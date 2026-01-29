@@ -45,7 +45,7 @@ export default function Reminders() {
   const fetchData = async () => {
     try {
       const [customersRes, logsRes] = await Promise.all([
-        supabase.from('customers').select('*, packages(name, monthly_price)'),
+        supabase.from('customers_safe').select('*, packages(name, monthly_price)'),
         supabase
           .from('reminder_logs')
           .select('*, customers(user_id, full_name)')
