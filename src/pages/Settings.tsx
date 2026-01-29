@@ -7,7 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Save, Plus, Trash2 } from "lucide-react";
+import { Save, Plus, Trash2, Shield, Users } from "lucide-react";
+import { UserManagement } from "@/components/settings/UserManagement";
+import { RolePermissions } from "@/components/settings/RolePermissions";
 
 interface Area {
   id: string;
@@ -148,10 +150,18 @@ Please pay ৳{Amount} to avoid disconnection.
       </div>
 
       <Tabs defaultValue="general" className="space-y-6">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp Template</TabsTrigger>
           <TabsTrigger value="areas">Areas/Zones</TabsTrigger>
+          <TabsTrigger value="users" className="flex items-center gap-1">
+            <Users className="h-4 w-4" />
+            User Management
+          </TabsTrigger>
+          <TabsTrigger value="permissions" className="flex items-center gap-1">
+            <Shield className="h-4 w-4" />
+            Role Permissions
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="general">
@@ -271,6 +281,14 @@ Please pay ৳{Amount} to avoid disconnection.
               )}
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="users">
+          <UserManagement />
+        </TabsContent>
+
+        <TabsContent value="permissions">
+          <RolePermissions />
         </TabsContent>
       </Tabs>
     </DashboardLayout>
