@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { Wifi, Loader2, User, KeyRound, UserPlus } from "lucide-react";
 import { z } from "zod";
+import { useIspSettings } from "@/hooks/useIspSettings";
 
 const loginSchema = z.object({
   user_id: z.string().min(1, "User ID is required"),
@@ -49,10 +50,10 @@ interface CustomerData {
 
 export default function CustomerLogin() {
   const navigate = useNavigate();
+  const { ispName } = useIspSettings();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("login");
   const [errors, setErrors] = useState<Record<string, string>>({});
-
   // Login state
   const [loginData, setLoginData] = useState({ user_id: "", password: "" });
 
@@ -214,9 +215,9 @@ export default function CustomerLogin() {
           <div className="w-14 h-14 rounded-2xl bg-primary mx-auto mb-4 flex items-center justify-center">
             <Wifi className="w-7 h-7 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl">Customer Portal</CardTitle>
+          <CardTitle className="text-2xl">{ispName}</CardTitle>
           <CardDescription>
-            Access your internet account
+            Customer Portal - Access your internet account
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -3,7 +3,9 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
+import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { supabase } from "@/integrations/supabase/client";
+import { useIspSettings } from "@/hooks/useIspSettings";
 import { 
   Users, 
   UserCheck, 
@@ -15,7 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { format } from "date-fns";
+import { format, startOfDay, isBefore } from "date-fns";
 
 interface DashboardStats {
   totalUsers: number;
@@ -41,6 +43,7 @@ interface Customer {
 }
 
 export default function Dashboard() {
+  const { ispName } = useIspSettings();
   const [stats, setStats] = useState<DashboardStats>({
     totalUsers: 0,
     activeUsers: 0,
@@ -65,10 +68,10 @@ export default function Dashboard() {
 
       if (customersError) throw customersError;
 
-      // Calculate stats
-      const now = new Date();
-      const threeDaysFromNow = new Date();
-      threeDaysFromNow.setDate(now.getDate() + 3);
+      // Calculate stats using actual billing date logic
+      const today = startOfDay(new Date());
+      const threeDaysFromNow = new Date(today);
+      threeDaysFromNow.setDate(today.getDate() + 3);
 
       let totalDue = 0;
       let activeCount = 0;
@@ -77,11 +80,15 @@ export default function Dashboard() {
       const expiringList: Customer[] = [];
 
       customers?.forEach(customer => {
-        totalDue += Number(customer.total_due) || 0;
+        const expiryDate = startOfDay(new Date(customer.expiry_date));
+        const isBillingPassed = isBefore(expiryDate, today) || expiryDate.getTime() === today.getTime();
         
-        const expiryDate = new Date(customer.expiry_date);
+        // Only count due if billing date has passed
+        if (isBillingPassed) {
+          totalDue += Number(customer.total_due) || 0;
+        }
         
-        if (expiryDate < now) {
+        if (isBefore(expiryDate, today)) {
           expiredCount++;
         } else if (expiryDate <= threeDaysFromNow) {
           expiringCount++;
@@ -92,11 +99,11 @@ export default function Dashboard() {
       });
 
       // Fetch today's payments
-      const today = format(new Date(), 'yyyy-MM-dd');
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
       const { data: payments } = await supabase
         .from('payments')
         .select('amount')
-        .gte('payment_date', today);
+        .gte('payment_date', todayStr);
 
       const todayCollections = payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
 
@@ -131,7 +138,7 @@ export default function Dashboard() {
     <DashboardLayout>
       <div className="page-header">
         <h1 className="page-title">Dashboard</h1>
-        <p className="page-description">Welcome back! Here's your ISP overview.</p>
+        <p className="page-description">Welcome back! Here's your {ispName} overview.</p>
       </div>
 
       {/* Stats Grid */}
@@ -210,20 +217,26 @@ export default function Dashboard() {
                     <td className="font-medium">{customer.full_name}</td>
                     <td>{customer.packages?.name || 'N/A'}</td>
                     <td>{format(new Date(customer.expiry_date), 'dd MMM yyyy')}</td>
-                    <td className="amount-due">৳{customer.total_due}</td>
+                  <td className="amount-due">৳{customer.total_due}</td>
                     <td>
                       <StatusBadge status={customer.status} />
                     </td>
                     <td>
-                      <WhatsAppButton
-                        phone={customer.phone}
-                        customerName={customer.full_name}
-                        userId={customer.user_id}
-                        packageName={customer.packages?.name || 'Internet'}
-                        expiryDate={new Date(customer.expiry_date)}
-                        amount={customer.packages?.monthly_price || customer.total_due}
-                        variant="icon"
-                      />
+                      <div className="flex items-center gap-1">
+                        <QuickCallRecord
+                          customerId={customer.id}
+                          customerName={customer.full_name}
+                        />
+                        <WhatsAppButton
+                          phone={customer.phone}
+                          customerName={customer.full_name}
+                          userId={customer.user_id}
+                          packageName={customer.packages?.name || 'Internet'}
+                          expiryDate={new Date(customer.expiry_date)}
+                          amount={customer.packages?.monthly_price || customer.total_due}
+                          variant="icon"
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}

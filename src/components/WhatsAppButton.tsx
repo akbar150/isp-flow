@@ -10,7 +10,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 import { getWhatsAppUrl, generateWhatsAppMessage } from "@/services/billing/billingService";
-
+import { useIspSettings } from "@/hooks/useIspSettings";
 interface WhatsAppButtonProps {
   phone: string;
   customerName: string;
@@ -18,7 +18,6 @@ interface WhatsAppButtonProps {
   packageName: string;
   expiryDate: Date;
   amount: number;
-  ispName?: string;
   variant?: 'default' | 'icon';
 }
 
@@ -29,9 +28,10 @@ export function WhatsAppButton({
   packageName,
   expiryDate,
   amount,
-  ispName = 'Smart ISP',
   variant = 'default'
 }: WhatsAppButtonProps) {
+  const { ispName } = useIspSettings();
+  
   const defaultMessage = generateWhatsAppMessage(
     customerName,
     userId,

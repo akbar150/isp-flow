@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "@/hooks/use-toast";
 import { Wifi, Loader2, KeyRound, ArrowLeft } from "lucide-react";
 import { z } from "zod";
-
+import { useIspSettings } from "@/hooks/useIspSettings";
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
@@ -30,6 +30,7 @@ export default function Auth() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isRecovery = searchParams.get("type") === "recovery";
+  const { ispName } = useIspSettings();
   
   const [loading, setLoading] = useState(false);
   const [showReset, setShowReset] = useState(false);
@@ -39,7 +40,6 @@ export default function Auth() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
@@ -245,7 +245,7 @@ export default function Auth() {
           <div className="w-14 h-14 rounded-2xl bg-primary mx-auto mb-4 flex items-center justify-center">
             <Wifi className="w-7 h-7 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl">Smart ISP Billing</CardTitle>
+          <CardTitle className="text-2xl">{ispName} Billing</CardTitle>
           <CardDescription>Admin & Staff Login Portal</CardDescription>
         </CardHeader>
         <CardContent>
