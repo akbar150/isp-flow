@@ -1,18 +1,49 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Shield, User } from "lucide-react";
+import { 
+  Save, 
+  Shield, 
+  User, 
+  Users, 
+  CreditCard, 
+  Package, 
+  Router, 
+  MapPin, 
+  Phone, 
+  Bell, 
+  FileText, 
+  Receipt, 
+  FolderOpen, 
+  Settings,
+  CheckCircle2,
+  XCircle,
+  ToggleLeft,
+  ToggleRight
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 interface Permission {
   id: string;
@@ -23,27 +54,36 @@ interface Permission {
 }
 
 const RESOURCES = [
-  { key: "customers", label: "Customers", description: "Customer management" },
-  { key: "payments", label: "Payments", description: "Payment processing" },
-  { key: "packages", label: "Packages", description: "Internet packages" },
-  { key: "routers", label: "Routers", description: "Router management" },
-  { key: "areas", label: "Areas/Zones", description: "Area management" },
-  { key: "call_records", label: "Call Records", description: "Customer call logs" },
-  { key: "reminders", label: "Reminders", description: "Payment reminders" },
-  { key: "reports", label: "Reports", description: "Financial reports" },
-  { key: "transactions", label: "Transactions", description: "Income and expense tracking" },
-  { key: "expense_categories", label: "Expense Categories", description: "Expense category management" },
-  { key: "settings", label: "Settings", description: "System settings" },
-  { key: "users", label: "User Management", description: "Admin/staff accounts" },
+  { key: "customers", label: "Customers", icon: Users },
+  { key: "payments", label: "Payments", icon: CreditCard },
+  { key: "packages", label: "Packages", icon: Package },
+  { key: "routers", label: "Routers", icon: Router },
+  { key: "areas", label: "Areas/Zones", icon: MapPin },
+  { key: "call_records", label: "Call Records", icon: Phone },
+  { key: "reminders", label: "Reminders", icon: Bell },
+  { key: "reports", label: "Reports", icon: FileText },
+  { key: "transactions", label: "Transactions", icon: Receipt },
+  { key: "expense_categories", label: "Expense Categories", icon: FolderOpen },
+  { key: "settings", label: "Settings", icon: Settings },
+  { key: "users", label: "User Management", icon: User },
 ];
 
-const ACTIONS = ["create", "read", "update", "delete"];
+const ACTIONS = [
+  { key: "create", label: "Create" },
+  { key: "read", label: "View" },
+  { key: "update", label: "Edit" },
+  { key: "delete", label: "Delete" },
+];
+
+type AppRole = "super_admin" | "admin" | "staff";
 
 export function RolePermissions() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [originalPermissions, setOriginalPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeRole, setActiveRole] = useState<"super_admin" | "admin" | "staff">("staff");
+  const [activeRole, setActiveRole] = useState<AppRole>("admin");
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -60,6 +100,7 @@ export function RolePermissions() {
 
       if (error) throw error;
       setPermissions(data || []);
+      setOriginalPermissions(JSON.parse(JSON.stringify(data || [])));
     } catch (error) {
       console.error("Error fetching permissions:", error);
       toast({
@@ -72,19 +113,35 @@ export function RolePermissions() {
     }
   };
 
-  const getPermission = (resource: string, action: string): Permission | undefined => {
-    return permissions.find(
-      (p) => p.role === activeRole && p.resource === resource && p.action === action
-    );
-  };
+  const rolePermissions = useMemo(() => {
+    return permissions.filter((p) => p.role === activeRole);
+  }, [permissions, activeRole]);
+
+  const changeCount = useMemo(() => {
+    let count = 0;
+    permissions.forEach((p) => {
+      const original = originalPermissions.find((op) => op.id === p.id);
+      if (original && original.allowed !== p.allowed) {
+        count++;
+      }
+    });
+    return count;
+  }, [permissions, originalPermissions]);
 
   const isAllowed = (resource: string, action: string): boolean => {
-    const perm = getPermission(resource, action);
+    const perm = rolePermissions.find(
+      (p) => p.resource === resource && p.action === action
+    );
     return perm?.allowed ?? false;
   };
 
+  const getResourceStats = (resource: string) => {
+    const resourcePerms = rolePermissions.filter((p) => p.resource === resource);
+    const enabled = resourcePerms.filter((p) => p.allowed).length;
+    return { enabled, total: resourcePerms.length };
+  };
+
   const togglePermission = (resource: string, action: string) => {
-    // Don't allow modifying super_admin permissions
     if (activeRole === "super_admin") return;
 
     setPermissions((prev) =>
@@ -97,24 +154,63 @@ export function RolePermissions() {
     );
   };
 
+  const toggleAllForResource = (resource: string, enable: boolean) => {
+    if (activeRole === "super_admin") return;
+
+    setPermissions((prev) =>
+      prev.map((p) => {
+        if (p.role === activeRole && p.resource === resource) {
+          return { ...p, allowed: enable };
+        }
+        return p;
+      })
+    );
+  };
+
+  const toggleAllPermissions = (enable: boolean) => {
+    if (activeRole === "super_admin") return;
+
+    setPermissions((prev) =>
+      prev.map((p) => {
+        if (p.role === activeRole) {
+          return { ...p, allowed: enable };
+        }
+        return p;
+      })
+    );
+  };
+
+  const handleSaveClick = () => {
+    if (changeCount > 0) {
+      setShowConfirmDialog(true);
+    }
+  };
+
   const handleSave = async () => {
+    setShowConfirmDialog(false);
     setSaving(true);
     try {
-      // Get all admin and staff permissions that may have changed
-      const editablePermissions = permissions.filter((p) => p.role === "staff" || p.role === "admin");
+      const editablePermissions = permissions.filter(
+        (p) => p.role === "staff" || p.role === "admin"
+      );
 
       for (const perm of editablePermissions) {
-        const { error } = await supabase
-          .from("permissions")
-          .update({ allowed: perm.allowed })
-          .eq("id", perm.id);
+        const original = originalPermissions.find((op) => op.id === perm.id);
+        if (original && original.allowed !== perm.allowed) {
+          const { error } = await supabase
+            .from("permissions")
+            .update({ allowed: perm.allowed })
+            .eq("id", perm.id);
 
-        if (error) throw error;
+          if (error) throw error;
+        }
       }
+
+      setOriginalPermissions(JSON.parse(JSON.stringify(permissions)));
 
       toast({
         title: "Permissions Saved",
-        description: "Role permissions have been updated successfully",
+        description: `${changeCount} permission(s) updated successfully`,
       });
     } catch (error) {
       console.error("Error saving permissions:", error);
@@ -128,6 +224,10 @@ export function RolePermissions() {
     }
   };
 
+  const resetChanges = () => {
+    setPermissions(JSON.parse(JSON.stringify(originalPermissions)));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -138,24 +238,39 @@ export function RolePermissions() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h3 className="text-lg font-medium">Role Permissions</h3>
           <p className="text-sm text-muted-foreground">
-            Configure what each role can do. Admin has full access by default.
+            Configure granular access control for each role
           </p>
         </div>
-        <Button onClick={handleSave} disabled={saving}>
-          <Save className="h-4 w-4 mr-2" />
-          {saving ? "Saving..." : "Save Changes"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {changeCount > 0 && (
+            <>
+              <Badge variant="secondary" className="gap-1">
+                {changeCount} unsaved change{changeCount > 1 ? "s" : ""}
+              </Badge>
+              <Button variant="ghost" size="sm" onClick={resetChanges}>
+                Reset
+              </Button>
+            </>
+          )}
+          <Button onClick={handleSaveClick} disabled={saving || changeCount === 0}>
+            <Save className="h-4 w-4 mr-2" />
+            {saving ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
       </div>
 
-      <Tabs value={activeRole} onValueChange={(v) => setActiveRole(v as "super_admin" | "admin" | "staff")}>
-        <TabsList>
+      {/* Role Tabs */}
+      <Tabs value={activeRole} onValueChange={(v) => setActiveRole(v as AppRole)}>
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="super_admin" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
-            Super Admin
+            <span className="hidden sm:inline">Super Admin</span>
+            <span className="sm:hidden">S.Admin</span>
           </TabsTrigger>
           <TabsTrigger value="admin" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
@@ -167,52 +282,154 @@ export function RolePermissions() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeRole} className="mt-4">
-          {activeRole === "super_admin" && (
-            <div className="mb-4 p-4 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground">
-                Super Admin role has full access to all resources and cannot be modified.
-              </p>
+        <TabsContent value={activeRole} className="mt-4 space-y-4">
+          {/* Role Info Banner */}
+          {activeRole === "super_admin" ? (
+            <div className="p-4 bg-muted rounded-lg border border-border">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Shield className="h-5 w-5" />
+                <span className="font-medium">Super Admin has immutable full access to all resources</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => toggleAllPermissions(true)}
+                className="gap-2"
+              >
+                <ToggleRight className="h-4 w-4" />
+                Enable All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => toggleAllPermissions(false)}
+                className="gap-2"
+              >
+                <ToggleLeft className="h-4 w-4" />
+                Disable All
+              </Button>
             </div>
           )}
 
-          <div className="grid gap-4">
-            {RESOURCES.map((resource) => (
-              <Card key={resource.key}>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">{resource.label}</CardTitle>
-                  <CardDescription>{resource.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {ACTIONS.map((action) => (
-                      <div
-                        key={action}
-                        className="flex items-center justify-between space-x-2"
-                      >
-                        <Label
-                          htmlFor={`${resource.key}-${action}`}
-                          className="text-sm capitalize"
-                        >
-                          {action}
-                        </Label>
-                        <Switch
-                          id={`${resource.key}-${action}`}
-                          checked={isAllowed(resource.key, action)}
-                          onCheckedChange={() =>
-                            togglePermission(resource.key, action)
-                          }
-                          disabled={activeRole === "super_admin"}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+          {/* Permissions Table */}
+          <div className="border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-[200px]">Resource</TableHead>
+                  {ACTIONS.map((action) => (
+                    <TableHead key={action.key} className="text-center w-[100px]">
+                      {action.label}
+                    </TableHead>
+                  ))}
+                  <TableHead className="text-center w-[120px]">Quick Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {RESOURCES.map((resource) => {
+                  const Icon = resource.icon;
+                  const stats = getResourceStats(resource.key);
+                  const allEnabled = stats.enabled === stats.total;
+                  const allDisabled = stats.enabled === 0;
+
+                  return (
+                    <TableRow key={resource.key}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-md bg-muted">
+                            <Icon className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                          <div>
+                            <span className="font-medium">{resource.label}</span>
+                            <div className="text-xs text-muted-foreground">
+                              {stats.enabled}/{stats.total} enabled
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      {ACTIONS.map((action) => {
+                        const allowed = isAllowed(resource.key, action.key);
+                        return (
+                          <TableCell key={action.key} className="text-center">
+                            <div className="flex justify-center">
+                              {activeRole === "super_admin" ? (
+                                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                              ) : (
+                                <Checkbox
+                                  checked={allowed}
+                                  onCheckedChange={() =>
+                                    togglePermission(resource.key, action.key)
+                                  }
+                                  className={cn(
+                                    "h-5 w-5 transition-colors",
+                                    allowed && "data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+                                  )}
+                                />
+                              )}
+                            </div>
+                          </TableCell>
+                        );
+                      })}
+                      <TableCell className="text-center">
+                        {activeRole !== "super_admin" && (
+                          <div className="flex justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2"
+                              onClick={() => toggleAllForResource(resource.key, true)}
+                              disabled={allEnabled}
+                            >
+                              <CheckCircle2 className={cn(
+                                "h-4 w-4",
+                                allEnabled ? "text-muted-foreground/40" : "text-green-600"
+                              )} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2"
+                              onClick={() => toggleAllForResource(resource.key, false)}
+                              disabled={allDisabled}
+                            >
+                              <XCircle className={cn(
+                                "h-4 w-4",
+                                allDisabled ? "text-muted-foreground/40" : "text-destructive"
+                              )} />
+                            </Button>
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Save Permission Changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to update {changeCount} permission{changeCount > 1 ? "s" : ""}. 
+              These changes will immediately affect what users with the {activeRole} role can access.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSave}>
+              Save Changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
