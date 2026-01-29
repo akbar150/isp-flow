@@ -28,6 +28,12 @@ interface DashboardStats {
   todayCollections: number;
 }
 
+interface MikrotikUser {
+  id: string;
+  username: string;
+  status: 'enabled' | 'disabled';
+}
+
 interface Customer {
   id: string;
   user_id: string;
@@ -40,6 +46,7 @@ interface Customer {
     name: string;
     monthly_price: number;
   } | null;
+  mikrotik_users: MikrotikUser[] | null;
 }
 
 export default function Dashboard() {
@@ -61,10 +68,10 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch customers using safe view (excludes password_hash)
+      // Fetch customers using safe view (excludes password_hash) with mikrotik_users
       const { data: customers, error: customersError } = await supabase
         .from('customers_safe')
-        .select('*, packages(name, monthly_price)');
+        .select('*, packages(name, monthly_price), mikrotik_users:mikrotik_users_safe(id, username, status)');
 
       if (customersError) throw customersError;
 
@@ -201,7 +208,7 @@ export default function Dashboard() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>User ID</th>
+                  <th>PPPoE Username</th>
                   <th>Name</th>
                   <th>Package</th>
                   <th>Expiry</th>
@@ -211,35 +218,39 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {expiringCustomers.map((customer) => (
-                  <tr key={customer.id}>
-                    <td className="font-mono text-sm">{customer.user_id}</td>
-                    <td className="font-medium">{customer.full_name}</td>
-                    <td>{customer.packages?.name || 'N/A'}</td>
-                    <td>{format(new Date(customer.expiry_date), 'dd MMM yyyy')}</td>
-                  <td className="amount-due">৳{customer.total_due}</td>
-                    <td>
-                      <StatusBadge status={customer.status} />
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-1">
-                        <QuickCallRecord
-                          customerId={customer.id}
-                          customerName={customer.full_name}
-                        />
-                        <WhatsAppButton
-                          phone={customer.phone}
-                          customerName={customer.full_name}
-                          userId={customer.user_id}
-                          packageName={customer.packages?.name || 'Internet'}
-                          expiryDate={new Date(customer.expiry_date)}
-                          amount={customer.packages?.monthly_price || customer.total_due}
-                          variant="icon"
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {expiringCustomers.map((customer) => {
+                  const pppoeUsername = customer.mikrotik_users?.[0]?.username || '';
+                  return (
+                    <tr key={customer.id}>
+                      <td className="font-mono text-sm">{pppoeUsername || <span className="text-muted-foreground">Not set</span>}</td>
+                      <td className="font-medium">{customer.full_name}</td>
+                      <td>{customer.packages?.name || 'N/A'}</td>
+                      <td>{format(new Date(customer.expiry_date), 'dd MMM yyyy')}</td>
+                      <td className="amount-due">৳{customer.total_due}</td>
+                      <td>
+                        <StatusBadge status={customer.status} />
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-1">
+                          <QuickCallRecord
+                            customerId={customer.id}
+                            customerName={customer.full_name}
+                          />
+                          <WhatsAppButton
+                            phone={customer.phone}
+                            customerName={customer.full_name}
+                            userId={customer.user_id}
+                            packageName={customer.packages?.name || 'Internet'}
+                            expiryDate={new Date(customer.expiry_date)}
+                            amount={customer.packages?.monthly_price || customer.total_due}
+                            variant="icon"
+                            pppoeUsername={pppoeUsername}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
