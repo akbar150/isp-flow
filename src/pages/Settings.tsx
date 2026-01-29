@@ -7,9 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Save, Plus, Trash2, Shield, Users } from "lucide-react";
+import { Save, Plus, Trash2, Shield, Users, Tags } from "lucide-react";
 import { UserManagement } from "@/components/settings/UserManagement";
 import { RolePermissions } from "@/components/settings/RolePermissions";
+import { ExpenseCategories } from "@/components/settings/ExpenseCategories";
 
 interface Area {
   id: string;
@@ -154,6 +155,10 @@ Please pay ৳{Amount} to avoid disconnection.
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp Template</TabsTrigger>
           <TabsTrigger value="areas">Areas/Zones</TabsTrigger>
+          <TabsTrigger value="expense-categories" className="flex items-center gap-1">
+            <Tags className="h-4 w-4" />
+            Expense Categories
+          </TabsTrigger>
           <TabsTrigger value="users" className="flex items-center gap-1">
             <Users className="h-4 w-4" />
             User Management
@@ -281,6 +286,10 @@ Please pay ৳{Amount} to avoid disconnection.
               )}
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="expense-categories">
+          <ExpenseCategories />
         </TabsContent>
 
         <TabsContent value="users">
