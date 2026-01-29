@@ -162,19 +162,27 @@ export function generateWhatsAppMessage(
   expiryDate: Date,
   amount: number,
   ispName: string = 'Smart ISP',
-  pppoeUsername?: string
+  pppoeUsername?: string,
+  pppoePassword?: string
 ): string {
   const formattedDate = format(expiryDate, 'dd MMM yyyy');
   
-  return `Dear ${customerName},
-PPPoE Username: ${pppoeUsername || userId}
-${pppoeUsername ? `Customer ID: ${userId}` : ''}
+  let message = `Dear ${customerName},
+PPPoE Username: ${pppoeUsername || userId}`;
+
+  if (pppoePassword) {
+    message += `\nPPPoE Password: ${pppoePassword}`;
+  }
+  
+  message += `\nCustomer ID: ${userId}
 
 Your internet package ${packageName}, will expire on ${formattedDate}.
 
 Please pay ৳${amount} to avoid disconnection.
 
 – ${ispName}`;
+
+  return message;
 }
 
 /**

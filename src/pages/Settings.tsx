@@ -7,27 +7,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Save, Plus, Trash2, Shield, Users, Tags } from "lucide-react";
+import { Save, Shield, Users, Tags, MapPin, Wifi } from "lucide-react";
 import { UserManagement } from "@/components/settings/UserManagement";
 import { RolePermissions } from "@/components/settings/RolePermissions";
 import { ExpenseCategories } from "@/components/settings/ExpenseCategories";
-
-interface Area {
-  id: string;
-  name: string;
-  description: string | null;
-}
+import { AreaManagement } from "@/components/settings/AreaManagement";
 
 export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [newArea, setNewArea] = useState({ name: "", description: "" });
 
   const [settings, setSettings] = useState({
     isp_name: "Smart ISP",
     whatsapp_template: `Dear {CustomerName},
 User ID: {user_id}
+PPPoE Username: {PPPoEUsername}
 
 Your internet package {PackageName}, will expire on {ExpiryDate}.
 
@@ -42,10 +36,7 @@ Please pay ৳{Amount} to avoid disconnection.
 
   const fetchData = async () => {
     try {
-      const [settingsRes, areasRes] = await Promise.all([
-        supabase.from('system_settings').select('*'),
-        supabase.from('areas').select('*').order('name'),
-      ]);
+      const settingsRes = await supabase.from('system_settings').select('*');
 
       if (settingsRes.data) {
         const settingsMap: Record<string, string> = {};
@@ -57,8 +48,6 @@ Please pay ৳{Amount} to avoid disconnection.
           whatsapp_template: settingsMap.whatsapp_template?.replace(/"/g, '') || settings.whatsapp_template,
         });
       }
-
-      setAreas(areasRes.data || []);
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
@@ -94,45 +83,6 @@ Please pay ৳{Amount} to avoid disconnection.
     }
   };
 
-  const addArea = async () => {
-    if (!newArea.name.trim()) return;
-
-    try {
-      const { error } = await supabase.from('areas').insert({
-        name: newArea.name,
-        description: newArea.description || null,
-      });
-
-      if (error) throw error;
-      toast({ title: "Area added" });
-      setNewArea({ name: "", description: "" });
-      fetchData();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to add area",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const deleteArea = async (id: string) => {
-    if (!confirm("Delete this area?")) return;
-
-    try {
-      const { error } = await supabase.from('areas').delete().eq('id', id);
-      if (error) throw error;
-      toast({ title: "Area deleted" });
-      fetchData();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Cannot delete area (may have assigned customers)",
-        variant: "destructive",
-      });
-    }
-  };
-
   if (loading) {
     return (
       <DashboardLayout>
@@ -152,12 +102,18 @@ Please pay ৳{Amount} to avoid disconnection.
 
       <Tabs defaultValue="general" className="space-y-6">
         <TabsList className="flex-wrap h-auto gap-1">
-          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="general" className="flex items-center gap-1">
+            <Wifi className="h-4 w-4" />
+            General
+          </TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp Template</TabsTrigger>
-          <TabsTrigger value="areas">Areas/Zones</TabsTrigger>
+          <TabsTrigger value="areas" className="flex items-center gap-1">
+            <MapPin className="h-4 w-4" />
+            Areas/Zones
+          </TabsTrigger>
           <TabsTrigger value="expense-categories" className="flex items-center gap-1">
             <Tags className="h-4 w-4" />
-            Expense Categories
+            Categories
           </TabsTrigger>
           <TabsTrigger value="users" className="flex items-center gap-1">
             <Users className="h-4 w-4" />
@@ -181,7 +137,7 @@ Please pay ৳{Amount} to avoid disconnection.
                   placeholder="Your ISP Name"
                 />
                 <p className="text-xs text-muted-foreground">
-                  This name appears in WhatsApp messages and system branding
+                  This name appears in WhatsApp messages, login pages, and system branding
                 </p>
               </div>
               <Button onClick={saveSettings} disabled={saving}>
@@ -211,6 +167,10 @@ Please pay ৳{Amount} to avoid disconnection.
                   <span>Customer's full name</span>
                   <code className="bg-background px-2 py-1 rounded">{'{user_id}'}</code>
                   <span>Customer's User ID</span>
+                  <code className="bg-background px-2 py-1 rounded">{'{PPPoEUsername}'}</code>
+                  <span>PPPoE Username</span>
+                  <code className="bg-background px-2 py-1 rounded">{'{PPPoEPassword}'}</code>
+                  <span>PPPoE Password</span>
                   <code className="bg-background px-2 py-1 rounded">{'{PackageName}'}</code>
                   <span>Internet package name</span>
                   <code className="bg-background px-2 py-1 rounded">{'{ExpiryDate}'}</code>
@@ -230,62 +190,7 @@ Please pay ৳{Amount} to avoid disconnection.
         </TabsContent>
 
         <TabsContent value="areas">
-          <div className="form-section max-w-2xl">
-            <h3 className="form-section-title">Areas / Zones</h3>
-            
-            {/* Add new area */}
-            <div className="flex gap-4 mb-6">
-              <div className="flex-1">
-                <Input
-                  placeholder="Area name"
-                  value={newArea.name}
-                  onChange={(e) => setNewArea({ ...newArea, name: e.target.value })}
-                />
-              </div>
-              <div className="flex-1">
-                <Input
-                  placeholder="Description (optional)"
-                  value={newArea.description}
-                  onChange={(e) => setNewArea({ ...newArea, description: e.target.value })}
-                />
-              </div>
-              <Button onClick={addArea}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add
-              </Button>
-            </div>
-
-            {/* Areas list */}
-            <div className="space-y-2">
-              {areas.length === 0 ? (
-                <p className="text-muted-foreground text-center py-6">
-                  No areas defined yet
-                </p>
-              ) : (
-                areas.map((area) => (
-                  <div
-                    key={area.id}
-                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                  >
-                    <div>
-                      <p className="font-medium">{area.name}</p>
-                      {area.description && (
-                        <p className="text-sm text-muted-foreground">{area.description}</p>
-                      )}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                      onClick={() => deleteArea(area.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          <AreaManagement />
         </TabsContent>
 
         <TabsContent value="expense-categories">

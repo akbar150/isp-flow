@@ -16,6 +16,7 @@ import CallRecords from "./pages/CallRecords";
 import Routers from "./pages/Routers";
 import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
+import Accounting from "./pages/Accounting";
 import CustomerLogin from "./pages/CustomerLogin";
 import CustomerPortal from "./pages/CustomerPortal";
 import NotFound from "./pages/NotFound";
@@ -129,6 +130,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Reports />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/accounting"
+        element={
+          <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+            <Accounting />
           </ProtectedRoute>
         }
       />

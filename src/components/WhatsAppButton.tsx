@@ -5,12 +5,14 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogTrigger 
+  DialogTrigger,
+  DialogDescription, 
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 import { getWhatsAppUrl, generateWhatsAppMessage } from "@/services/billing/billingService";
 import { useIspSettings } from "@/hooks/useIspSettings";
+
 interface WhatsAppButtonProps {
   phone: string;
   customerName: string;
@@ -20,6 +22,7 @@ interface WhatsAppButtonProps {
   amount: number;
   variant?: 'default' | 'icon';
   pppoeUsername?: string;
+  pppoePassword?: string;
 }
 
 export function WhatsAppButton({
@@ -30,7 +33,8 @@ export function WhatsAppButton({
   expiryDate,
   amount,
   variant = 'default',
-  pppoeUsername
+  pppoeUsername,
+  pppoePassword
 }: WhatsAppButtonProps) {
   const { ispName } = useIspSettings();
   
@@ -41,7 +45,8 @@ export function WhatsAppButton({
     expiryDate,
     amount,
     ispName,
-    pppoeUsername
+    pppoeUsername,
+    pppoePassword
   );
 
   const [message, setMessage] = useState(defaultMessage);
@@ -56,7 +61,7 @@ export function WhatsAppButton({
   if (variant === 'icon') {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
+      <DialogTrigger asChild>
           <Button size="icon" variant="ghost" className="h-8 w-8 text-[hsl(142,70%,45%)]">
             <MessageCircle className="h-4 w-4" />
           </Button>
@@ -64,6 +69,9 @@ export function WhatsAppButton({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Send WhatsApp Reminder</DialogTitle>
+            <DialogDescription>
+              Edit the message below before sending
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div>
@@ -97,6 +105,9 @@ export function WhatsAppButton({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Send WhatsApp Reminder</DialogTitle>
+          <DialogDescription>
+            Edit the message below before sending
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 mt-4">
           <div>

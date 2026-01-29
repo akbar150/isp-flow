@@ -7,6 +7,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -21,7 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format, differenceInDays, startOfDay } from "date-fns";
-import { CalendarIcon, Loader2, User, Phone, MapPin, Package, Calendar as CalendarIconAlt, CreditCard, Wifi } from "lucide-react";
+import { CalendarIcon, Loader2, User, Phone, MapPin, Package, Calendar as CalendarIconAlt, CreditCard, Wifi, Key, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CustomerCallRecords } from "./CustomerCallRecords";
 import { StatusBadge } from "./StatusBadge";
@@ -92,6 +93,7 @@ export function CustomerViewDialog({
 }: CustomerViewDialogProps) {
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showPasswords, setShowPasswords] = useState(false);
   const [formData, setFormData] = useState({
     full_name: "",
     phone: "",
@@ -104,6 +106,14 @@ export function CustomerViewDialog({
     billing_start_date: new Date(),
     expiry_date: new Date(),
   });
+  
+  // Credential editing
+  const [credentialData, setCredentialData] = useState({
+    pppoe_username: "",
+    pppoe_password: "",
+    user_password: "",
+  });
+  const [savingCredentials, setSavingCredentials] = useState(false);
 
   useEffect(() => {
     if (customer) {
@@ -118,6 +128,11 @@ export function CustomerViewDialog({
         status: customer.status,
         billing_start_date: new Date(customer.billing_start_date),
         expiry_date: new Date(customer.expiry_date),
+      });
+      setCredentialData({
+        pppoe_username: customer.mikrotik_users?.[0]?.username || "",
+        pppoe_password: "",
+        user_password: "",
       });
       setIsEditing(false);
     }
@@ -162,6 +177,80 @@ export function CustomerViewDialog({
     }
   };
 
+  const handleSaveCredentials = async () => {
+    if (!customer) return;
+    
+    setSavingCredentials(true);
+    try {
+      // Update PPPoE username if changed
+      if (credentialData.pppoe_username && credentialData.pppoe_username !== customer.mikrotik_users?.[0]?.username) {
+        const mikrotikUser = customer.mikrotik_users?.[0];
+        if (mikrotikUser) {
+          const { error: pppoeError } = await supabase
+            .from("mikrotik_users")
+            .update({ username: credentialData.pppoe_username })
+            .eq("id", mikrotikUser.id);
+          
+          if (pppoeError) throw pppoeError;
+        }
+      }
+
+      // Update PPPoE password if provided
+      if (credentialData.pppoe_password) {
+        const mikrotikUser = customer.mikrotik_users?.[0];
+        if (mikrotikUser) {
+          // Hash the password using the database function
+          const { data: hashData, error: hashError } = await supabase.rpc('hash_password', {
+            raw_password: credentialData.pppoe_password
+          });
+          
+          if (hashError) throw hashError;
+          
+          const { error: pppoePassError } = await supabase
+            .from("mikrotik_users")
+            .update({ password_encrypted: hashData })
+            .eq("id", mikrotikUser.id);
+          
+          if (pppoePassError) throw pppoePassError;
+        }
+      }
+
+      // Update user/portal password if provided
+      if (credentialData.user_password) {
+        // Hash the password using the database function
+        const { data: hashData, error: hashError } = await supabase.rpc('hash_password', {
+          raw_password: credentialData.user_password
+        });
+        
+        if (hashError) throw hashError;
+        
+        const { error: userPassError } = await supabase
+          .from("customers")
+          .update({ password_hash: hashData })
+          .eq("id", customer.id);
+        
+        if (userPassError) throw userPassError;
+      }
+
+      toast({ title: "Credentials updated successfully" });
+      setCredentialData({ 
+        ...credentialData, 
+        pppoe_password: "", 
+        user_password: "" 
+      });
+      onSuccess();
+    } catch (error) {
+      console.error("Error updating credentials:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update credentials",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingCredentials(false);
+    }
+  };
+
   if (!customer) return null;
 
   const pppoeUsername = customer.mikrotik_users?.[0]?.username || "Not set";
@@ -181,11 +270,15 @@ export function CustomerViewDialog({
             <User className="h-5 w-5" />
             Customer Details: {pppoeUsername}
           </DialogTitle>
+          <DialogDescription>
+            View and manage customer information
+          </DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="details" className="mt-4">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="credentials">Credentials</TabsTrigger>
             <TabsTrigger value="calls">Call Records</TabsTrigger>
           </TabsList>
 
@@ -499,6 +592,97 @@ export function CustomerViewDialog({
                 </div>
               </form>
             )}
+          </TabsContent>
+
+          <TabsContent value="credentials" className="space-y-6 mt-4">
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800">
+                <strong>Security Note:</strong> Password fields are blank for security. 
+                Enter a new password only if you want to change it.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {/* PPPoE Username */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Wifi className="h-4 w-4" />
+                  PPPoE Username
+                </Label>
+                <Input
+                  value={credentialData.pppoe_username}
+                  onChange={(e) => setCredentialData({ ...credentialData, pppoe_username: e.target.value })}
+                  placeholder="PPPoE username"
+                  disabled={!canEdit}
+                />
+              </div>
+
+              {/* PPPoE Password */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Key className="h-4 w-4" />
+                  PPPoE Password
+                </Label>
+                <div className="relative">
+                  <Input
+                    type={showPasswords ? "text" : "password"}
+                    value={credentialData.pppoe_password}
+                    onChange={(e) => setCredentialData({ ...credentialData, pppoe_password: e.target.value })}
+                    placeholder="Enter new password to change"
+                    disabled={!canEdit}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full"
+                    onClick={() => setShowPasswords(!showPasswords)}
+                  >
+                    {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Minimum 4 characters</p>
+              </div>
+
+              {/* User/Portal Password */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Key className="h-4 w-4" />
+                  Portal Password (Customer Login)
+                </Label>
+                <div className="relative">
+                  <Input
+                    type={showPasswords ? "text" : "password"}
+                    value={credentialData.user_password}
+                    onChange={(e) => setCredentialData({ ...credentialData, user_password: e.target.value })}
+                    placeholder="Enter new password to change"
+                    disabled={!canEdit}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full"
+                    onClick={() => setShowPasswords(!showPasswords)}
+                  >
+                    {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
+              </div>
+
+              {canEdit && (
+                <div className="flex justify-end pt-4">
+                  <Button 
+                    onClick={handleSaveCredentials} 
+                    disabled={savingCredentials || (!credentialData.pppoe_username && !credentialData.pppoe_password && !credentialData.user_password)}
+                  >
+                    {savingCredentials && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Credentials
+                  </Button>
+                </div>
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent value="calls" className="mt-4">
