@@ -21,7 +21,6 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    // Try Resend first (preferred), fall back to Brevo
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     const brevoApiKey = Deno.env.get("BREVO_API_KEY");
     
@@ -38,8 +37,15 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Sending email to: ${to}, subject: ${subject}`);
 
-    // Use Resend API (preferred - no IP restrictions)
+    // Use Resend API (preferred)
     if (resendApiKey) {
+      // IMPORTANT: You must verify a domain in Resend to send to any email address
+      // The "from" address must use a verified domain
+      // Free tier can only send to the account owner's email
+      const fromAddress = senderEmail 
+        ? `${senderName || "ISP Billing"} <${senderEmail}>` 
+        : `${senderName || "ISP Billing System"} <onboarding@resend.dev>`;
+      
       const resendResponse = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -47,7 +53,7 @@ const handler = async (req: Request): Promise<Response> => {
           "Authorization": `Bearer ${resendApiKey}`,
         },
         body: JSON.stringify({
-          from: `${senderName || "ISP Billing System"} <onboarding@resend.dev>`,
+          from: fromAddress,
           to: [to],
           subject: subject,
           html: htmlContent,
@@ -58,51 +64,36 @@ const handler = async (req: Request): Promise<Response> => {
       if (!resendResponse.ok) {
         const errorData = await resendResponse.json();
         console.error("Resend API error:", errorData);
+        
+        // Check if it's a domain verification error
+        if (errorData.message?.includes("verify a domain") || errorData.message?.includes("testing emails")) {
+          // Try Brevo as fallback if available
+          if (brevoApiKey) {
+            console.log("Resend requires domain verification, falling back to Brevo...");
+            return await sendViaBravo(brevoApiKey, to, subject, htmlContent, textContent, senderName, senderEmail);
+          }
+          
+          throw new Error(
+            "Email sending requires domain verification. " +
+            "Please verify a domain at resend.com/domains, then update your 'From' email address in Settings → Email Templates. " +
+            "Until then, emails can only be sent to the account owner's address."
+          );
+        }
+        
         throw new Error(`Resend API error: ${JSON.stringify(errorData)}`);
       }
 
       const data = await resendResponse.json();
       console.log("Email sent successfully via Resend:", data);
 
-      return new Response(JSON.stringify({ success: true, messageId: data?.id }), {
+      return new Response(JSON.stringify({ success: true, messageId: data?.id, provider: "resend" }), {
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     }
 
-    // Fallback to Brevo API
-    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: {
-        "Accept": "application/json",
-        "Content-Type": "application/json; charset=utf-8",
-        "api-key": brevoApiKey!,
-      },
-      body: JSON.stringify({
-        sender: {
-          name: senderName || "ISP Billing System",
-          email: senderEmail || "noreply@easylinkbd.com",
-        },
-        to: [{ email: to }],
-        subject: subject,
-        htmlContent: htmlContent,
-        textContent: textContent || undefined,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("Brevo API error:", errorData);
-      throw new Error(`Brevo API error: ${JSON.stringify(errorData)}`);
-    }
-
-    const result = await response.json();
-    console.log("Email sent successfully via Brevo:", result);
-
-    return new Response(JSON.stringify({ success: true, messageId: result.messageId }), {
-      status: 200,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
+    // Use Brevo API
+    return await sendViaBravo(brevoApiKey!, to, subject, htmlContent, textContent, senderName, senderEmail);
   } catch (error: unknown) {
     console.error("Error in send-email-brevo function:", error);
     return new Response(
@@ -116,5 +107,48 @@ const handler = async (req: Request): Promise<Response> => {
     );
   }
 };
+
+async function sendViaBravo(
+  apiKey: string, 
+  to: string, 
+  subject: string, 
+  htmlContent: string, 
+  textContent?: string, 
+  senderName?: string, 
+  senderEmail?: string
+): Promise<Response> {
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "Accept": "application/json",
+      "Content-Type": "application/json; charset=utf-8",
+      "api-key": apiKey,
+    },
+    body: JSON.stringify({
+      sender: {
+        name: senderName || "ISP Billing System",
+        email: senderEmail || "noreply@easylinkbd.com",
+      },
+      to: [{ email: to }],
+      subject: subject,
+      htmlContent: htmlContent,
+      textContent: textContent || undefined,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    console.error("Brevo API error:", errorData);
+    throw new Error(`Brevo API error: ${JSON.stringify(errorData)}`);
+  }
+
+  const result = await response.json();
+  console.log("Email sent successfully via Brevo:", result);
+
+  return new Response(JSON.stringify({ success: true, messageId: result.messageId, provider: "brevo" }), {
+    status: 200,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+  });
+}
 
 serve(handler);

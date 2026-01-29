@@ -98,8 +98,23 @@ export function UserManagement() {
       });
 
       if (usersError) {
-        console.error("Edge function error:", usersError);
-        // Fallback to local data
+        console.error("Edge function network error:", usersError);
+        toast({
+          variant: "destructive",
+          title: "Connection Error",
+          description: "Failed to connect to the server. Using local data.",
+        });
+        await fetchUsersLocally();
+        return;
+      }
+
+      if (usersData?.success === false) {
+        console.error("Edge function returned error:", usersData.error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: usersData.error || "Failed to load users",
+        });
         await fetchUsersLocally();
         return;
       }
@@ -516,19 +531,20 @@ export function UserManagement() {
             <DialogTitle>Edit User</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {isSuperAdmin && (
-              <div className="space-y-2">
-                <Label htmlFor="edit-email">Email</Label>
-                <Input
-                  id="edit-email"
-                  type="email"
-                  placeholder="user@example.com"
-                  value={editData.email}
-                  onChange={(e) => setEditData({ ...editData, email: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground">Leave unchanged to keep current email</p>
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                placeholder="user@example.com"
+                value={editData.email}
+                onChange={(e) => setEditData({ ...editData, email: e.target.value })}
+                disabled={!isSuperAdmin}
+              />
+              {!isSuperAdmin && (
+                <p className="text-xs text-muted-foreground">Only Super Admins can change email addresses</p>
+              )}
+            </div>
             <div className="space-y-2">
               <Label htmlFor="edit-full_name">Full Name</Label>
               <Input
