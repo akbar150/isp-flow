@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
+import { EmailButton } from "@/components/EmailButton";
 import { CredentialsModal } from "@/components/CredentialsModal";
 import { CustomerEditDialog } from "@/components/CustomerEditDialog";
 import { CustomerViewDialog } from "@/components/CustomerViewDialog";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
+import { QuickPaymentRecord } from "@/components/QuickPaymentRecord";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,7 +35,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { Plus, Search, Eye, EyeOff, RefreshCw, MoreHorizontal, Edit, Trash2, UserCircle } from "lucide-react";
+import { Plus, Search, Eye, EyeOff, RefreshCw, MoreHorizontal, Edit, Trash2, UserCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { calculateBillingInfo } from "@/lib/billingUtils";
 
@@ -81,6 +83,8 @@ interface Customer {
   mikrotik_users: MikrotikUser[] | null;
 }
 
+type SortDirection = 'asc' | 'desc' | null;
+
 export default function Customers() {
   const { isAdmin, isSuperAdmin } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -92,6 +96,7 @@ export default function Customers() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [dateSortDirection, setDateSortDirection] = useState<SortDirection>(null);
   
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -326,18 +331,37 @@ export default function Customers() {
     }
   };
 
-  const filteredCustomers = customers.filter(customer => {
-    const pppoeUsername = customer.mikrotik_users?.[0]?.username || '';
-    const matchesSearch = 
-      customer.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.user_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      pppoeUsername.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.phone.includes(searchTerm);
-    
-    const matchesStatus = statusFilter === "all" || customer.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  const toggleDateSort = () => {
+    if (dateSortDirection === null) {
+      setDateSortDirection('asc');
+    } else if (dateSortDirection === 'asc') {
+      setDateSortDirection('desc');
+    } else {
+      setDateSortDirection(null);
+    }
+  };
+
+  const filteredCustomers = customers
+    .filter(customer => {
+      const pppoeUsername = customer.mikrotik_users?.[0]?.username || '';
+      const matchesSearch = 
+        customer.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        customer.user_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        pppoeUsername.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        customer.phone.includes(searchTerm);
+      
+      const matchesStatus = statusFilter === "all" || customer.status === statusFilter;
+      
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      if (dateSortDirection === null) return 0;
+      
+      const dateA = new Date(a.expiry_date).getTime();
+      const dateB = new Date(b.expiry_date).getTime();
+      
+      return dateSortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+    });
 
   const canEdit = isAdmin || isSuperAdmin;
 
@@ -362,7 +386,8 @@ export default function Customers() {
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
-              Add Customer
+              <span className="hidden sm:inline">Add Customer</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -548,7 +573,7 @@ export default function Customers() {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
           <SelectContent>
@@ -566,13 +591,23 @@ export default function Customers() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>PPPoE Username</th>
+              <th className="hidden sm:table-cell">PPPoE Username</th>
               <th>Name</th>
-              <th>Phone</th>
-              <th>Package</th>
-              <th>Billing Date</th>
+              <th className="hidden md:table-cell">Phone</th>
+              <th className="hidden lg:table-cell">Package</th>
+              <th>
+                <button 
+                  onClick={toggleDateSort}
+                  className="flex items-center gap-1 hover:text-primary transition-colors"
+                >
+                  Billing Date
+                  {dateSortDirection === null && <ArrowUpDown className="h-3 w-3" />}
+                  {dateSortDirection === 'asc' && <ArrowUp className="h-3 w-3" />}
+                  {dateSortDirection === 'desc' && <ArrowDown className="h-3 w-3" />}
+                </button>
+              </th>
               <th>Due</th>
-              <th>Status</th>
+              <th className="hidden sm:table-cell">Status</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -591,15 +626,21 @@ export default function Customers() {
                   customer.status,
                   customer.packages?.monthly_price || 0
                 );
+                const pppoeUsername = customer.mikrotik_users?.[0]?.username;
                 
                 return (
                   <tr key={customer.id}>
-                    <td className="font-mono text-sm">
-                      {customer.mikrotik_users?.[0]?.username || <span className="text-muted-foreground">Not set</span>}
+                    <td className="font-mono text-sm hidden sm:table-cell">
+                      {pppoeUsername || <span className="text-muted-foreground">Not set</span>}
                     </td>
-                    <td className="font-medium">{customer.full_name}</td>
-                    <td>{customer.phone}</td>
-                    <td>{customer.packages?.name || 'N/A'}</td>
+                    <td>
+                      <div>
+                        <p className="font-medium">{customer.full_name}</p>
+                        <p className="text-xs text-muted-foreground sm:hidden font-mono">{pppoeUsername}</p>
+                      </div>
+                    </td>
+                    <td className="hidden md:table-cell">{customer.phone}</td>
+                    <td className="hidden lg:table-cell">{customer.packages?.name || 'N/A'}</td>
                     <td>
                       <div className="flex flex-col">
                         <span>{format(new Date(customer.expiry_date), 'dd MMM yyyy')}</span>
@@ -609,11 +650,11 @@ export default function Customers() {
                     <td className={billingInfo.displayDue > 0 ? "amount-due" : "amount-positive"}>
                       ৳{billingInfo.displayDue}
                     </td>
-                    <td>
+                    <td className="hidden sm:table-cell">
                       <StatusBadge status={billingInfo.status} />
                     </td>
                     <td>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 flex-wrap">
                         <QuickCallRecord
                           customerId={customer.id}
                           customerName={customer.full_name}
@@ -627,7 +668,24 @@ export default function Customers() {
                           expiryDate={new Date(customer.expiry_date)}
                           amount={customer.packages?.monthly_price || customer.total_due}
                           variant="icon"
-                          pppoeUsername={customer.mikrotik_users?.[0]?.username}
+                          pppoeUsername={pppoeUsername}
+                        />
+                        <EmailButton
+                          phone={customer.phone}
+                          customerName={customer.full_name}
+                          userId={customer.user_id}
+                          packageName={customer.packages?.name || 'Internet'}
+                          expiryDate={new Date(customer.expiry_date)}
+                          amount={customer.packages?.monthly_price || customer.total_due}
+                          variant="icon"
+                          pppoeUsername={pppoeUsername}
+                        />
+                        <QuickPaymentRecord
+                          customerId={customer.id}
+                          customerName={customer.full_name}
+                          dueAmount={customer.total_due}
+                          monthlyPrice={customer.packages?.monthly_price || 0}
+                          onSuccess={fetchData}
                         />
                         {canEdit && (
                           <DropdownMenu>

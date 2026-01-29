@@ -25,6 +25,54 @@ interface WhatsAppButtonProps {
   pppoePassword?: string;
 }
 
+// Format message with WhatsApp formatting (bold, italic, etc.)
+function formatWhatsAppMessage(
+  customerName: string,
+  userId: string,
+  packageName: string,
+  expiryDate: Date,
+  amount: number,
+  ispName: string,
+  pppoeUsername?: string,
+  pppoePassword?: string
+): string {
+  const formattedDate = expiryDate.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+
+  // WhatsApp supports: *bold*, _italic_, ~strikethrough~, ```monospace```
+  let message = `🌐 *${ispName} - Payment Reminder*
+
+Dear *${customerName}*,
+
+📋 *Account Details:*
+━━━━━━━━━━━━━━━
+👤 PPPoE Username: \`${pppoeUsername || userId}\``;
+
+  if (pppoePassword) {
+    message += `
+🔑 PPPoE Password: \`${pppoePassword}\``;
+  }
+
+  message += `
+🆔 Customer ID: \`${userId}\`
+📦 Package: *${packageName}*
+📅 Expiry Date: *${formattedDate}*
+
+💰 *Due Amount: ৳${amount}*
+━━━━━━━━━━━━━━━
+
+⚠️ Please pay before the expiry date to avoid service disconnection.
+
+🙏 Thank you for choosing *${ispName}*!
+
+_For any queries, please contact us._`;
+
+  return message;
+}
+
 export function WhatsAppButton({
   phone,
   customerName,
@@ -38,7 +86,7 @@ export function WhatsAppButton({
 }: WhatsAppButtonProps) {
   const { ispName } = useIspSettings();
   
-  const defaultMessage = generateWhatsAppMessage(
+  const defaultMessage = formatWhatsAppMessage(
     customerName,
     userId,
     packageName,
@@ -70,7 +118,7 @@ export function WhatsAppButton({
           <DialogHeader>
             <DialogTitle>Send WhatsApp Reminder</DialogTitle>
             <DialogDescription>
-              Edit the message below before sending
+              Edit the message below before sending. Uses WhatsApp formatting: *bold*, _italic_, ~strikethrough~
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
@@ -81,8 +129,11 @@ export function WhatsAppButton({
               <Textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                className="min-h-[200px] font-mono text-sm"
+                className="min-h-[280px] font-mono text-sm"
               />
+              <p className="text-xs text-muted-foreground mt-2">
+                💡 Tip: Use *bold*, _italic_, ~strikethrough~, and ```code``` for formatting
+              </p>
             </div>
             <Button onClick={handleSend} className="whatsapp-btn w-full">
               <MessageCircle className="h-4 w-4" />
@@ -106,7 +157,7 @@ export function WhatsAppButton({
         <DialogHeader>
           <DialogTitle>Send WhatsApp Reminder</DialogTitle>
           <DialogDescription>
-            Edit the message below before sending
+            Edit the message below before sending. Uses WhatsApp formatting: *bold*, _italic_, ~strikethrough~
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 mt-4">
@@ -117,8 +168,11 @@ export function WhatsAppButton({
             <Textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              className="min-h-[200px] font-mono text-sm"
+              className="min-h-[280px] font-mono text-sm"
             />
+            <p className="text-xs text-muted-foreground mt-2">
+              💡 Tip: Use *bold*, _italic_, ~strikethrough~, and ```code``` for formatting
+            </p>
           </div>
           <Button onClick={handleSend} className="whatsapp-btn w-full">
             <MessageCircle className="h-4 w-4" />
