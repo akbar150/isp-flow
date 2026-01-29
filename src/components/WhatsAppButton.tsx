@@ -25,52 +25,16 @@ interface WhatsAppButtonProps {
   pppoePassword?: string;
 }
 
-// Format message with WhatsApp formatting (bold, italic, etc.)
-function formatWhatsAppMessage(
-  customerName: string,
-  userId: string,
-  packageName: string,
-  expiryDate: Date,
-  amount: number,
-  ispName: string,
-  pppoeUsername?: string,
-  pppoePassword?: string
+// Apply template variables to a message template
+function applyTemplateVars(
+  template: string,
+  vars: Record<string, string>
 ): string {
-  const formattedDate = expiryDate.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  });
-
-  // WhatsApp supports: *bold*, _italic_, ~strikethrough~, ```monospace```
-  let message = `🌐 *${ispName} - Payment Reminder*
-
-Dear *${customerName}*,
-
-📋 *Account Details:*
-━━━━━━━━━━━━━━━
-👤 PPPoE Username: \`${pppoeUsername || userId}\``;
-
-  if (pppoePassword) {
-    message += `
-🔑 PPPoE Password: \`${pppoePassword}\``;
+  let result = template;
+  for (const [key, value] of Object.entries(vars)) {
+    result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
   }
-
-  message += `
-🆔 Customer ID: \`${userId}\`
-📦 Package: *${packageName}*
-📅 Expiry Date: *${formattedDate}*
-
-💰 *Due Amount: ৳${amount}*
-━━━━━━━━━━━━━━━
-
-⚠️ Please pay before the expiry date to avoid service disconnection.
-
-🙏 Thank you for choosing *${ispName}*!
-
-_For any queries, please contact us._`;
-
-  return message;
+  return result;
 }
 
 export function WhatsAppButton({
@@ -84,18 +48,28 @@ export function WhatsAppButton({
   pppoeUsername,
   pppoePassword
 }: WhatsAppButtonProps) {
-  const { ispName } = useIspSettings();
+  const { ispName, whatsappTemplate } = useIspSettings();
   
-  const defaultMessage = formatWhatsAppMessage(
-    customerName,
-    userId,
-    packageName,
-    expiryDate,
-    amount,
-    ispName,
-    pppoeUsername,
-    pppoePassword
-  );
+  const formattedDate = expiryDate.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+  
+  // Build template variables
+  const templateVars: Record<string, string> = {
+    CustomerName: customerName,
+    CustomerID: userId,
+    PPPoEUsername: pppoeUsername || userId,
+    PPPoEPassword: pppoePassword || '',
+    PackageName: packageName,
+    ExpiryDate: formattedDate,
+    Amount: String(amount),
+    ISPName: ispName,
+  };
+  
+  // Use saved template if available, otherwise use default
+  const defaultMessage = applyTemplateVars(whatsappTemplate, templateVars);
 
   const [message, setMessage] = useState(defaultMessage);
   const [open, setOpen] = useState(false);

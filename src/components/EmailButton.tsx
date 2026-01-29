@@ -11,7 +11,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useIspSettings } from "@/hooks/useIspSettings";
@@ -30,6 +30,18 @@ interface EmailButtonProps {
   pppoeUsername?: string;
 }
 
+// Apply template variables to a message template
+function applyTemplateVars(
+  template: string,
+  vars: Record<string, string>
+): string {
+  let result = template;
+  for (const [key, value] of Object.entries(vars)) {
+    result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+  }
+  return result;
+}
+
 export function EmailButton({
   email,
   phone,
@@ -41,30 +53,34 @@ export function EmailButton({
   variant = 'default',
   pppoeUsername
 }: EmailButtonProps) {
-  const { ispName } = useIspSettings();
+  const { ispName, emailSubjectReminder, emailTemplateReminder, emailFromName, emailFromAddress } = useIspSettings();
   const [open, setOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [customerEmail, setCustomerEmail] = useState(email || "");
   
   const formattedDate = format(expiryDate, 'dd MMM yyyy');
   
-  const [subject, setSubject] = useState(`Payment Reminder - ${ispName}`);
-  const [message, setMessage] = useState(`Dear ${customerName},
-
-Your internet package "${packageName}" will expire on ${formattedDate}.
-
-Account Details:
-• PPPoE Username: ${pppoeUsername || userId}
-• Customer ID: ${userId}
-• Package: ${packageName}
-• Due Amount: ৳${amount}
-
-Please make the payment to avoid service disconnection.
-
-Thank you for choosing ${ispName}.
-
-Best Regards,
-${ispName} Team`);
+  // Build template variables
+  const templateVars: Record<string, string> = {
+    CustomerName: customerName,
+    CustomerID: userId,
+    PPPoEUsername: pppoeUsername || userId,
+    PackageName: packageName,
+    ExpiryDate: formattedDate,
+    Amount: String(amount),
+    ISPName: ispName,
+  };
+  
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  
+  // Update subject and message when dialog opens or settings load
+  useEffect(() => {
+    if (open) {
+      setSubject(applyTemplateVars(emailSubjectReminder, templateVars));
+      setMessage(applyTemplateVars(emailTemplateReminder, templateVars));
+    }
+  }, [open, emailSubjectReminder, emailTemplateReminder, ispName]);
 
   const handleSend = async () => {
     if (!customerEmail) {
@@ -78,19 +94,25 @@ ${ispName} Team`);
 
     setSending(true);
     try {
+      // Convert plain text message to HTML with proper styling
+      const htmlMessage = message
+        .split('\n')
+        .map(line => line.trim() === '' ? '<br>' : `<p style="margin: 8px 0; color: #4b5563;">${line}</p>`)
+        .join('');
+      
       const { data, error } = await supabase.functions.invoke('send-email-brevo', {
         body: {
           to: customerEmail,
           subject: subject,
+          senderName: emailFromName || ispName,
+          senderEmail: emailFromAddress || undefined,
           htmlContent: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <div style="background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%); padding: 20px; text-align: center;">
                 <h1 style="color: white; margin: 0;">${ispName}</h1>
               </div>
               <div style="padding: 30px; background: #f9fafb;">
-                <h2 style="color: #1f2937; margin-top: 0;">Payment Reminder</h2>
-                <p style="color: #4b5563;">Dear <strong>${customerName}</strong>,</p>
-                <p style="color: #4b5563;">Your internet package "<strong>${packageName}</strong>" will expire on <strong>${formattedDate}</strong>.</p>
+                ${htmlMessage}
                 
                 <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
                   <h3 style="color: #1f2937; margin-top: 0;">Account Details</h3>
@@ -113,9 +135,6 @@ ${ispName} Team`);
                     </tr>
                   </table>
                 </div>
-                
-                <p style="color: #4b5563;">Please make the payment to avoid service disconnection.</p>
-                <p style="color: #4b5563;">Thank you for choosing ${ispName}.</p>
                 
                 <p style="color: #6b7280; margin-top: 30px;">Best Regards,<br><strong>${ispName} Team</strong></p>
               </div>
