@@ -11,7 +11,8 @@ import {
   Router,
   ChevronLeft,
   ChevronRight,
-  Wifi
+  Wifi,
+  Phone
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
   { path: "/packages", label: "Packages", icon: Package, roles: ["admin"] },
   { path: "/payments", label: "Payments", icon: CreditCard, roles: ["admin", "staff"] },
   { path: "/reminders", label: "Reminders", icon: Bell, roles: ["admin", "staff"] },
+  { path: "/call-records", label: "Call Records", icon: Phone, roles: ["admin", "staff"] },
   { path: "/routers", label: "Routers", icon: Router, roles: ["admin"] },
   { path: "/settings", label: "Settings", icon: Settings, roles: ["admin"] },
 ];

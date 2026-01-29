@@ -65,6 +65,48 @@ export type Database = {
         }
         Relationships: []
       }
+      call_records: {
+        Row: {
+          call_date: string
+          called_by: string | null
+          created_at: string
+          customer_id: string
+          id: string
+          notes: string
+        }
+        Insert: {
+          call_date?: string
+          called_by?: string | null
+          created_at?: string
+          customer_id: string
+          id?: string
+          notes: string
+        }
+        Update: {
+          call_date?: string
+          called_by?: string | null
+          created_at?: string
+          customer_id?: string
+          id?: string
+          notes?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_records_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_records_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address: string
