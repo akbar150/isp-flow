@@ -20,7 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 
-type AppRole = "admin" | "staff";
+type AppRole = "super_admin" | "admin" | "staff";
 
 interface NavItem {
   path: string;
@@ -30,14 +30,14 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "staff"] },
-  { path: "/customers", label: "Customers", icon: Users, roles: ["admin", "staff"] },
-  { path: "/packages", label: "Packages", icon: Package, roles: ["admin"] },
-  { path: "/payments", label: "Payments", icon: CreditCard, roles: ["admin", "staff"] },
-  { path: "/reminders", label: "Reminders", icon: Bell, roles: ["admin", "staff"] },
-  { path: "/call-records", label: "Call Records", icon: Phone, roles: ["admin", "staff"] },
-  { path: "/routers", label: "Routers", icon: Router, roles: ["admin"] },
-  { path: "/settings", label: "Settings", icon: Settings, roles: ["admin"] },
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["super_admin", "admin", "staff"] },
+  { path: "/customers", label: "Customers", icon: Users, roles: ["super_admin", "admin", "staff"] },
+  { path: "/packages", label: "Packages", icon: Package, roles: ["super_admin", "admin"] },
+  { path: "/payments", label: "Payments", icon: CreditCard, roles: ["super_admin", "admin", "staff"] },
+  { path: "/reminders", label: "Reminders", icon: Bell, roles: ["super_admin", "admin", "staff"] },
+  { path: "/call-records", label: "Call Records", icon: Phone, roles: ["super_admin", "admin", "staff"] },
+  { path: "/routers", label: "Routers", icon: Router, roles: ["super_admin", "admin"] },
+  { path: "/settings", label: "Settings", icon: Settings, roles: ["super_admin", "admin"] },
 ];
 
 interface AppSidebarProps {

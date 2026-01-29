@@ -27,35 +27,54 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Trash2, Shield, User } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { UserPlus, Trash2, Shield, User, Crown, Pencil, KeyRound } from "lucide-react";
 import { z } from "zod";
+
+type AppRole = "super_admin" | "admin" | "staff";
 
 const createUserSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   full_name: z.string().min(2, "Full name must be at least 2 characters").max(100, "Full name too long"),
-  role: z.enum(["admin", "staff"]),
+  role: z.enum(["super_admin", "admin", "staff"]),
 });
 
 interface AdminUser {
   id: string;
   email: string;
   full_name: string | null;
-  role: string;
+  role: AppRole;
   created_at: string;
 }
 
 export function UserManagement() {
+  const { role: currentUserRole } = useAuth();
+  const isSuperAdmin = currentUserRole === "super_admin";
+
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     full_name: "",
-    role: "staff" as "admin" | "staff",
+    role: "staff" as AppRole,
   });
+  
+  const [editData, setEditData] = useState({
+    email: "",
+    full_name: "",
+    role: "staff" as AppRole,
+    password: "",
+  });
+  
+  const [resetEmail, setResetEmail] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
@@ -65,28 +84,25 @@ export function UserManagement() {
 
   const fetchUsers = async () => {
     try {
-      // Get user roles with profiles
       const { data: rolesData, error: rolesError } = await supabase
         .from("user_roles")
         .select("user_id, role, created_at");
 
       if (rolesError) throw rolesError;
 
-      // Get profiles for these users
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
         .select("user_id, full_name");
 
       if (profilesError) throw profilesError;
 
-      // Combine the data
       const usersWithProfiles: AdminUser[] = rolesData.map((role) => {
         const profile = profilesData.find((p) => p.user_id === role.user_id);
         return {
           id: role.user_id,
-          email: "", // We don't have access to email from client
+          email: "",
           full_name: profile?.full_name || null,
-          role: role.role,
+          role: role.role as AppRole,
           created_at: role.created_at,
         };
       });
@@ -107,23 +123,30 @@ export function UserManagement() {
   const handleCreateUser = async () => {
     setErrors({});
 
-    // Validate form data
     const result = createUserSchema.safeParse(formData);
     if (!result.success) {
       const fieldErrors: Record<string, string> = {};
       result.error.errors.forEach((err) => {
-        if (err.path[0]) {
-          fieldErrors[err.path[0] as string] = err.message;
-        }
+        if (err.path[0]) fieldErrors[err.path[0] as string] = err.message;
       });
       setErrors(fieldErrors);
       return;
     }
 
+    // Check permissions
+    if ((formData.role === "admin" || formData.role === "super_admin") && !isSuperAdmin) {
+      toast({
+        variant: "destructive",
+        title: "Permission Denied",
+        description: "Only super admins can create admin users",
+      });
+      return;
+    }
+
     setCreating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-admin-user", {
-        body: formData,
+      const { data, error } = await supabase.functions.invoke("manage-user", {
+        body: { action: "create", ...formData },
       });
 
       if (error) throw error;
@@ -149,32 +172,155 @@ export function UserManagement() {
     }
   };
 
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm("Are you sure you want to remove this user's role? This cannot be undone.")) {
-      return;
-    }
+  const handleEditUser = async () => {
+    if (!selectedUser) return;
 
+    setCreating(true);
     try {
-      const { error } = await supabase
-        .from("user_roles")
-        .delete()
-        .eq("user_id", userId);
+      const updateData: Record<string, unknown> = {
+        action: "update",
+        user_id: selectedUser.id,
+      };
+
+      if (editData.email && editData.email !== selectedUser.email) {
+        updateData.email = editData.email;
+      }
+      if (editData.full_name && editData.full_name !== selectedUser.full_name) {
+        updateData.full_name = editData.full_name;
+      }
+      if (editData.password) {
+        updateData.password = editData.password;
+      }
+      if (isSuperAdmin && editData.role !== selectedUser.role) {
+        updateData.role = editData.role;
+      }
+
+      const { data, error } = await supabase.functions.invoke("manage-user", {
+        body: updateData,
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+
+      toast({
+        title: "User Updated",
+        description: "User profile has been updated successfully",
+      });
+
+      setEditDialogOpen(false);
+      setSelectedUser(null);
+      fetchUsers();
+    } catch (error: any) {
+      console.error("Error updating user:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to update user",
+      });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetEmail) return;
+
+    setCreating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-user", {
+        body: { action: "reset_password", email: resetEmail },
+      });
 
       if (error) throw error;
 
       toast({
-        title: "User Role Removed",
-        description: "The user's admin/staff role has been removed",
+        title: "Password Reset Sent",
+        description: data.message || "Password reset email has been sent",
+      });
+
+      setResetDialogOpen(false);
+      setResetEmail("");
+    } catch (error: any) {
+      console.error("Error resetting password:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to send password reset",
+      });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, userRole: AppRole) => {
+    if (!confirm("Are you sure you want to delete this user? This cannot be undone.")) {
+      return;
+    }
+
+    // Check permissions
+    if ((userRole === "admin" || userRole === "super_admin") && !isSuperAdmin) {
+      toast({
+        variant: "destructive",
+        title: "Permission Denied",
+        description: "Only super admins can delete admin users",
+      });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-user", {
+        body: { action: "delete", user_id: userId },
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+
+      toast({
+        title: "User Deleted",
+        description: "The user has been removed",
       });
 
       fetchUsers();
     } catch (error: any) {
-      console.error("Error deleting user role:", error);
+      console.error("Error deleting user:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to remove user role",
+        description: error.message || "Failed to delete user",
       });
+    }
+  };
+
+  const openEditDialog = (user: AdminUser) => {
+    setSelectedUser(user);
+    setEditData({
+      email: user.email,
+      full_name: user.full_name || "",
+      role: user.role,
+      password: "",
+    });
+    setEditDialogOpen(true);
+  };
+
+  const getRoleIcon = (role: AppRole) => {
+    switch (role) {
+      case "super_admin":
+        return <Crown className="h-3 w-3 mr-1" />;
+      case "admin":
+        return <Shield className="h-3 w-3 mr-1" />;
+      default:
+        return <User className="h-3 w-3 mr-1" />;
+    }
+  };
+
+  const getRoleBadgeVariant = (role: AppRole) => {
+    switch (role) {
+      case "super_admin":
+        return "default" as const;
+      case "admin":
+        return "secondary" as const;
+      default:
+        return "outline" as const;
     }
   };
 
@@ -184,77 +330,171 @@ export function UserManagement() {
         <div>
           <h3 className="text-lg font-medium">Admin & Staff Users</h3>
           <p className="text-sm text-muted-foreground">
-            Manage admin and staff accounts. Only admins can create new users.
+            Manage admin and staff accounts.
+            {isSuperAdmin ? " You have super admin access." : " Only super admins can create admin users."}
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <UserPlus className="h-4 w-4 mr-2" />
-              Create User
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create Admin/Staff User</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="user@example.com"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                />
-                {errors.email && (
-                  <p className="text-sm text-destructive">{errors.email}</p>
-                )}
+        <div className="flex gap-2">
+          <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <KeyRound className="h-4 w-4 mr-2" />
+                Reset Password
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Send Password Reset Email</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reset-email">User Email</Label>
+                  <Input
+                    id="reset-email"
+                    type="email"
+                    placeholder="user@example.com"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                  />
+                </div>
+                <Button onClick={handleResetPassword} disabled={creating || !resetEmail} className="w-full">
+                  {creating ? "Sending..." : "Send Reset Email"}
+                </Button>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="full_name">Full Name</Label>
-                <Input
-                  id="full_name"
-                  placeholder="John Doe"
-                  value={formData.full_name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, full_name: e.target.value })
-                  }
-                />
-                {errors.full_name && (
-                  <p className="text-sm text-destructive">{errors.full_name}</p>
-                )}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Create User
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New User</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="user@example.com"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  />
+                  {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="full_name">Full Name</Label>
+                  <Input
+                    id="full_name"
+                    placeholder="John Doe"
+                    value={formData.full_name}
+                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                  />
+                  {errors.full_name && <p className="text-sm text-destructive">{errors.full_name}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  />
+                  {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="role">Role</Label>
+                  <Select
+                    value={formData.role}
+                    onValueChange={(value: AppRole) => setFormData({ ...formData, role: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isSuperAdmin && (
+                        <SelectItem value="super_admin">
+                          <div className="flex items-center gap-2">
+                            <Crown className="h-4 w-4" />
+                            Super Admin
+                          </div>
+                        </SelectItem>
+                      )}
+                      {isSuperAdmin && (
+                        <SelectItem value="admin">
+                          <div className="flex items-center gap-2">
+                            <Shield className="h-4 w-4" />
+                            Admin
+                          </div>
+                        </SelectItem>
+                      )}
+                      <SelectItem value="staff">
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4" />
+                          Staff
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={handleCreateUser} disabled={creating} className="w-full">
+                  {creating ? "Creating..." : "Create User"}
+                </Button>
               </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Edit User Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-full_name">Full Name</Label>
+              <Input
+                id="edit-full_name"
+                placeholder="John Doe"
+                value={editData.full_name}
+                onChange={(e) => setEditData({ ...editData, full_name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-password">New Password (leave blank to keep current)</Label>
+              <Input
+                id="edit-password"
+                type="password"
+                placeholder="••••••••"
+                value={editData.password}
+                onChange={(e) => setEditData({ ...editData, password: e.target.value })}
+              />
+            </div>
+            {isSuperAdmin && selectedUser && (
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={formData.password}
-                  onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
-                  }
-                />
-                {errors.password && (
-                  <p className="text-sm text-destructive">{errors.password}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
+                <Label htmlFor="edit-role">Role</Label>
                 <Select
-                  value={formData.role}
-                  onValueChange={(value: "admin" | "staff") =>
-                    setFormData({ ...formData, role: value })
-                  }
+                  value={editData.role}
+                  onValueChange={(value: AppRole) => setEditData({ ...editData, role: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="super_admin">
+                      <div className="flex items-center gap-2">
+                        <Crown className="h-4 w-4" />
+                        Super Admin
+                      </div>
+                    </SelectItem>
                     <SelectItem value="admin">
                       <div className="flex items-center gap-2">
                         <Shield className="h-4 w-4" />
@@ -269,21 +509,14 @@ export function UserManagement() {
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                {errors.role && (
-                  <p className="text-sm text-destructive">{errors.role}</p>
-                )}
               </div>
-              <Button
-                onClick={handleCreateUser}
-                disabled={creating}
-                className="w-full"
-              >
-                {creating ? "Creating..." : "Create User"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+            )}
+            <Button onClick={handleEditUser} disabled={creating} className="w-full">
+              {creating ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="border rounded-lg">
         <Table>
@@ -292,7 +525,7 @@ export function UserManagement() {
               <TableHead>Name</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Created</TableHead>
-              <TableHead className="w-[100px]">Actions</TableHead>
+              <TableHead className="w-[120px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -315,28 +548,31 @@ export function UserManagement() {
                     {user.full_name || "Unnamed User"}
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={user.role === "admin" ? "default" : "secondary"}
-                    >
-                      {user.role === "admin" ? (
-                        <Shield className="h-3 w-3 mr-1" />
-                      ) : (
-                        <User className="h-3 w-3 mr-1" />
-                      )}
-                      {user.role}
+                    <Badge variant={getRoleBadgeVariant(user.role)}>
+                      {getRoleIcon(user.role)}
+                      {user.role.replace("_", " ")}
                     </Badge>
                   </TableCell>
                   <TableCell>
                     {new Date(user.created_at).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteUser(user.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEditDialog(user)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteUser(user.id, user.role)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
