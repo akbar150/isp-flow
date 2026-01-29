@@ -40,11 +40,14 @@ interface Payment {
 
 export default function CustomerPortal() {
   const navigate = useNavigate();
-  const { ispName } = useIspSettings();
+  const { ispName, loading: settingsLoading } = useIspSettings();
   const [customer, setCustomer] = useState<CustomerData | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  
+  // Show loading placeholder while settings load to prevent "Smart ISP" flash
+  const displayName = settingsLoading ? "Loading..." : ispName;
 
   // Profile update state
   const [profileData, setProfileData] = useState({
@@ -200,7 +203,7 @@ export default function CustomerPortal() {
               <Wifi className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-semibold">{ispName}</h1>
+              <h1 className="font-semibold">{displayName}</h1>
               <p className="text-xs text-muted-foreground">Customer Portal</p>
             </div>
           </div>

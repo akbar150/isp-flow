@@ -15,13 +15,6 @@ interface EmailRequest {
   senderEmail?: string;
 }
 
-interface SmtpSettings {
-  smtp_server: string;
-  smtp_port: string;
-  smtp_username: string;
-  smtp_password: string;
-}
-
 function decodeSettingValue(raw: unknown): string {
   if (raw === null || raw === undefined) return "";
 
@@ -53,26 +46,32 @@ function decodeSettingValue(raw: unknown): string {
   return String(raw);
 }
 
-async function getSmtpSettings(): Promise<SmtpSettings | null> {
+interface EmailSettings {
+  api_key: string;
+  sender_email: string;
+  sender_name: string;
+}
+
+async function getEmailSettings(): Promise<EmailSettings | null> {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.log("No Supabase credentials for fetching SMTP settings");
+      console.log("No Supabase credentials for fetching email settings");
       return null;
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch SMTP settings from system_settings
+    // Fetch settings from system_settings
     const { data: settingsData, error: settingsError } = await supabase
       .from("system_settings")
       .select("key, value")
-      .in("key", ["smtp_server", "smtp_port", "smtp_username", "smtp_password_encrypted"]);
+      .in("key", ["smtp_username", "smtp_password_encrypted", "email_from_name", "email_from_address"]);
 
     if (settingsError || !settingsData) {
-      console.log("Could not fetch SMTP settings:", settingsError?.message);
+      console.log("Could not fetch email settings:", settingsError?.message);
       return null;
     }
 
@@ -81,87 +80,46 @@ async function getSmtpSettings(): Promise<SmtpSettings | null> {
       settings[row.key] = decodeSettingValue(row.value);
     }
 
-    // Check if we have SMTP settings configured
-    if (!settings.smtp_server || !settings.smtp_password_encrypted) {
-      console.log("SMTP settings not fully configured");
+    // Check if we have the encrypted API key
+    if (!settings.smtp_password_encrypted) {
+      console.log("No API key configured in settings");
       return null;
     }
 
-    // Decrypt the password
-    const { data: decryptedPassword, error: decryptError } = await supabase
+    // Decrypt the API key
+    const { data: decryptedKey, error: decryptError } = await supabase
       .rpc("decrypt_smtp_password", { encrypted_password: settings.smtp_password_encrypted });
 
-    if (decryptError || !decryptedPassword) {
-      console.error("Failed to decrypt SMTP password:", decryptError?.message);
+    if (decryptError || !decryptedKey) {
+      console.error("Failed to decrypt API key:", decryptError?.message);
       return null;
     }
 
+    console.log("Decrypted API key prefix:", decryptedKey.substring(0, 10) + "...");
+
     return {
-      smtp_server: settings.smtp_server,
-      smtp_port: settings.smtp_port || "587",
-      smtp_username: settings.smtp_username || "",
-      smtp_password: decryptedPassword,
+      api_key: decryptedKey,
+      sender_email: settings.email_from_address || settings.smtp_username || "",
+      sender_name: settings.email_from_name || "ISP Billing System",
     };
   } catch (error) {
-    console.error("Error getting SMTP settings:", error);
+    console.error("Error getting email settings:", error);
     return null;
   }
 }
 
-async function sendViaBrevoSmtpApi(
-  smtpSettings: SmtpSettings,
+async function sendViaBrevo(
+  apiKey: string,
   to: string,
   subject: string,
   htmlContent: string,
   textContent?: string,
   senderName?: string,
   senderEmail?: string
-): Promise<Response> {
-  // Use the SMTP key as the API key for Brevo's transactional API
-  // This works because Brevo SMTP keys can also be used for the HTTP API
-  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: {
-      "Accept": "application/json",
-      "Content-Type": "application/json; charset=utf-8",
-      "api-key": smtpSettings.smtp_password, // SMTP key works as API key
-    },
-    body: JSON.stringify({
-      sender: {
-        name: senderName || "ISP Billing System",
-        email: senderEmail || smtpSettings.smtp_username || "noreply@easylinkbd.com",
-      },
-      to: [{ email: to }],
-      subject: subject,
-      htmlContent: htmlContent,
-      textContent: textContent || undefined,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    console.error("Brevo SMTP API error:", errorData);
-    throw new Error(`Brevo API error: ${JSON.stringify(errorData)}`);
-  }
-
-  const result = await response.json();
-  console.log("Email sent successfully via Brevo SMTP API:", result);
-
-  return new Response(JSON.stringify({ success: true, messageId: result.messageId, provider: "brevo-smtp" }), {
-    status: 200,
-    headers: { "Content-Type": "application/json", ...corsHeaders },
-  });
-}
-
-async function sendViaBrevoApiKey(
-  apiKey: string, 
-  to: string, 
-  subject: string, 
-  htmlContent: string, 
-  textContent?: string, 
-  senderName?: string, 
-  senderEmail?: string
-): Promise<Response> {
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  console.log(`Sending email via Brevo to: ${to}`);
+  console.log(`API key type: ${apiKey.startsWith("xkeysib-") ? "API Key" : apiKey.startsWith("xsmtpsib-") ? "SMTP Key (may not work!)" : "Unknown"}`);
+  
   const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
@@ -181,19 +139,27 @@ async function sendViaBrevoApiKey(
     }),
   });
 
+  const responseText = await response.text();
+  console.log(`Brevo API response status: ${response.status}`);
+  console.log(`Brevo API response: ${responseText}`);
+
   if (!response.ok) {
-    const errorData = await response.json();
-    console.error("Brevo API error:", errorData);
-    throw new Error(`Brevo API error: ${JSON.stringify(errorData)}`);
+    let errorMessage = `Brevo API error (${response.status})`;
+    try {
+      const errorData = JSON.parse(responseText);
+      errorMessage = errorData.message || errorData.error || JSON.stringify(errorData);
+    } catch {
+      errorMessage = responseText || errorMessage;
+    }
+    return { success: false, error: errorMessage };
   }
 
-  const result = await response.json();
-  console.log("Email sent successfully via Brevo API:", result);
-
-  return new Response(JSON.stringify({ success: true, messageId: result.messageId, provider: "brevo" }), {
-    status: 200,
-    headers: { "Content-Type": "application/json", ...corsHeaders },
-  });
+  try {
+    const result = JSON.parse(responseText);
+    return { success: true, messageId: result.messageId };
+  } catch {
+    return { success: true };
+  }
 }
 
 async function sendViaResend(
@@ -204,10 +170,12 @@ async function sendViaResend(
   textContent?: string,
   senderName?: string,
   senderEmail?: string
-): Promise<Response> {
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const fromAddress = senderEmail 
     ? `${senderName || "ISP Billing"} <${senderEmail}>` 
     : `${senderName || "ISP Billing System"} <onboarding@resend.dev>`;
+  
+  console.log(`Sending email via Resend to: ${to}`);
   
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -224,19 +192,26 @@ async function sendViaResend(
     }),
   });
 
+  const responseText = await response.text();
+  console.log(`Resend API response status: ${response.status}`);
+
   if (!response.ok) {
-    const errorData = await response.json();
-    console.error("Resend API error:", errorData);
-    throw new Error(`Resend API error: ${JSON.stringify(errorData)}`);
+    let errorMessage = `Resend API error (${response.status})`;
+    try {
+      const errorData = JSON.parse(responseText);
+      errorMessage = errorData.message || errorData.error || JSON.stringify(errorData);
+    } catch {
+      errorMessage = responseText || errorMessage;
+    }
+    return { success: false, error: errorMessage };
   }
 
-  const data = await response.json();
-  console.log("Email sent successfully via Resend:", data);
-
-  return new Response(JSON.stringify({ success: true, messageId: data?.id, provider: "resend" }), {
-    status: 200,
-    headers: { "Content-Type": "application/json", ...corsHeaders },
-  });
+  try {
+    const result = JSON.parse(responseText);
+    return { success: true, messageId: result.id };
+  } catch {
+    return { success: true };
+  }
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -253,70 +228,105 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Missing required fields: to, subject, htmlContent");
     }
 
-    console.log(`Sending email to: ${to}, subject: ${subject}`);
+    console.log(`=== Email Request ===`);
+    console.log(`To: ${to}`);
+    console.log(`Subject: ${subject}`);
 
     // Try methods in order of preference:
-    // 1. User-configured SMTP settings (Brevo SMTP)
-    // 2. BREVO_SMTP_KEY secret
-    // 3. BREVO_API_KEY secret
-    // 4. RESEND_API_KEY secret
+    // 1. User-configured API key from database
+    // 2. BREVO_API_KEY secret
+    // 3. RESEND_API_KEY secret
 
-    // 1. Try user-configured SMTP settings first
-    const smtpSettings = await getSmtpSettings();
-    if (smtpSettings) {
-      try {
-        console.log("Attempting to send via user-configured SMTP settings...");
-        return await sendViaBrevoSmtpApi(smtpSettings, to, subject, htmlContent, textContent, senderName, senderEmail);
-      } catch (smtpError) {
-        console.error("SMTP settings failed:", smtpError);
-        // Fall through to try other methods
+    const errors: string[] = [];
+
+    // 1. Try user-configured settings first
+    const emailSettings = await getEmailSettings();
+    if (emailSettings) {
+      console.log("Attempting to send via user-configured API key...");
+      const result = await sendViaBrevo(
+        emailSettings.api_key,
+        to,
+        subject,
+        htmlContent,
+        textContent,
+        senderName || emailSettings.sender_name,
+        senderEmail || emailSettings.sender_email
+      );
+      
+      if (result.success) {
+        console.log("Email sent successfully via user settings");
+        return new Response(JSON.stringify({ 
+          success: true, 
+          messageId: result.messageId, 
+          provider: "brevo-configured" 
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      } else {
+        console.error("User-configured API key failed:", result.error);
+        errors.push(`Configured API: ${result.error}`);
       }
     }
 
-    // 2. Try BREVO_SMTP_KEY
-    const brevoSmtpKey = Deno.env.get("BREVO_SMTP_KEY");
-    if (brevoSmtpKey) {
-      try {
-        console.log("Attempting to send via BREVO_SMTP_KEY...");
-        return await sendViaBrevoApiKey(brevoSmtpKey, to, subject, htmlContent, textContent, senderName, senderEmail);
-      } catch (smtpKeyError) {
-        console.error("BREVO_SMTP_KEY failed:", smtpKeyError);
-        // Fall through
-      }
-    }
-
-    // 3. Try BREVO_API_KEY
+    // 2. Try BREVO_API_KEY environment secret
     const brevoApiKey = Deno.env.get("BREVO_API_KEY");
     if (brevoApiKey) {
-      try {
-        console.log("Attempting to send via BREVO_API_KEY...");
-        return await sendViaBrevoApiKey(brevoApiKey, to, subject, htmlContent, textContent, senderName, senderEmail);
-      } catch (apiKeyError) {
-        console.error("BREVO_API_KEY failed:", apiKeyError);
-        // Fall through
+      console.log("Attempting to send via BREVO_API_KEY secret...");
+      const result = await sendViaBrevo(brevoApiKey, to, subject, htmlContent, textContent, senderName, senderEmail);
+      
+      if (result.success) {
+        console.log("Email sent successfully via BREVO_API_KEY");
+        return new Response(JSON.stringify({ 
+          success: true, 
+          messageId: result.messageId, 
+          provider: "brevo" 
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      } else {
+        console.error("BREVO_API_KEY failed:", result.error);
+        errors.push(`BREVO_API_KEY: ${result.error}`);
       }
     }
 
-    // 4. Try RESEND_API_KEY
+    // 3. Try RESEND_API_KEY environment secret
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     if (resendApiKey) {
-      try {
-        console.log("Attempting to send via RESEND_API_KEY...");
-        return await sendViaResend(resendApiKey, to, subject, htmlContent, textContent, senderName, senderEmail);
-      } catch (resendError) {
-        console.error("RESEND_API_KEY failed:", resendError);
-        throw resendError; // This is the last option, so throw
+      console.log("Attempting to send via RESEND_API_KEY secret...");
+      const result = await sendViaResend(resendApiKey, to, subject, htmlContent, textContent, senderName, senderEmail);
+      
+      if (result.success) {
+        console.log("Email sent successfully via RESEND_API_KEY");
+        return new Response(JSON.stringify({ 
+          success: true, 
+          messageId: result.messageId, 
+          provider: "resend" 
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      } else {
+        console.error("RESEND_API_KEY failed:", result.error);
+        errors.push(`RESEND_API_KEY: ${result.error}`);
       }
+    }
+
+    // All methods failed or not configured
+    if (errors.length > 0) {
+      throw new Error(`All email providers failed:\n${errors.join("\n")}`);
     }
 
     throw new Error(
-      "No email sending method configured. Please configure SMTP settings in Settings > Email, " +
-      "or set BREVO_API_KEY or RESEND_API_KEY in environment secrets."
+      "No email sending method configured. Please go to Settings > Email and enter a Brevo API Key " +
+      "(starts with xkeysib-). Note: SMTP keys (xsmtpsib-) do not work with the HTTP API."
     );
   } catch (error: unknown) {
     console.error("Error in send-email-brevo function:", error);
     return new Response(
       JSON.stringify({ 
+        success: false,
         error: error instanceof Error ? error.message : "Unknown error" 
       }),
       {

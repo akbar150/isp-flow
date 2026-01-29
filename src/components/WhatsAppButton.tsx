@@ -95,7 +95,13 @@ export function WhatsAppButton({
   }, [computedMessage, loading]);
 
   const handleSend = () => {
+    // Log the message to help debug emoji issues
+    console.log("WhatsApp message being sent:", message);
+    console.log("Message length:", message.length);
+    
     const url = getWhatsAppUrl(phone, message);
+    console.log("WhatsApp URL:", url);
+    
     window.open(url, '_blank');
     setOpen(false);
   };
