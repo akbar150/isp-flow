@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Save, Mail, Server, Eye, EyeOff, Loader2, TestTube } from "lucide-react";
 import { useIspSettings } from "@/hooks/useIspSettings";
+import { decodeSettingValue } from "@/lib/settingsValue";
 
 export function EmailTemplates() {
   const { ispName } = useIspSettings();
@@ -74,9 +75,7 @@ Thank you for choosing {ISPName}.`,
       if (data) {
         const settingsMap: Record<string, string> = {};
         data.forEach((s) => {
-          settingsMap[s.key] = typeof s.value === "string" 
-            ? s.value.replace(/^"|"$/g, "") 
-            : JSON.stringify(s.value).replace(/^"|"$/g, "");
+          settingsMap[s.key] = decodeSettingValue(s.value);
         });
         setSettings({
           email_from_name: settingsMap.email_from_name || ispName || "",
@@ -103,11 +102,11 @@ Thank you for choosing {ISPName}.`,
     setSaving(true);
     try {
       const updates = [
-        { key: "email_from_name", value: JSON.stringify(settings.email_from_name) },
-        { key: "email_from_address", value: JSON.stringify(settings.email_from_address) },
-        { key: "email_subject_reminder", value: JSON.stringify(settings.email_subject_reminder) },
-        { key: "email_subject_welcome", value: JSON.stringify(settings.email_subject_welcome) },
-        { key: "email_template_reminder", value: JSON.stringify(settings.email_template_reminder) },
+        { key: "email_from_name", value: settings.email_from_name },
+        { key: "email_from_address", value: settings.email_from_address },
+        { key: "email_subject_reminder", value: settings.email_subject_reminder },
+        { key: "email_subject_welcome", value: settings.email_subject_welcome },
+        { key: "email_template_reminder", value: settings.email_template_reminder },
       ];
 
       for (const update of updates) {
@@ -134,9 +133,9 @@ Thank you for choosing {ISPName}.`,
     try {
       // Save non-sensitive SMTP settings directly
       const updates = [
-        { key: "smtp_server", value: JSON.stringify(smtpSettings.smtp_server) },
-        { key: "smtp_port", value: JSON.stringify(smtpSettings.smtp_port) },
-        { key: "smtp_username", value: JSON.stringify(smtpSettings.smtp_username) },
+        { key: "smtp_server", value: smtpSettings.smtp_server },
+        { key: "smtp_port", value: smtpSettings.smtp_port },
+        { key: "smtp_username", value: smtpSettings.smtp_username },
       ];
 
       for (const update of updates) {
@@ -158,7 +157,8 @@ Thank you for choosing {ISPName}.`,
         await supabase.from("system_settings").upsert(
           { 
             key: "smtp_password_encrypted", 
-            value: JSON.stringify(encryptedData),
+            // Store as a proper jsonb string (NOT JSON.stringify) to avoid extra escaping.
+            value: encryptedData,
             updated_at: new Date().toISOString() 
           },
           { onConflict: "key" }

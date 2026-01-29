@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { decodeSettingValue } from "@/lib/settingsValue";
 
 interface IspSettings {
   ispName: string;
@@ -77,33 +78,28 @@ export function IspSettingsProvider({ children }: { children: ReactNode }) {
 
   const fetchSettings = async () => {
     try {
-      // Try authenticated fetch first, fall back to public view
-      let data;
-      const authRes = await supabase.from("system_settings").select("key, value");
-      
-      if (authRes.error) {
-        // Fallback to public view for unauthenticated users
-        const publicRes = await supabase.from("system_settings_public").select("key, value");
-        data = publicRes.data;
+      // Prefer backend RPC (works for both authenticated + unauthenticated)
+      let data: Array<{ key: string | null; value: unknown }> | null = null;
+
+      const rpcRes = await supabase.rpc("get_public_system_settings");
+      if (!rpcRes.error && rpcRes.data) {
+        data = rpcRes.data as Array<{ key: string | null; value: unknown }>;
       } else {
-        data = authRes.data;
+        // Fallback: try authenticated table, then public view.
+        const authRes = await supabase.from("system_settings").select("key, value");
+        if (authRes.error) {
+          const publicRes = await supabase.from("system_settings_public").select("key, value");
+          data = (publicRes.data || null) as Array<{ key: string | null; value: unknown }> | null;
+        } else {
+          data = (authRes.data || null) as Array<{ key: string | null; value: unknown }> | null;
+        }
       }
 
       if (data) {
         const settingsMap: Record<string, string> = {};
         data.forEach((s: { key: string | null; value: unknown }) => {
           if (s.key) {
-            // Handle both JSON-wrapped strings and plain values
-            const rawVal = s.value;
-            if (typeof rawVal === "string") {
-              // Remove surrounding quotes if present (JSON.stringify artifact)
-              settingsMap[s.key] = rawVal.replace(/^"|"$/g, "");
-            } else if (typeof rawVal === "object" && rawVal !== null) {
-              // It's already JSON, stringify for template vars
-              settingsMap[s.key] = JSON.stringify(rawVal);
-            } else {
-              settingsMap[s.key] = String(rawVal);
-            }
+            settingsMap[s.key] = decodeSettingValue(s.value);
           }
         });
         

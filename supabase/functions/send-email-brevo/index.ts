@@ -22,6 +22,37 @@ interface SmtpSettings {
   smtp_password: string;
 }
 
+function decodeSettingValue(raw: unknown): string {
+  if (raw === null || raw === undefined) return "";
+
+  if (typeof raw === "string") {
+    let s = raw;
+
+    // Unwrap legacy JSON.stringify / double-stringify values
+    for (let i = 0; i < 2; i++) {
+      const t = s.trim();
+      if (t.startsWith('"') && t.endsWith('"')) {
+        try {
+          const parsed = JSON.parse(t);
+          if (typeof parsed === "string") {
+            s = parsed;
+            continue;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      break;
+    }
+
+    // Convert literal "\\n" into real newlines
+    return s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n");
+  }
+
+  if (typeof raw === "object") return JSON.stringify(raw);
+  return String(raw);
+}
+
 async function getSmtpSettings(): Promise<SmtpSettings | null> {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -47,8 +78,7 @@ async function getSmtpSettings(): Promise<SmtpSettings | null> {
 
     const settings: Record<string, string> = {};
     for (const row of settingsData) {
-      const val = row.value;
-      settings[row.key] = typeof val === "string" ? val.replace(/^"|"$/g, "") : String(val);
+      settings[row.key] = decodeSettingValue(row.value);
     }
 
     // Check if we have SMTP settings configured
