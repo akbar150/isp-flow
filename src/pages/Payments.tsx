@@ -75,7 +75,8 @@ export default function Payments() {
           .select('*, customers(user_id, full_name)')
           .order('payment_date', { ascending: false })
           .limit(100),
-        supabase.from('customers').select('id, user_id, full_name, total_due, packages(monthly_price)'),
+      // Use customers_safe view to prevent password_hash exposure
+      supabase.from('customers_safe').select('id, user_id, full_name, total_due, packages(monthly_price)'),
       ]);
 
       if (paymentsRes.error) throw paymentsRes.error;
@@ -96,9 +97,37 @@ export default function Payments() {
       if (!selectedCustomer) throw new Error('Please select a customer');
 
       const amount = parseFloat(formData.amount);
+
+      // Comprehensive payment validation
+      if (isNaN(amount) || amount <= 0) {
+        throw new Error('Payment amount must be a positive number');
+      }
+
+      if (amount > 999999) {
+        throw new Error('Payment amount exceeds maximum limit (৳999,999)');
+      }
+
+      // Transaction ID validation for electronic payments
+      if (['bkash', 'bank_transfer'].includes(formData.method)) {
+        if (!formData.transaction_id || formData.transaction_id.trim().length === 0) {
+          throw new Error('Transaction ID is required for bKash and Bank Transfer');
+        }
+        if (formData.transaction_id.length > 100) {
+          throw new Error('Transaction ID too long (max 100 characters)');
+        }
+      }
+
+      // Warn if paying more than due
+      if (amount > selectedCustomer.total_due && selectedCustomer.total_due > 0) {
+        const confirmed = confirm(
+          `Payment (৳${amount}) exceeds current due (৳${selectedCustomer.total_due}). Continue with advance payment?`
+        );
+        if (!confirmed) return;
+      }
+
       const remainingDue = Math.max(0, selectedCustomer.total_due - amount);
 
-      // Create payment record
+      // Create payment record - database trigger handles customer due update automatically
       const { error: paymentError } = await supabase.from('payments').insert({
         customer_id: formData.customer_id,
         amount,
@@ -110,13 +139,8 @@ export default function Payments() {
 
       if (paymentError) throw paymentError;
 
-      // Update customer due
-      const { error: customerError } = await supabase
-        .from('customers')
-        .update({ total_due: remainingDue })
-        .eq('id', formData.customer_id);
-
-      if (customerError) throw customerError;
+      // Note: Customer total_due is now updated automatically via database trigger
+      // This removes the need for staff to have UPDATE permission on customers table
 
       toast({ title: "Payment recorded successfully" });
       setDialogOpen(false);
