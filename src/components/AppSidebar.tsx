@@ -14,6 +14,7 @@ import {
   Wifi,
   Phone,
   FileBarChart,
+  Calculator,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ const navItems: NavItem[] = [
   { path: "/payments", label: "Payments", icon: CreditCard, roles: ["super_admin", "admin", "staff"] },
   { path: "/reminders", label: "Reminders", icon: Bell, roles: ["super_admin", "admin", "staff"] },
   { path: "/call-records", label: "Call Records", icon: Phone, roles: ["super_admin", "admin", "staff"] },
+  { path: "/accounting", label: "Accounting", icon: Calculator, roles: ["super_admin", "admin"] },
   { path: "/reports", label: "Reports", icon: FileBarChart, roles: ["super_admin", "admin", "staff"] },
   { path: "/routers", label: "Routers", icon: Router, roles: ["super_admin", "admin"] },
   { path: "/settings", label: "Settings", icon: Settings, roles: ["super_admin", "admin"] },
