@@ -12,6 +12,7 @@ import Customers from "./pages/Customers";
 import Packages from "./pages/Packages";
 import Payments from "./pages/Payments";
 import Reminders from "./pages/Reminders";
+import CallRecords from "./pages/CallRecords";
 import Routers from "./pages/Routers";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -93,6 +94,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Reminders />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/call-records"
+        element={
+          <ProtectedRoute>
+            <CallRecords />
           </ProtectedRoute>
         }
       />
