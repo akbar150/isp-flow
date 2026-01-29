@@ -101,8 +101,12 @@ serve(async (req) => {
           throw new Error("Missing required fields: full_name, phone, password");
         }
 
-        if (password.length < 12) {
-          throw new Error("Password must be at least 12 characters");
+        // Validate password (min 6 chars, alphanumeric only)
+        if (password.length < 6) {
+          throw new Error("Password must be at least 6 characters");
+        }
+        if (!/^[a-zA-Z0-9]+$/.test(password)) {
+          throw new Error("Password can only contain letters and numbers");
         }
 
         // Check if phone already exists
@@ -253,8 +257,11 @@ serve(async (req) => {
         if (address) updates.address = address;
 
         if (new_password) {
-          if (new_password.length < 12) {
-            throw new Error("New password must be at least 12 characters");
+          if (new_password.length < 6) {
+            throw new Error("New password must be at least 6 characters");
+          }
+          if (!/^[a-zA-Z0-9]+$/.test(new_password)) {
+            throw new Error("New password can only contain letters and numbers");
           }
           const { data: hashedPassword } = await supabaseAdmin.rpc("hash_password", {
             raw_password: new_password,
