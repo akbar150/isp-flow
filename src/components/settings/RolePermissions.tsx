@@ -40,7 +40,7 @@ export function RolePermissions() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeRole, setActiveRole] = useState<"admin" | "staff">("staff");
+  const [activeRole, setActiveRole] = useState<"super_admin" | "admin" | "staff">("staff");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -81,8 +81,8 @@ export function RolePermissions() {
   };
 
   const togglePermission = (resource: string, action: string) => {
-    // Don't allow modifying admin permissions
-    if (activeRole === "admin") return;
+    // Don't allow modifying admin or super_admin permissions
+    if (activeRole === "admin" || activeRole === "super_admin") return;
 
     setPermissions((prev) =>
       prev.map((p) => {
@@ -148,8 +148,12 @@ export function RolePermissions() {
         </Button>
       </div>
 
-      <Tabs value={activeRole} onValueChange={(v) => setActiveRole(v as "admin" | "staff")}>
+      <Tabs value={activeRole} onValueChange={(v) => setActiveRole(v as "super_admin" | "admin" | "staff")}>
         <TabsList>
+          <TabsTrigger value="super_admin" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            Super Admin
+          </TabsTrigger>
           <TabsTrigger value="admin" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
             Admin
@@ -161,10 +165,10 @@ export function RolePermissions() {
         </TabsList>
 
         <TabsContent value={activeRole} className="mt-4">
-          {activeRole === "admin" && (
+          {(activeRole === "admin" || activeRole === "super_admin") && (
             <div className="mb-4 p-4 bg-muted rounded-lg">
               <p className="text-sm text-muted-foreground">
-                Admin role has full access to all resources and cannot be modified.
+                {activeRole === "super_admin" ? "Super Admin" : "Admin"} role has full access to all resources and cannot be modified.
               </p>
             </div>
           )}
@@ -195,7 +199,7 @@ export function RolePermissions() {
                           onCheckedChange={() =>
                             togglePermission(resource.key, action)
                           }
-                          disabled={activeRole === "admin"}
+                          disabled={activeRole === "admin" || activeRole === "super_admin"}
                         />
                       </div>
                     ))}
