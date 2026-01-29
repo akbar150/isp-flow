@@ -15,11 +15,13 @@ import Reminders from "./pages/Reminders";
 import CallRecords from "./pages/CallRecords";
 import Routers from "./pages/Routers";
 import Settings from "./pages/Settings";
+import CustomerLogin from "./pages/CustomerLogin";
+import CustomerPortal from "./pages/CustomerPortal";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-type AppRole = "admin" | "staff";
+type AppRole = "super_admin" | "admin" | "staff";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -76,7 +78,7 @@ function AppRoutes() {
       <Route
         path="/packages"
         element={
-          <ProtectedRoute allowedRoles={["admin"]}>
+          <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
             <Packages />
           </ProtectedRoute>
         }
@@ -108,7 +110,7 @@ function AppRoutes() {
       <Route
         path="/routers"
         element={
-          <ProtectedRoute allowedRoles={["admin"]}>
+          <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
             <Routers />
           </ProtectedRoute>
         }
@@ -116,11 +118,14 @@ function AppRoutes() {
       <Route
         path="/settings"
         element={
-          <ProtectedRoute allowedRoles={["admin"]}>
+          <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
             <Settings />
           </ProtectedRoute>
         }
       />
+      {/* Customer Routes */}
+      <Route path="/customer-login" element={<CustomerLogin />} />
+      <Route path="/customer-portal" element={<CustomerPortal />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

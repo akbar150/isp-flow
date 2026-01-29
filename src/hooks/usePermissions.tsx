@@ -47,8 +47,8 @@ export function usePermissions() {
     (resource: string, action: string): boolean => {
       if (!role) return false;
       
-      // Admin always has full access as fallback
-      if (role === "admin") return true;
+      // Super admin and admin always have full access
+      if (role === "super_admin" || role === "admin") return true;
       
       const permission = permissions.find(
         (p) => p.resource === resource && p.action === action
