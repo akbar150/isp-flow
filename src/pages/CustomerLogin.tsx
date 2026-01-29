@@ -50,10 +50,13 @@ interface CustomerData {
 
 export default function CustomerLogin() {
   const navigate = useNavigate();
-  const { ispName } = useIspSettings();
+  const { ispName, loading: settingsLoading } = useIspSettings();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("login");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  // Show loading placeholder while settings load to prevent "Smart ISP" flash
+  const displayName = settingsLoading ? "Loading..." : ispName;
   // Login state
   const [loginData, setLoginData] = useState({ user_id: "", password: "" });
 
@@ -215,7 +218,7 @@ export default function CustomerLogin() {
           <div className="w-14 h-14 rounded-2xl bg-primary mx-auto mb-4 flex items-center justify-center">
             <Wifi className="w-7 h-7 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl">{ispName}</CardTitle>
+          <CardTitle className="text-2xl">{displayName}</CardTitle>
           <CardDescription>
             Customer Portal - Access your internet account
           </CardDescription>

@@ -145,13 +145,13 @@ export function QuickPaymentRecord({
             </div>
           </div>
 
-          {formData.method === "bkash" && (
+          {(formData.method === "bkash" || formData.method === "bank_transfer") && (
             <div className="space-y-2">
-              <Label>Transaction ID</Label>
+              <Label>Transaction ID (optional)</Label>
               <Input
                 value={formData.transaction_id}
                 onChange={(e) => setFormData({ ...formData, transaction_id: e.target.value })}
-                placeholder="bKash transaction ID"
+                placeholder={formData.method === "bkash" ? "bKash transaction ID" : "Bank reference number"}
               />
             </div>
           )}

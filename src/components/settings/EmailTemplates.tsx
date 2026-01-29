@@ -265,12 +265,13 @@ Thank you for choosing {ISPName}.`,
 
         <div className="space-y-4">
           <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
-            <p className="text-sm font-medium mb-2">📧 Brevo SMTP Setup Instructions:</p>
+            <p className="text-sm font-medium mb-2">📧 Brevo API Setup Instructions:</p>
             <ol className="text-sm text-muted-foreground space-y-1 list-decimal pl-5">
               <li>Sign up at <a href="https://brevo.com" target="_blank" rel="noopener" className="text-primary underline">brevo.com</a> (free tier: 300 emails/day)</li>
-              <li>Go to <strong>SMTP & API</strong> section in Brevo dashboard</li>
-              <li>Generate an <strong>SMTP Key</strong> (not API key)</li>
-              <li>Enter the details below</li>
+              <li>Go to <strong>SMTP & API</strong> → <strong>API Keys</strong> section</li>
+              <li>Generate an <strong>API Key</strong> (starts with <code className="bg-background px-1 rounded">xkeysib-</code>)</li>
+              <li>⚠️ <strong>NOT</strong> an SMTP Key (which starts with <code className="bg-background px-1 rounded">xsmtpsib-</code>)</li>
+              <li>Enter the API key below</li>
             </ol>
           </div>
 
@@ -295,7 +296,7 @@ Thank you for choosing {ISPName}.`,
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>SMTP Username (Login Email)</Label>
+              <Label>Sender Email (must be verified in Brevo)</Label>
               <Input
                 type="email"
                 value={smtpSettings.smtp_username}
@@ -304,13 +305,13 @@ Thank you for choosing {ISPName}.`,
               />
             </div>
             <div className="space-y-2">
-              <Label>SMTP Password (SMTP Key)</Label>
+              <Label>Brevo API Key</Label>
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}
                   value={smtpSettings.smtp_password}
                   onChange={(e) => setSmtpSettings({ ...smtpSettings, smtp_password: e.target.value })}
-                  placeholder="••••••••••••••••"
+                  placeholder="xkeysib-..."
                   className="pr-10"
                 />
                 <Button
@@ -324,7 +325,7 @@ Thank you for choosing {ISPName}.`,
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Enter new password only when changing. Leave blank to keep existing.
+                Must start with <code className="bg-muted px-1 rounded">xkeysib-</code>. Enter new key only when changing.
               </p>
             </div>
           </div>
@@ -332,7 +333,7 @@ Thank you for choosing {ISPName}.`,
           <div className="flex gap-2">
             <Button onClick={saveSmtpSettings} disabled={saving}>
               <Save className="h-4 w-4 mr-2" />
-              {saving ? "Saving..." : "Save SMTP Settings"}
+              {saving ? "Saving..." : "Save Email Settings"}
             </Button>
           </div>
         </div>

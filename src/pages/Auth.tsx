@@ -30,7 +30,7 @@ export default function Auth() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isRecovery = searchParams.get("type") === "recovery";
-  const { ispName } = useIspSettings();
+  const { ispName, loading: settingsLoading } = useIspSettings();
   
   const [loading, setLoading] = useState(false);
   const [showReset, setShowReset] = useState(false);
@@ -40,6 +40,9 @@ export default function Auth() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  // Show loading placeholder while settings load to prevent "Smart ISP" flash
+  const displayName = settingsLoading ? "Loading..." : ispName;
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
@@ -245,7 +248,7 @@ export default function Auth() {
           <div className="w-14 h-14 rounded-2xl bg-primary mx-auto mb-4 flex items-center justify-center">
             <Wifi className="w-7 h-7 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl">{ispName} Billing</CardTitle>
+          <CardTitle className="text-2xl">{displayName} Billing</CardTitle>
           <CardDescription>Admin & Staff Login Portal</CardDescription>
         </CardHeader>
         <CardContent>
