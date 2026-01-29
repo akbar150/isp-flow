@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useIspSettings } from "@/hooks/useIspSettings";
 
 type AppRole = "super_admin" | "admin" | "staff";
 
@@ -50,6 +51,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { role } = useAuth();
+  const { ispName } = useIspSettings();
   const [collapsed, setCollapsed] = useState(false);
 
   // Filter navigation items based on user role
@@ -77,7 +79,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
         </div>
         {!collapsed && (
           <div className="flex-1 min-w-0">
-            <h1 className="font-bold text-sidebar-foreground truncate">Smart ISP</h1>
+            <h1 className="font-bold text-sidebar-foreground truncate">{ispName}</h1>
             <p className="text-xs text-sidebar-foreground/60 truncate">Billing System</p>
           </div>
         )}

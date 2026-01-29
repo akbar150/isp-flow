@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { StatusBadge } from "@/components/StatusBadge";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
+import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { supabase } from "@/integrations/supabase/client";
-import { format, addDays, isBefore, isAfter, isEqual } from "date-fns";
+import { format, addDays, isEqual, startOfDay } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Customer {
@@ -63,8 +63,7 @@ export default function Reminders() {
     }
   };
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = startOfDay(new Date());
 
   const categorizeCustomers = () => {
     const threeDaysBefore: Customer[] = [];
@@ -73,8 +72,7 @@ export default function Reminders() {
     const threeDaysOverdue: Customer[] = [];
 
     customers.forEach(customer => {
-      const expiry = new Date(customer.expiry_date);
-      expiry.setHours(0, 0, 0, 0);
+      const expiry = startOfDay(new Date(customer.expiry_date));
 
       const threeDaysFromNow = addDays(today, 3);
       const oneDayFromNow = addDays(today, 1);
@@ -112,7 +110,7 @@ export default function Reminders() {
                 <th>Package</th>
                 <th>Expiry</th>
                 <th>Due</th>
-                <th>Action</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -125,14 +123,22 @@ export default function Reminders() {
                   <td>{format(new Date(customer.expiry_date), 'dd MMM yyyy')}</td>
                   <td className="amount-due">৳{customer.total_due}</td>
                   <td>
-                    <WhatsAppButton
-                      phone={customer.phone}
-                      customerName={customer.full_name}
-                      userId={customer.user_id}
-                      packageName={customer.packages?.name || 'Internet'}
-                      expiryDate={new Date(customer.expiry_date)}
-                      amount={customer.packages?.monthly_price || customer.total_due}
-                    />
+                    <div className="flex items-center gap-1">
+                      <QuickCallRecord
+                        customerId={customer.id}
+                        customerName={customer.full_name}
+                        onSuccess={fetchData}
+                      />
+                      <WhatsAppButton
+                        phone={customer.phone}
+                        customerName={customer.full_name}
+                        userId={customer.user_id}
+                        packageName={customer.packages?.name || 'Internet'}
+                        expiryDate={new Date(customer.expiry_date)}
+                        amount={customer.packages?.monthly_price || customer.total_due}
+                        variant="icon"
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}

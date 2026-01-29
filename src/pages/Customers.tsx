@@ -3,6 +3,8 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { CredentialsModal } from "@/components/CredentialsModal";
+import { CustomerEditDialog } from "@/components/CustomerEditDialog";
+import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,10 +22,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Search, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { Plus, Search, Eye, EyeOff, RefreshCw, MoreHorizontal, Edit, Trash2 } from "lucide-react";
 import { format, addDays } from "date-fns";
+import { calculateBillingInfo } from "@/lib/billingUtils";
 
 interface Package {
   id: string;
@@ -70,6 +80,7 @@ interface Customer {
 }
 
 export default function Customers() {
+  const { isAdmin, isSuperAdmin } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -79,6 +90,10 @@ export default function Customers() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  
+  // Edit dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   
   // Credentials modal state (secure password display)
   const [credentialsModal, setCredentialsModal] = useState({
@@ -111,7 +126,6 @@ export default function Customers() {
   const fetchData = async () => {
     try {
       const [customersRes, packagesRes, areasRes, routersRes] = await Promise.all([
-        // Use customers_safe view and join mikrotik_users_safe for PPPoE username
         supabase.from('customers_safe').select('*, packages(*), areas(*), routers(*), mikrotik_users:mikrotik_users_safe(id, username, status)').order('created_at', { ascending: false }),
         supabase.from('packages').select('*').eq('is_active', true),
         supabase.from('areas').select('*'),
@@ -136,7 +150,6 @@ export default function Customers() {
   };
 
   const generatePassword = (forField: 'password' | 'pppoe_password' = 'password') => {
-    // Generate alphanumeric password based on field type
     const length = forField === 'pppoe_password' ? 6 : 8;
     const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     const randomValues = new Uint8Array(length);
@@ -150,7 +163,6 @@ export default function Customers() {
   };
 
   const generateUserId = async (): Promise<string> => {
-    // Use database function with sequence to prevent race conditions
     const { data, error } = await supabase.rpc('generate_customer_user_id');
     if (error) throw new Error('Failed to generate user ID');
     return data;
@@ -160,7 +172,6 @@ export default function Customers() {
     e.preventDefault();
     
     try {
-      // Comprehensive input validation
       if (!formData.full_name || formData.full_name.trim().length < 3) {
         throw new Error('Full name must be at least 3 characters');
       }
@@ -168,14 +179,12 @@ export default function Customers() {
         throw new Error('Full name too long (max 100 characters)');
       }
 
-      // Phone validation (Bangladesh format or international)
       const phoneRegex = /^(\+?880)?[0-9]{10,11}$/;
       const cleanPhone = formData.phone.replace(/[\s-]/g, '');
       if (!phoneRegex.test(cleanPhone)) {
         throw new Error('Invalid phone number format');
       }
 
-      // Alt phone validation if provided
       if (formData.alt_phone && formData.alt_phone.trim()) {
         const cleanAltPhone = formData.alt_phone.replace(/[\s-]/g, '');
         if (!phoneRegex.test(cleanAltPhone)) {
@@ -183,7 +192,6 @@ export default function Customers() {
         }
       }
 
-      // Address validation
       if (!formData.address || formData.address.trim().length < 10) {
         throw new Error('Address must be at least 10 characters');
       }
@@ -191,7 +199,6 @@ export default function Customers() {
         throw new Error('Address too long (max 500 characters)');
       }
 
-      // Validate portal password (min 6 chars, alphanumeric only)
       if (formData.password.length < 6) {
         throw new Error('Portal password must be at least 6 characters');
       }
@@ -199,11 +206,9 @@ export default function Customers() {
         throw new Error('Portal password can only contain letters and numbers');
       }
 
-      // Validate PPPoE credentials
       if (!formData.pppoe_username || formData.pppoe_username.trim().length < 3) {
         throw new Error('PPPoE Username must be at least 3 characters');
       }
-      // PPPoE password: min 4 chars, alphanumeric only
       if (!formData.pppoe_password || formData.pppoe_password.length < 4) {
         throw new Error('PPPoE Password must be at least 4 characters');
       }
@@ -218,19 +223,16 @@ export default function Customers() {
       const today = new Date();
       const expiryDate = addDays(today, selectedPackage.validity_days);
 
-      // Hash password using database function (bcrypt)
       const { data: hashedPassword, error: hashError } = await supabase
         .rpc('hash_password', { raw_password: formData.password });
       
       if (hashError) throw new Error('Failed to secure password');
 
-      // Hash PPPoE password
       const { data: hashedPppoePassword, error: pppoeHashError } = await supabase
         .rpc('hash_password', { raw_password: formData.pppoe_password });
       
       if (pppoeHashError) throw new Error('Failed to secure PPPoE password');
 
-      // Create customer
       const { data: newCustomer, error } = await supabase.from('customers').insert({
         user_id: userId,
         full_name: formData.full_name,
@@ -249,7 +251,6 @@ export default function Customers() {
 
       if (error) throw error;
 
-      // Create mikrotik_users entry for PPPoE credentials
       const { error: mikrotikError } = await supabase.from('mikrotik_users').insert({
         customer_id: newCustomer.id,
         username: formData.pppoe_username,
@@ -261,10 +262,8 @@ export default function Customers() {
 
       if (mikrotikError) {
         console.error('Failed to create PPPoE user:', mikrotikError);
-        // Don't throw - customer is created, just log the error
       }
 
-      // Show secure credentials modal instead of toast
       setCredentialsModal({
         open: true,
         userId: userId,
@@ -296,6 +295,31 @@ export default function Customers() {
     }
   };
 
+  const handleDelete = async (customer: Customer) => {
+    if (!confirm(`Are you sure you want to delete ${customer.full_name}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .delete()
+        .eq('id', customer.id);
+
+      if (error) throw error;
+
+      toast({ title: "Customer deleted successfully" });
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete customer. They may have associated records.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const filteredCustomers = customers.filter(customer => {
     const pppoeUsername = customer.mikrotik_users?.[0]?.username || '';
     const matchesSearch = 
@@ -308,6 +332,8 @@ export default function Customers() {
     
     return matchesSearch && matchesStatus;
   });
+
+  const canEdit = isAdmin || isSuperAdmin;
 
   if (loading) {
     return (
@@ -538,7 +564,7 @@ export default function Customers() {
               <th>Name</th>
               <th>Phone</th>
               <th>Package</th>
-              <th>Expiry</th>
+              <th>Billing Date</th>
               <th>Due</th>
               <th>Status</th>
               <th>Actions</th>
@@ -552,38 +578,97 @@ export default function Customers() {
                 </td>
               </tr>
             ) : (
-              filteredCustomers.map((customer) => (
-                <tr key={customer.id}>
-                  <td className="font-mono text-sm">
-                    {customer.mikrotik_users?.[0]?.username || <span className="text-muted-foreground">Not set</span>}
-                  </td>
-                  <td className="font-medium">{customer.full_name}</td>
-                  <td>{customer.phone}</td>
-                  <td>{customer.packages?.name || 'N/A'}</td>
-                  <td>{format(new Date(customer.expiry_date), 'dd MMM yyyy')}</td>
-                  <td className={customer.total_due > 0 ? "amount-due" : "amount-positive"}>
-                    ৳{customer.total_due}
-                  </td>
-                  <td>
-                    <StatusBadge status={customer.status} />
-                  </td>
-                  <td>
-                    <WhatsAppButton
-                      phone={customer.phone}
-                      customerName={customer.full_name}
-                      userId={customer.user_id}
-                      packageName={customer.packages?.name || 'Internet'}
-                      expiryDate={new Date(customer.expiry_date)}
-                      amount={customer.packages?.monthly_price || customer.total_due}
-                      variant="icon"
-                    />
-                  </td>
-                </tr>
-              ))
+              filteredCustomers.map((customer) => {
+                const billingInfo = calculateBillingInfo(
+                  new Date(customer.expiry_date),
+                  customer.total_due,
+                  customer.status,
+                  customer.packages?.monthly_price || 0
+                );
+                
+                return (
+                  <tr key={customer.id}>
+                    <td className="font-mono text-sm">
+                      {customer.mikrotik_users?.[0]?.username || <span className="text-muted-foreground">Not set</span>}
+                    </td>
+                    <td className="font-medium">{customer.full_name}</td>
+                    <td>{customer.phone}</td>
+                    <td>{customer.packages?.name || 'N/A'}</td>
+                    <td>
+                      <div className="flex flex-col">
+                        <span>{format(new Date(customer.expiry_date), 'dd MMM yyyy')}</span>
+                        <span className="text-xs text-muted-foreground">{billingInfo.statusLabel}</span>
+                      </div>
+                    </td>
+                    <td className={billingInfo.displayDue > 0 ? "amount-due" : "amount-positive"}>
+                      ৳{billingInfo.displayDue}
+                    </td>
+                    <td>
+                      <StatusBadge status={billingInfo.status} />
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-1">
+                        <QuickCallRecord
+                          customerId={customer.id}
+                          customerName={customer.full_name}
+                          onSuccess={fetchData}
+                        />
+                        <WhatsAppButton
+                          phone={customer.phone}
+                          customerName={customer.full_name}
+                          userId={customer.user_id}
+                          packageName={customer.packages?.name || 'Internet'}
+                          expiryDate={new Date(customer.expiry_date)}
+                          amount={customer.packages?.monthly_price || customer.total_due}
+                          variant="icon"
+                        />
+                        {canEdit && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setEditingCustomer(customer);
+                                  setEditDialogOpen(true);
+                                }}
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => handleDelete(customer)}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Edit Customer Dialog */}
+      <CustomerEditDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        customer={editingCustomer}
+        packages={packages}
+        areas={areas}
+        routers={routers}
+        onSuccess={fetchData}
+      />
 
       {/* Secure Credentials Modal */}
       <CredentialsModal
