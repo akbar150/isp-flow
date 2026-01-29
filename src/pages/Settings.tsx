@@ -16,6 +16,7 @@ import { SmsSettings } from "@/components/settings/SmsSettings";
 import { FirebaseOtpSettings } from "@/components/settings/FirebaseOtpSettings";
 import { EmailTemplates } from "@/components/settings/EmailTemplates";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { decodeSettingValue, normalizeTemplateVars } from "@/lib/settingsValue";
 
 export default function Settings() {
   const [loading, setLoading] = useState(true);
@@ -55,11 +56,11 @@ Please pay to avoid disconnection.
       if (settingsRes.data) {
         const settingsMap: Record<string, string> = {};
         settingsRes.data.forEach(s => {
-          settingsMap[s.key] = typeof s.value === 'string' ? s.value : JSON.stringify(s.value);
+          settingsMap[s.key] = decodeSettingValue(s.value);
         });
         setSettings({
-          isp_name: settingsMap.isp_name?.replace(/"/g, '') || "Smart ISP",
-          whatsapp_template: settingsMap.whatsapp_template?.replace(/"/g, '') || settings.whatsapp_template,
+          isp_name: settingsMap.isp_name || "Smart ISP",
+          whatsapp_template: settingsMap.whatsapp_template || settings.whatsapp_template,
         });
       }
     } catch (error) {
@@ -72,18 +73,23 @@ Please pay to avoid disconnection.
   const saveSettings = async () => {
     setSaving(true);
     try {
+      const normalizedWhatsapp = normalizeTemplateVars(settings.whatsapp_template);
+
       await Promise.all([
         supabase.from('system_settings').upsert({ 
           key: 'isp_name', 
-          value: JSON.stringify(settings.isp_name),
+          value: settings.isp_name,
           updated_at: new Date().toISOString()
         }, { onConflict: 'key' }),
         supabase.from('system_settings').upsert({ 
           key: 'whatsapp_template', 
-          value: JSON.stringify(settings.whatsapp_template),
+          value: normalizedWhatsapp,
           updated_at: new Date().toISOString()
         }, { onConflict: 'key' }),
       ]);
+
+      // Update local state so the textarea matches what will be sent.
+      setSettings((prev) => ({ ...prev, whatsapp_template: normalizedWhatsapp }));
 
       toast({ title: "Settings saved successfully" });
     } catch (error) {

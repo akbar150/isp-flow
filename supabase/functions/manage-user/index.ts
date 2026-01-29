@@ -5,6 +5,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const allowedOrigins = [
   "https://easylinkbd.lovable.app",
   "https://id-preview--f3ea74ef-bbb2-4d36-9390-fa74e8d6e7df.lovable.app",
+  "https://isp.easylinkbd.com",
 ];
 
 function getCorsHeaders(req: Request) {

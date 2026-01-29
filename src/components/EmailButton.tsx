@@ -147,6 +147,7 @@ export function EmailButton({
       });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       toast({
         title: "Email sent successfully",
@@ -157,7 +158,7 @@ export function EmailButton({
       console.error('Error sending email:', error);
       toast({
         title: "Error",
-        description: "Failed to send email. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to send email. Please try again.",
         variant: "destructive",
       });
     } finally {
