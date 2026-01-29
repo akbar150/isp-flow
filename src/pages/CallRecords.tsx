@@ -9,11 +9,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Phone, Search, Download, Calendar, User } from "lucide-react";
-import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { Phone, Search, Download, Calendar as CalendarIcon, User, FileText } from "lucide-react";
+import { format, startOfDay, endOfDay } from "date-fns";
 import { CallRecordDialog } from "@/components/CallRecordDialog";
+import { cn } from "@/lib/utils";
+import { exportToCSV, exportToPDF, formatDateForExport } from "@/lib/exportUtils";
+
+interface MikrotikUser {
+  id: string;
+  username: string;
+}
 
 interface CallRecordWithCustomer {
   id: string;
@@ -28,6 +37,7 @@ interface CallRecordWithCustomer {
     full_name: string;
     phone: string;
   } | null;
+  mikrotik_users?: MikrotikUser[] | null;
 }
 
 interface CustomerOption {
@@ -35,6 +45,7 @@ interface CustomerOption {
   user_id: string;
   full_name: string;
   phone: string;
+  mikrotik_users?: MikrotikUser[] | null;
 }
 
 export default function CallRecords() {
@@ -42,9 +53,11 @@ export default function CallRecords() {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [dateFilter, setDateFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null);
+  const [dateRange, setDateRange] = useState<{ start: Date | null; end: Date | null }>({
+    start: null,
+    end: null,
+  });
 
   useEffect(() => {
     fetchData();
@@ -59,15 +72,25 @@ export default function CallRecords() {
           .order("call_date", { ascending: false }),
         supabase
           .from("customers_safe")
-          .select("id, user_id, full_name, phone")
+          .select("id, user_id, full_name, phone, mikrotik_users:mikrotik_users_safe(id, username)")
           .order("full_name"),
       ]);
 
       if (recordsRes.error) throw recordsRes.error;
       if (customersRes.error) throw customersRes.error;
 
-      setRecords(recordsRes.data as CallRecordWithCustomer[] || []);
-      setCustomers(customersRes.data as CustomerOption[] || []);
+      // Enrich records with PPPoE username from customers
+      const customersData = customersRes.data as CustomerOption[] || [];
+      const enrichedRecords = (recordsRes.data || []).map(record => {
+        const customer = customersData.find(c => c.id === record.customer_id);
+        return {
+          ...record,
+          mikrotik_users: customer?.mikrotik_users,
+        };
+      });
+
+      setRecords(enrichedRecords as CallRecordWithCustomer[]);
+      setCustomers(customersData);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
@@ -83,7 +106,7 @@ export default function CallRecords() {
   const getFilteredRecords = () => {
     let filtered = records;
 
-    // Search filter
+    // Search filter - including PPPoE username
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(
@@ -91,57 +114,71 @@ export default function CallRecords() {
           record.customers?.full_name.toLowerCase().includes(term) ||
           record.customers?.user_id.toLowerCase().includes(term) ||
           record.customers?.phone.includes(term) ||
+          record.mikrotik_users?.[0]?.username?.toLowerCase().includes(term) ||
           record.notes.toLowerCase().includes(term)
       );
     }
 
-    // Date filter
-    if (dateFilter !== "all") {
-      const now = new Date();
-      let startDate: Date;
-
-      switch (dateFilter) {
-        case "today":
-          startDate = startOfDay(now);
-          break;
-        case "week":
-          startDate = subDays(now, 7);
-          break;
-        case "month":
-          startDate = subDays(now, 30);
-          break;
-        default:
-          startDate = new Date(0);
-      }
-
+    // Date range filter
+    if (dateRange.start) {
+      const start = startOfDay(dateRange.start);
       filtered = filtered.filter(
-        (record) => new Date(record.call_date) >= startDate
+        (record) => new Date(record.call_date) >= start
+      );
+    }
+    if (dateRange.end) {
+      const end = endOfDay(dateRange.end);
+      filtered = filtered.filter(
+        (record) => new Date(record.call_date) <= end
       );
     }
 
     return filtered;
   };
 
-  const exportToCSV = () => {
-    const filtered = getFilteredRecords();
-    const headers = ["Date/Time", "Customer ID", "Customer Name", "Phone", "Notes"];
-    const rows = filtered.map((record) => [
-      format(new Date(record.call_date), "yyyy-MM-dd HH:mm:ss"),
-      record.customers?.user_id || "",
-      record.customers?.full_name || "",
-      record.customers?.phone || "",
-      `"${record.notes.replace(/"/g, '""')}"`,
-    ]);
+  const filteredRecords = getFilteredRecords();
 
-    const csv = [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `call_records_${format(new Date(), "yyyy-MM-dd")}.csv`;
-    link.click();
+  const handleExportCSV = () => {
+    const data = filteredRecords.map(record => ({
+      date: formatDateForExport(record.call_date, "yyyy-MM-dd HH:mm"),
+      pppoe_username: record.mikrotik_users?.[0]?.username || "",
+      customer_id: record.customers?.user_id || "",
+      customer_name: record.customers?.full_name || "",
+      phone: record.customers?.phone || "",
+      notes: record.notes,
+    }));
+    
+    exportToCSV(data, [
+      { key: "date", label: "Date/Time" },
+      { key: "pppoe_username", label: "PPPoE Username" },
+      { key: "customer_id", label: "Customer ID" },
+      { key: "customer_name", label: "Customer Name" },
+      { key: "phone", label: "Phone" },
+      { key: "notes", label: "Notes" },
+    ], `call_records_${format(new Date(), "yyyy-MM-dd")}`);
   };
 
-  const filteredRecords = getFilteredRecords();
+  const handleExportPDF = () => {
+    const data = filteredRecords.map(record => ({
+      date: formatDateForExport(record.call_date, "dd MMM yyyy HH:mm"),
+      pppoe_username: record.mikrotik_users?.[0]?.username || "-",
+      customer_name: record.customers?.full_name || "-",
+      phone: record.customers?.phone || "-",
+      notes: record.notes.substring(0, 50) + (record.notes.length > 50 ? "..." : ""),
+    }));
+    
+    exportToPDF(data, [
+      { key: "date", label: "Date/Time" },
+      { key: "pppoe_username", label: "PPPoE Username" },
+      { key: "customer_name", label: "Customer Name" },
+      { key: "phone", label: "Phone" },
+      { key: "notes", label: "Notes" },
+    ], "Call Records Report", `call_records_${format(new Date(), "yyyy-MM-dd")}`);
+  };
+
+  const clearDateFilter = () => {
+    setDateRange({ start: null, end: null });
+  };
 
   if (loading) {
     return (
@@ -167,10 +204,14 @@ export default function CallRecords() {
             Track and manage customer call follow-ups
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={exportToCSV}>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={handleExportCSV}>
             <Download className="h-4 w-4 mr-2" />
-            Export CSV
+            CSV
+          </Button>
+          <Button variant="outline" onClick={handleExportPDF}>
+            <FileText className="h-4 w-4 mr-2" />
+            PDF
           </Button>
           <Button onClick={() => setDialogOpen(true)}>
             <Phone className="h-4 w-4 mr-2" />
@@ -184,24 +225,63 @@ export default function CallRecords() {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by customer name, ID, phone, or notes..."
+            placeholder="Search by PPPoE username, name, phone, or notes..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
           />
         </div>
-        <Select value={dateFilter} onValueChange={setDateFilter}>
-          <SelectTrigger className="w-[180px]">
-            <Calendar className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Filter by date" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Time</SelectItem>
-            <SelectItem value="today">Today</SelectItem>
-            <SelectItem value="week">Last 7 Days</SelectItem>
-            <SelectItem value="month">Last 30 Days</SelectItem>
-          </SelectContent>
-        </Select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "justify-start text-left font-normal min-w-[200px]",
+                !dateRange.start && !dateRange.end && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {dateRange.start ? (
+                dateRange.end ? (
+                  <>
+                    {format(dateRange.start, "dd MMM")} - {format(dateRange.end, "dd MMM yyyy")}
+                  </>
+                ) : (
+                  format(dateRange.start, "dd MMM yyyy")
+                )
+              ) : (
+                "Filter by date"
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <div className="p-4 space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Start Date</label>
+                <Calendar
+                  mode="single"
+                  selected={dateRange.start || undefined}
+                  onSelect={(date) => setDateRange(prev => ({ ...prev, start: date || null }))}
+                  className="p-3 pointer-events-auto"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">End Date</label>
+                <Calendar
+                  mode="single"
+                  selected={dateRange.end || undefined}
+                  onSelect={(date) => setDateRange(prev => ({ ...prev, end: date || null }))}
+                  className="p-3 pointer-events-auto"
+                />
+              </div>
+              {(dateRange.start || dateRange.end) && (
+                <Button variant="outline" size="sm" onClick={clearDateFilter} className="w-full">
+                  Clear Filter
+                </Button>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Stats */}
@@ -226,7 +306,11 @@ export default function CallRecords() {
           <p className="text-2xl font-bold">
             {
               records.filter(
-                (r) => new Date(r.call_date) >= subDays(new Date(), 7)
+                (r) => {
+                  const weekAgo = new Date();
+                  weekAgo.setDate(weekAgo.getDate() - 7);
+                  return new Date(r.call_date) >= weekAgo;
+                }
               ).length
             }
           </p>
@@ -244,7 +328,7 @@ export default function CallRecords() {
             <thead>
               <tr>
                 <th>Date/Time</th>
-                <th>Customer ID</th>
+                <th>PPPoE Username</th>
                 <th>Customer Name</th>
                 <th>Phone</th>
                 <th>Call Notes</th>
@@ -262,7 +346,7 @@ export default function CallRecords() {
                   <tr key={record.id}>
                     <td className="whitespace-nowrap">
                       <div className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3 text-muted-foreground" />
+                        <CalendarIcon className="h-3 w-3 text-muted-foreground" />
                         {format(new Date(record.call_date), "dd MMM yyyy")}
                       </div>
                       <div className="text-xs text-muted-foreground">
@@ -270,7 +354,9 @@ export default function CallRecords() {
                       </div>
                     </td>
                     <td className="font-mono text-sm">
-                      {record.customers?.user_id || "N/A"}
+                      {record.mikrotik_users?.[0]?.username || (
+                        <span className="text-muted-foreground">Not set</span>
+                      )}
                     </td>
                     <td className="font-medium">
                       {record.customers?.full_name || "Unknown"}
@@ -323,7 +409,8 @@ function AddCallRecordWithCustomerDialog({
     (c) =>
       c.full_name.toLowerCase().includes(searchCustomer.toLowerCase()) ||
       c.user_id.toLowerCase().includes(searchCustomer.toLowerCase()) ||
-      c.phone.includes(searchCustomer)
+      c.phone.includes(searchCustomer) ||
+      c.mikrotik_users?.[0]?.username?.toLowerCase().includes(searchCustomer.toLowerCase())
   );
 
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
@@ -389,7 +476,7 @@ function AddCallRecordWithCustomerDialog({
             <div className="space-y-2">
               <label className="text-sm font-medium">Search Customer *</label>
               <Input
-                placeholder="Search by name, ID, or phone..."
+                placeholder="Search by PPPoE username, name, ID, or phone..."
                 value={searchCustomer}
                 onChange={(e) => setSearchCustomer(e.target.value)}
               />
@@ -409,7 +496,7 @@ function AddCallRecordWithCustomerDialog({
                     >
                       <div className="font-medium">{customer.full_name}</div>
                       <div className="text-xs text-muted-foreground">
-                        {customer.user_id} • {customer.phone}
+                        PPPoE: {customer.mikrotik_users?.[0]?.username || "Not set"} • {customer.phone}
                       </div>
                     </button>
                   ))}
@@ -429,7 +516,7 @@ function AddCallRecordWithCustomerDialog({
                   {selectedCustomer.full_name}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {selectedCustomer.user_id} • {selectedCustomer.phone}
+                  PPPoE: {selectedCustomer.mikrotik_users?.[0]?.username || "Not set"} • {selectedCustomer.phone}
                 </p>
               </div>
             )}

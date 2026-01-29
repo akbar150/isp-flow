@@ -45,7 +45,14 @@ import {
   Trash2,
   Phone,
   Download,
+  FileText,
 } from "lucide-react";
+import { exportToCSV, exportToPDF, formatDateForExport, formatCurrencyForExport } from "@/lib/exportUtils";
+
+interface MikrotikUser {
+  id: string;
+  username: string;
+}
 
 interface Transaction {
   id: string;
@@ -90,6 +97,7 @@ interface Payment {
     user_id: string;
     full_name: string;
   } | null;
+  mikrotik_users?: MikrotikUser[] | null;
 }
 
 interface CallRecord {
@@ -100,9 +108,13 @@ interface CallRecord {
     user_id: string;
     full_name: string;
   } | null;
-  profiles?: {
-    full_name: string;
-  } | null;
+  mikrotik_users?: MikrotikUser[] | null;
+}
+
+interface CustomerOption {
+  id: string;
+  user_id: string;
+  mikrotik_users: MikrotikUser[] | null;
 }
 
 export default function Reports() {
@@ -161,7 +173,7 @@ export default function Reports() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [transactionsRes, categoriesRes, paymentsRes, callRecordsRes] = await Promise.all([
+      const [transactionsRes, categoriesRes, paymentsRes, callRecordsRes, customersRes] = await Promise.all([
         supabase
           .from("transactions")
           .select("*, expense_categories(name)")
@@ -185,6 +197,9 @@ export default function Reports() {
           .gte("call_date", dateFilter.start)
           .lte("call_date", dateFilter.end + "T23:59:59")
           .order("call_date", { ascending: false }),
+        supabase
+          .from("customers_safe")
+          .select("id, user_id, mikrotik_users:mikrotik_users_safe(id, username)"),
       ]);
 
       if (transactionsRes.error) throw transactionsRes.error;
@@ -195,10 +210,29 @@ export default function Reports() {
         type: t.type as "income" | "expense",
       }));
 
+      // Enrich payments with PPPoE usernames
+      const customersData = customersRes.data as CustomerOption[] || [];
+      const enrichedPayments = (paymentsRes.data || []).map(payment => {
+        const customer = customersData.find(c => c.user_id === payment.customers?.user_id);
+        return {
+          ...payment,
+          mikrotik_users: customer?.mikrotik_users,
+        };
+      });
+
+      // Enrich call records with PPPoE usernames
+      const enrichedCallRecords = (callRecordsRes.data || []).map(record => {
+        const customer = customersData.find(c => c.user_id === record.customers?.user_id);
+        return {
+          ...record,
+          mikrotik_users: customer?.mikrotik_users,
+        };
+      });
+
       setTransactions(typedTransactions);
       setCategories(categoriesRes.data || []);
-      setPayments(paymentsRes.data as Payment[] || []);
-      setCallRecords(callRecordsRes.data as CallRecord[] || []);
+      setPayments(enrichedPayments as Payment[]);
+      setCallRecords(enrichedCallRecords as CallRecord[]);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
@@ -355,26 +389,112 @@ export default function Reports() {
     }).format(amount);
   };
 
-  const exportCallRecords = () => {
-    const headers = ["Date", "Customer ID", "Customer Name", "Notes"];
-    const rows = callRecords.map(record => [
-      format(new Date(record.call_date), "yyyy-MM-dd HH:mm"),
-      record.customers?.user_id || "",
-      record.customers?.full_name || "",
-      record.notes.replace(/"/g, '""'),
-    ]);
+  const exportCallRecordsCSV = () => {
+    const data = callRecords.map(record => ({
+      date: formatDateForExport(record.call_date, "yyyy-MM-dd HH:mm"),
+      pppoe_username: record.mikrotik_users?.[0]?.username || "",
+      customer_id: record.customers?.user_id || "",
+      customer_name: record.customers?.full_name || "",
+      notes: record.notes,
+    }));
     
-    const csv = [
-      headers.join(","),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
-    ].join("\n");
+    exportToCSV(data, [
+      { key: "date", label: "Date/Time" },
+      { key: "pppoe_username", label: "PPPoE Username" },
+      { key: "customer_id", label: "Customer ID" },
+      { key: "customer_name", label: "Customer Name" },
+      { key: "notes", label: "Notes" },
+    ], `call-records-${dateFilter.start}-to-${dateFilter.end}`);
+  };
+
+  const exportCallRecordsPDF = () => {
+    const data = callRecords.map(record => ({
+      date: formatDateForExport(record.call_date, "dd MMM yyyy HH:mm"),
+      pppoe_username: record.mikrotik_users?.[0]?.username || "-",
+      customer_name: record.customers?.full_name || "-",
+      notes: record.notes.substring(0, 50) + (record.notes.length > 50 ? "..." : ""),
+    }));
     
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `call-records-${dateFilter.start}-to-${dateFilter.end}.csv`;
-    a.click();
+    exportToPDF(data, [
+      { key: "date", label: "Date/Time" },
+      { key: "pppoe_username", label: "PPPoE Username" },
+      { key: "customer_name", label: "Customer Name" },
+      { key: "notes", label: "Notes" },
+    ], "Call Records Report", `call-records-${dateFilter.start}-to-${dateFilter.end}`);
+  };
+
+  const exportPaymentsCSV = () => {
+    const data = filteredPayments.map(payment => ({
+      date: formatDateForExport(payment.payment_date, "yyyy-MM-dd"),
+      pppoe_username: payment.mikrotik_users?.[0]?.username || "",
+      customer_name: payment.customers?.full_name || "",
+      method: payment.method.replace("_", " "),
+      amount: payment.amount,
+    }));
+    
+    exportToCSV(data, [
+      { key: "date", label: "Date" },
+      { key: "pppoe_username", label: "PPPoE Username" },
+      { key: "customer_name", label: "Customer Name" },
+      { key: "method", label: "Payment Method" },
+      { key: "amount", label: "Amount" },
+    ], `payments-${dateFilter.start}-to-${dateFilter.end}`);
+  };
+
+  const exportPaymentsPDF = () => {
+    const data = filteredPayments.map(payment => ({
+      date: formatDateForExport(payment.payment_date, "dd MMM yyyy"),
+      pppoe_username: payment.mikrotik_users?.[0]?.username || "-",
+      customer_name: payment.customers?.full_name || "-",
+      method: payment.method.replace("_", " "),
+      amount: formatCurrencyForExport(payment.amount),
+    }));
+    
+    exportToPDF(data, [
+      { key: "date", label: "Date" },
+      { key: "pppoe_username", label: "PPPoE Username" },
+      { key: "customer_name", label: "Customer Name" },
+      { key: "method", label: "Method" },
+      { key: "amount", label: "Amount" },
+    ], "Payments Report", `payments-${dateFilter.start}-to-${dateFilter.end}`);
+  };
+
+  const exportTransactionsCSV = () => {
+    const data = transactions.map(t => ({
+      date: formatDateForExport(t.transaction_date, "yyyy-MM-dd"),
+      type: t.type,
+      category: t.expense_categories?.name || "-",
+      method: t.payment_method.replace("_", " "),
+      description: t.description || "",
+      amount: t.amount,
+    }));
+    
+    exportToCSV(data, [
+      { key: "date", label: "Date" },
+      { key: "type", label: "Type" },
+      { key: "category", label: "Category" },
+      { key: "method", label: "Payment Method" },
+      { key: "description", label: "Description" },
+      { key: "amount", label: "Amount" },
+    ], `transactions-${dateFilter.start}-to-${dateFilter.end}`);
+  };
+
+  const exportTransactionsPDF = () => {
+    const data = transactions.map(t => ({
+      date: formatDateForExport(t.transaction_date, "dd MMM yyyy"),
+      type: t.type,
+      category: t.expense_categories?.name || "-",
+      method: t.payment_method.replace("_", " "),
+      amount: formatCurrencyForExport(t.amount),
+    }));
+    
+    exportToPDF(data, [
+      { key: "date", label: "Date" },
+      { key: "type", label: "Type" },
+      { key: "category", label: "Category" },
+      { key: "method", label: "Method" },
+      { key: "amount", label: "Amount" },
+    ], "Transactions Report", `transactions-${dateFilter.start}-to-${dateFilter.end}`);
   };
 
   return (
@@ -607,17 +727,27 @@ export default function Reports() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Customer Payments</CardTitle>
-                <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="All Methods" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Methods</SelectItem>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="bkash">bKash</SelectItem>
-                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue placeholder="All Methods" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Methods</SelectItem>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="bkash">bKash</SelectItem>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" size="sm" onClick={exportPaymentsCSV}>
+                    <Download className="h-4 w-4 mr-1" />
+                    CSV
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={exportPaymentsPDF}>
+                    <FileText className="h-4 w-4 mr-1" />
+                    PDF
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {loading ? (
@@ -633,6 +763,7 @@ export default function Reports() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Date</TableHead>
+                        <TableHead>PPPoE Username</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead>Method</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
@@ -642,13 +773,13 @@ export default function Reports() {
                       {filteredPayments.map((payment) => (
                         <TableRow key={payment.id}>
                           <TableCell>{format(new Date(payment.payment_date), "dd MMM yyyy")}</TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {payment.mikrotik_users?.[0]?.username || (
+                              <span className="text-muted-foreground">Not set</span>
+                            )}
+                          </TableCell>
                           <TableCell>
-                            <div>
-                              <p className="font-medium">{payment.customers?.full_name}</p>
-                              <p className="text-xs text-muted-foreground font-mono">
-                                {payment.customers?.user_id}
-                              </p>
-                            </div>
+                            <p className="font-medium">{payment.customers?.full_name}</p>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -670,8 +801,18 @@ export default function Reports() {
 
           <TabsContent value="transactions">
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>All Transactions</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={exportTransactionsCSV}>
+                    <Download className="h-4 w-4 mr-1" />
+                    CSV
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={exportTransactionsPDF}>
+                    <FileText className="h-4 w-4 mr-1" />
+                    PDF
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {loading ? (
@@ -817,10 +958,16 @@ export default function Reports() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Call Records</CardTitle>
-                <Button variant="outline" size="sm" onClick={exportCallRecords}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Export CSV
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={exportCallRecordsCSV}>
+                    <Download className="h-4 w-4 mr-1" />
+                    CSV
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={exportCallRecordsPDF}>
+                    <FileText className="h-4 w-4 mr-1" />
+                    PDF
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {loading ? (
@@ -836,6 +983,7 @@ export default function Reports() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Date & Time</TableHead>
+                        <TableHead>PPPoE Username</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead>Notes</TableHead>
                       </TableRow>
@@ -844,13 +992,13 @@ export default function Reports() {
                       {callRecords.map((record) => (
                         <TableRow key={record.id}>
                           <TableCell>{format(new Date(record.call_date), "dd MMM yyyy HH:mm")}</TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {record.mikrotik_users?.[0]?.username || (
+                              <span className="text-muted-foreground">Not set</span>
+                            )}
+                          </TableCell>
                           <TableCell>
-                            <div>
-                              <p className="font-medium">{record.customers?.full_name}</p>
-                              <p className="text-xs text-muted-foreground font-mono">
-                                {record.customers?.user_id}
-                              </p>
-                            </div>
+                            <p className="font-medium">{record.customers?.full_name}</p>
                           </TableCell>
                           <TableCell className="max-w-[400px]">
                             <p className="whitespace-pre-wrap">{record.notes}</p>

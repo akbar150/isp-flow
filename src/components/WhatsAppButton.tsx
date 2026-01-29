@@ -19,6 +19,7 @@ interface WhatsAppButtonProps {
   expiryDate: Date;
   amount: number;
   variant?: 'default' | 'icon';
+  pppoeUsername?: string;
 }
 
 export function WhatsAppButton({
@@ -28,7 +29,8 @@ export function WhatsAppButton({
   packageName,
   expiryDate,
   amount,
-  variant = 'default'
+  variant = 'default',
+  pppoeUsername
 }: WhatsAppButtonProps) {
   const { ispName } = useIspSettings();
   
@@ -38,7 +40,8 @@ export function WhatsAppButton({
     packageName,
     expiryDate,
     amount,
-    ispName
+    ispName,
+    pppoeUsername
   );
 
   const [message, setMessage] = useState(defaultMessage);

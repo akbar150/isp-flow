@@ -4,6 +4,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { CredentialsModal } from "@/components/CredentialsModal";
 import { CustomerEditDialog } from "@/components/CustomerEditDialog";
+import { CustomerViewDialog } from "@/components/CustomerViewDialog";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,11 +28,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { Plus, Search, Eye, EyeOff, RefreshCw, MoreHorizontal, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Eye, EyeOff, RefreshCw, MoreHorizontal, Edit, Trash2, UserCircle } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { calculateBillingInfo } from "@/lib/billingUtils";
 
@@ -94,6 +96,10 @@ export default function Customers() {
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  
+  // View dialog state
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
   
   // Credentials modal state (secure password display)
   const [credentialsModal, setCredentialsModal] = useState({
@@ -621,6 +627,7 @@ export default function Customers() {
                           expiryDate={new Date(customer.expiry_date)}
                           amount={customer.packages?.monthly_price || customer.total_due}
                           variant="icon"
+                          pppoeUsername={customer.mikrotik_users?.[0]?.username}
                         />
                         {canEdit && (
                           <DropdownMenu>
@@ -632,13 +639,23 @@ export default function Customers() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
                                 onClick={() => {
+                                  setViewingCustomer(customer);
+                                  setViewDialogOpen(true);
+                                }}
+                              >
+                                <UserCircle className="h-4 w-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
                                   setEditingCustomer(customer);
                                   setEditDialogOpen(true);
                                 }}
                               >
                                 <Edit className="h-4 w-4 mr-2" />
-                                Edit
+                                Quick Edit
                               </DropdownMenuItem>
+                              <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
                                 onClick={() => handleDelete(customer)}
@@ -658,6 +675,18 @@ export default function Customers() {
           </tbody>
         </table>
       </div>
+
+      {/* View Customer Dialog */}
+      <CustomerViewDialog
+        open={viewDialogOpen}
+        onOpenChange={setViewDialogOpen}
+        customer={viewingCustomer}
+        packages={packages}
+        areas={areas}
+        routers={routers}
+        onSuccess={fetchData}
+        canEdit={canEdit}
+      />
 
       {/* Edit Customer Dialog */}
       <CustomerEditDialog

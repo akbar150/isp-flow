@@ -161,12 +161,14 @@ export function generateWhatsAppMessage(
   packageName: string,
   expiryDate: Date,
   amount: number,
-  ispName: string = 'Smart ISP'
+  ispName: string = 'Smart ISP',
+  pppoeUsername?: string
 ): string {
   const formattedDate = format(expiryDate, 'dd MMM yyyy');
   
   return `Dear ${customerName},
-User ID: ${userId}
+PPPoE Username: ${pppoeUsername || userId}
+${pppoeUsername ? `Customer ID: ${userId}` : ''}
 
 Your internet package ${packageName}, will expire on ${formattedDate}.
 
