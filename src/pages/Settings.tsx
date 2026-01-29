@@ -23,24 +23,25 @@ export default function Settings() {
 
   const [settings, setSettings] = useState({
     isp_name: "Smart ISP",
-    whatsapp_template: `🌐 *{ISP Name} - Payment Reminder*
+    whatsapp_template: `🔔 *পেমেন্ট রিমাইন্ডার / Payment Reminder*
 
-Dear *{CustomerName}*,
+প্রিয় *{CustomerName}*,
 
-📋 *Account Details:*
-━━━━━━━━━━━━━━━
+📋 *অ্যাকাউন্ট তথ্য / Account Details:*
+━━━━━━━━━━━━━━━━
 👤 PPPoE Username: \`{PPPoEUsername}\`
 🔑 PPPoE Password: \`{PPPoEPassword}\`
-🆔 Customer ID: \`{user_id}\`
+🆔 Customer ID: \`{CustomerID}\`
 📦 Package: *{PackageName}*
-📅 Expiry Date: *{ExpiryDate}*
+📅 মেয়াদ উত্তীর্ণ / Expires: *{ExpiryDate}*
+💰 বকেয়া / Due Amount: *৳{Amount}*
+━━━━━━━━━━━━━━━━
 
-💰 *Due Amount: ৳{Amount}*
-━━━━━━━━━━━━━━━
+⚠️ সংযোগ বিচ্ছিন্ন এড়াতে অনুগ্রহ করে পেমেন্ট করুন।
+Please pay to avoid disconnection.
 
-⚠️ Please pay before the expiry date to avoid service disconnection.
-
-🙏 Thank you for choosing *{ISP Name}*!`,
+ধন্যবাদ / Thank you
+*{ISPName}* 🌐`,
   });
 
   useEffect(() => {
@@ -213,7 +214,7 @@ Dear *{CustomerName}*,
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
                   <code className="bg-background px-2 py-1 rounded">{'{CustomerName}'}</code>
                   <span>Customer's full name</span>
-                  <code className="bg-background px-2 py-1 rounded">{'{user_id}'}</code>
+                  <code className="bg-background px-2 py-1 rounded">{'{CustomerID}'}</code>
                   <span>Customer's User ID</span>
                   <code className="bg-background px-2 py-1 rounded">{'{PPPoEUsername}'}</code>
                   <span>PPPoE Username</span>
@@ -225,7 +226,7 @@ Dear *{CustomerName}*,
                   <span>Subscription expiry date</span>
                   <code className="bg-background px-2 py-1 rounded">{'{Amount}'}</code>
                   <span>Due amount</span>
-                  <code className="bg-background px-2 py-1 rounded">{'{ISP Name}'}</code>
+                  <code className="bg-background px-2 py-1 rounded">{'{ISPName}'}</code>
                   <span>Your ISP name</span>
                 </div>
               </div>

@@ -30,6 +30,30 @@ interface ManageUserRequest {
   role?: AppRole;
 }
 
+// Helper function to get ISP name from settings
+async function getIspName(supabaseUrl: string, serviceKey: string): Promise<string> {
+  try {
+    const supabase = createClient(supabaseUrl, serviceKey);
+    const { data, error } = await supabase
+      .from("system_settings")
+      .select("value")
+      .eq("key", "isp_name")
+      .single();
+    
+    if (error || !data) {
+      return "ISP Billing";
+    }
+    
+    const value = (data as { value: unknown }).value;
+    if (typeof value === "string") {
+      return value.replace(/^"|"$/g, "");
+    }
+    return String(value);
+  } catch {
+    return "ISP Billing";
+  }
+}
+
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   
@@ -368,11 +392,59 @@ serve(async (req) => {
           throw new Error(`Failed to generate reset link: ${linkError.message}`);
         }
 
-        // Send email via Resend
+        // Get dynamic ISP name
+        const ispName = await getIspName(supabaseUrl, supabaseServiceKey);
+
+        // Send email via Brevo or Resend
+        const brevoApiKey = Deno.env.get("BREVO_API_KEY") || Deno.env.get("BREVO_SMTP_KEY");
         const resendApiKey = Deno.env.get("RESEND_API_KEY");
-        if (resendApiKey) {
-          const resetUrl = linkData.properties.action_link;
-          
+        const resetUrl = linkData.properties.action_link;
+        
+        if (brevoApiKey) {
+          // Use Brevo API
+          const emailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+            method: "POST",
+            headers: {
+              "Accept": "application/json",
+              "Content-Type": "application/json; charset=utf-8",
+              "api-key": brevoApiKey,
+            },
+            body: JSON.stringify({
+              sender: {
+                name: ispName,
+                email: "noreply@easylinkbd.com",
+              },
+              to: [{ email }],
+              subject: `Reset your password - ${ispName}`,
+              htmlContent: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <div style="background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%); padding: 20px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">${ispName}</h1>
+                  </div>
+                  <div style="padding: 30px; background: #f9fafb;">
+                    <h2 style="color: #1f2937;">Password Reset Request</h2>
+                    <p style="color: #4b5563;">You requested to reset your password for ${ispName} Billing.</p>
+                    <p style="margin: 24px 0;">
+                      <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#0891b2;color:white;text-decoration:none;border-radius:6px;font-weight:500;">
+                        Reset Password
+                      </a>
+                    </p>
+                    <p style="color: #6b7280;">If you didn't request this, you can safely ignore this email.</p>
+                    <p style="color: #9ca3af; font-size: 12px;">This link will expire in 1 hour.</p>
+                  </div>
+                  <div style="background: #1f2937; padding: 15px; text-align: center;">
+                    <p style="color: #9ca3af; margin: 0; font-size: 12px;">© ${new Date().getFullYear()} ${ispName}. All rights reserved.</p>
+                  </div>
+                </div>
+              `,
+            }),
+          });
+
+          if (!emailRes.ok) {
+            console.error("Brevo error:", await emailRes.text());
+          }
+        } else if (resendApiKey) {
+          // Fallback to Resend
           const emailRes = await fetch("https://api.resend.com/emails", {
             method: "POST",
             headers: {
@@ -380,13 +452,13 @@ serve(async (req) => {
               "Authorization": `Bearer ${resendApiKey}`,
             },
             body: JSON.stringify({
-              from: "Smart ISP <onboarding@resend.dev>",
+              from: `${ispName} <onboarding@resend.dev>`,
               to: [email],
-              subject: "Reset your password - Smart ISP",
+              subject: `Reset your password - ${ispName}`,
               html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                   <h2 style="color: #1f2937;">Password Reset Request</h2>
-                  <p style="color: #4b5563;">You requested to reset your password for Smart ISP Billing.</p>
+                  <p style="color: #4b5563;">You requested to reset your password for ${ispName} Billing.</p>
                   <p style="margin: 24px 0;">
                     <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#0891b2;color:white;text-decoration:none;border-radius:6px;font-weight:500;">
                       Reset Password

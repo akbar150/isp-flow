@@ -877,6 +877,14 @@ export type Database = {
       }
     }
     Functions: {
+      decrypt_smtp_password: {
+        Args: { encrypted_password: string }
+        Returns: string
+      }
+      encrypt_smtp_password: {
+        Args: { plain_password: string }
+        Returns: string
+      }
       generate_customer_user_id: { Args: never; Returns: string }
       get_public_system_settings: {
         Args: never
