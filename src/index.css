@@ -2,95 +2,137 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
+/* 
+  Smart ISP Billing System Design System
+  Professional telecom dashboard theme with teal/cyan primary
 */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Background colors */
+    --background: 210 20% 98%;
+    --foreground: 215 25% 15%;
 
+    /* Card surfaces */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 215 25% 15%;
 
+    /* Popover/dropdown */
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 215 25% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary - Deep Teal (connectivity, trust) */
+    --primary: 185 65% 35%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary - Slate */
+    --secondary: 215 20% 93%;
+    --secondary-foreground: 215 25% 25%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted backgrounds */
+    --muted: 215 20% 96%;
+    --muted-foreground: 215 15% 50%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent - Cyan glow */
+    --accent: 185 60% 94%;
+    --accent-foreground: 185 65% 30%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Destructive - Red for errors/expired */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Borders & inputs */
+    --border: 215 20% 88%;
+    --input: 215 20% 88%;
+    --ring: 185 65% 35%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;
 
-    --sidebar-background: 0 0% 98%;
+    /* Status colors for ISP billing */
+    --status-active: 152 69% 40%;
+    --status-active-foreground: 0 0% 100%;
+    --status-expiring: 38 92% 50%;
+    --status-expiring-foreground: 0 0% 100%;
+    --status-expired: 0 72% 51%;
+    --status-expired-foreground: 0 0% 100%;
+    --status-suspended: 270 50% 50%;
+    --status-suspended-foreground: 0 0% 100%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    /* Chart colors */
+    --chart-1: 185 65% 35%;
+    --chart-2: 152 69% 40%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 0 72% 51%;
+    --chart-5: 270 50% 50%;
 
-    --sidebar-primary: 240 5.9% 10%;
+    /* Sidebar */
+    --sidebar-background: 215 25% 12%;
+    --sidebar-foreground: 215 15% 85%;
+    --sidebar-primary: 185 65% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 25% 18%;
+    --sidebar-accent-foreground: 215 15% 95%;
+    --sidebar-border: 215 25% 20%;
+    --sidebar-ring: 185 65% 50%;
 
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(185 65% 35%) 0%, hsl(185 65% 45%) 100%);
+    --gradient-dashboard: linear-gradient(180deg, hsl(210 20% 98%) 0%, hsl(210 20% 95%) 100%);
+    --gradient-card-hover: linear-gradient(180deg, hsl(185 60% 97%) 0%, hsl(0 0% 100%) 100%);
+    
+    /* Shadows */
+    --shadow-card: 0 1px 3px hsl(215 25% 15% / 0.04), 0 4px 12px hsl(215 25% 15% / 0.06);
+    --shadow-card-hover: 0 4px 12px hsl(215 25% 15% / 0.08), 0 8px 24px hsl(215 25% 15% / 0.08);
+    --shadow-dropdown: 0 10px 40px hsl(215 25% 15% / 0.12);
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 215 25% 9%;
+    --foreground: 210 20% 95%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 215 25% 12%;
+    --card-foreground: 210 20% 95%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 215 25% 12%;
+    --popover-foreground: 210 20% 95%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 185 65% 50%;
+    --primary-foreground: 215 25% 9%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 215 25% 18%;
+    --secondary-foreground: 210 20% 90%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 215 25% 15%;
+    --muted-foreground: 215 15% 55%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 215 25% 18%;
+    --accent-foreground: 185 65% 60%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --border: 215 25% 18%;
+    --input: 215 25% 18%;
+    --ring: 185 65% 50%;
+
+    --status-active: 152 69% 45%;
+    --status-expiring: 38 92% 55%;
+    --status-expired: 0 62% 50%;
+    --status-suspended: 270 50% 55%;
+
+    --sidebar-background: 215 25% 8%;
+    --sidebar-foreground: 215 15% 85%;
+    --sidebar-primary: 185 65% 55%;
+    --sidebar-primary-foreground: 215 25% 9%;
+    --sidebar-accent: 215 25% 14%;
+    --sidebar-accent-foreground: 215 15% 95%;
+    --sidebar-border: 215 25% 15%;
+    --sidebar-ring: 185 65% 55%;
+
+    --shadow-card: 0 1px 3px hsl(0 0% 0% / 0.2), 0 4px 12px hsl(0 0% 0% / 0.3);
+    --shadow-card-hover: 0 4px 12px hsl(0 0% 0% / 0.3), 0 8px 24px hsl(0 0% 0% / 0.4);
   }
 }
 
@@ -100,6 +142,176 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  /* Dashboard stat cards */
+  .stat-card {
+    @apply bg-card rounded-xl p-5 transition-all duration-200;
+    box-shadow: var(--shadow-card);
+  }
+
+  .stat-card:hover {
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-1px);
+  }
+
+  .stat-card-value {
+    @apply text-3xl font-bold tracking-tight;
+  }
+
+  .stat-card-label {
+    @apply text-sm text-muted-foreground font-medium;
+  }
+
+  /* Status badges */
+  .status-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  .status-active {
+    @apply bg-[hsl(var(--status-active)/0.15)] text-[hsl(var(--status-active))];
+  }
+
+  .status-expiring {
+    @apply bg-[hsl(var(--status-expiring)/0.15)] text-[hsl(var(--status-expiring))];
+  }
+
+  .status-expired {
+    @apply bg-[hsl(var(--status-expired)/0.15)] text-[hsl(var(--status-expired))];
+  }
+
+  .status-suspended {
+    @apply bg-[hsl(var(--status-suspended)/0.15)] text-[hsl(var(--status-suspended))];
+  }
+
+  /* Data table styles */
+  .data-table {
+    @apply w-full text-sm;
+  }
+
+  .data-table th {
+    @apply text-left font-semibold text-muted-foreground uppercase text-xs tracking-wider py-3 px-4 border-b;
+  }
+
+  .data-table td {
+    @apply py-3 px-4 border-b border-border/50;
+  }
+
+  .data-table tr:hover td {
+    @apply bg-muted/30;
+  }
+
+  /* Sidebar nav styles */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sidebar-foreground/70 transition-all duration-150;
+  }
+
+  .nav-item:hover {
+    @apply bg-sidebar-accent text-sidebar-foreground;
+  }
+
+  .nav-item.active {
+    @apply bg-sidebar-primary/10 text-sidebar-primary font-medium;
+  }
+
+  /* WhatsApp button */
+  .whatsapp-btn {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150;
+    background: linear-gradient(135deg, hsl(142 70% 45%) 0%, hsl(142 70% 40%) 100%);
+    color: white;
+  }
+
+  .whatsapp-btn:hover {
+    background: linear-gradient(135deg, hsl(142 70% 40%) 0%, hsl(142 70% 35%) 100%);
+    transform: translateY(-1px);
+  }
+
+  /* Page header */
+  .page-header {
+    @apply mb-6;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold text-foreground;
+  }
+
+  .page-description {
+    @apply text-muted-foreground mt-1;
+  }
+
+  /* Form sections */
+  .form-section {
+    @apply bg-card rounded-xl p-6;
+    box-shadow: var(--shadow-card);
+  }
+
+  .form-section-title {
+    @apply text-lg font-semibold mb-4 pb-3 border-b;
+  }
+
+  /* Metric cards with icons */
+  .metric-icon {
+    @apply w-10 h-10 rounded-lg flex items-center justify-center;
+  }
+
+  .metric-icon-primary {
+    @apply bg-primary/10 text-primary;
+  }
+
+  .metric-icon-success {
+    @apply bg-[hsl(var(--status-active)/0.15)] text-[hsl(var(--status-active))];
+  }
+
+  .metric-icon-warning {
+    @apply bg-[hsl(var(--status-expiring)/0.15)] text-[hsl(var(--status-expiring))];
+  }
+
+  .metric-icon-danger {
+    @apply bg-[hsl(var(--status-expired)/0.15)] text-[hsl(var(--status-expired))];
+  }
+
+  /* Amount display for billing */
+  .amount-positive {
+    @apply text-[hsl(var(--status-active))] font-semibold;
+  }
+
+  .amount-negative {
+    @apply text-[hsl(var(--status-expired))] font-semibold;
+  }
+
+  .amount-due {
+    @apply text-[hsl(var(--status-expiring))] font-semibold;
+  }
+
+  /* Scrollbar styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-muted/30 rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+}
+
+@layer utilities {
+  .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
   }
 }
