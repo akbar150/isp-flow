@@ -750,13 +750,14 @@ export type Database = {
         Returns: boolean
       }
       hash_password: { Args: { raw_password: string }; Returns: string }
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       verify_password: {
         Args: { hashed_password: string; raw_password: string }
         Returns: boolean
       }
     }
     Enums: {
-      app_role: "admin" | "staff"
+      app_role: "admin" | "staff" | "super_admin"
       customer_status: "active" | "expiring" | "expired" | "suspended"
       mikrotik_user_status: "enabled" | "disabled"
       payment_method: "bkash" | "cash" | "bank_transfer" | "due"
@@ -893,7 +894,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "staff"],
+      app_role: ["admin", "staff", "super_admin"],
       customer_status: ["active", "expiring", "expired", "suspended"],
       mikrotik_user_status: ["enabled", "disabled"],
       payment_method: ["bkash", "cash", "bank_transfer", "due"],
