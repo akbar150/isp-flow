@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
+import { EmailButton } from "@/components/EmailButton";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
+import { QuickPaymentRecord } from "@/components/QuickPaymentRecord";
 import { supabase } from "@/integrations/supabase/client";
-import { format, addDays, startOfDay, differenceInDays } from "date-fns";
+import { format, startOfDay, differenceInDays } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface MikrotikUser {
@@ -79,6 +81,9 @@ export default function Reminders() {
     const threeDaysOverdue: Customer[] = [];
 
     customers.forEach(customer => {
+      // Skip suspended customers
+      if (customer.status === 'suspended') return;
+      
       const expiry = startOfDay(new Date(customer.expiry_date));
       const daysDiff = differenceInDays(expiry, today);
 
@@ -94,8 +99,9 @@ export default function Reminders() {
       else if (daysDiff === 0) {
         expiryDay.push(customer);
       }
-      // 3 days overdue (expired 3 days ago)
-      else if (daysDiff === -3) {
+      // 3 days overdue (expired 3 days ago, daysDiff would be -3)
+      // Also include customers who are MORE than 3 days overdue (daysDiff <= -3)
+      else if (daysDiff <= -3 && daysDiff >= -30) {
         threeDaysOverdue.push(customer);
       }
     });
@@ -115,10 +121,10 @@ export default function Reminders() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>PPPoE Username</th>
+                <th className="hidden sm:table-cell">PPPoE Username</th>
                 <th>Name</th>
-                <th>Phone</th>
-                <th>Package</th>
+                <th className="hidden md:table-cell">Phone</th>
+                <th className="hidden lg:table-cell">Package</th>
                 <th>Expiry</th>
                 <th>Due</th>
                 <th>Actions</th>
@@ -127,16 +133,29 @@ export default function Reminders() {
             <tbody>
               {customerList.map((customer) => {
                 const pppoeUsername = customer.mikrotik_users?.[0]?.username || '';
+                const daysOverdue = Math.abs(differenceInDays(startOfDay(new Date(customer.expiry_date)), today));
                 return (
                   <tr key={customer.id}>
-                    <td className="font-mono text-sm">{pppoeUsername || <span className="text-muted-foreground">Not set</span>}</td>
-                    <td className="font-medium">{customer.full_name}</td>
-                    <td>{customer.phone}</td>
-                    <td>{customer.packages?.name || 'N/A'}</td>
-                    <td>{format(new Date(customer.expiry_date), 'dd MMM yyyy')}</td>
+                    <td className="font-mono text-sm hidden sm:table-cell">{pppoeUsername || <span className="text-muted-foreground">Not set</span>}</td>
+                    <td>
+                      <div>
+                        <p className="font-medium">{customer.full_name}</p>
+                        <p className="text-xs text-muted-foreground sm:hidden">{pppoeUsername}</p>
+                      </div>
+                    </td>
+                    <td className="hidden md:table-cell">{customer.phone}</td>
+                    <td className="hidden lg:table-cell">{customer.packages?.name || 'N/A'}</td>
+                    <td>
+                      <div>
+                        <p>{format(new Date(customer.expiry_date), 'dd MMM yyyy')}</p>
+                        {differenceInDays(startOfDay(new Date(customer.expiry_date)), today) < 0 && (
+                          <p className="text-xs text-destructive">{daysOverdue} days overdue</p>
+                        )}
+                      </div>
+                    </td>
                     <td className="amount-due">৳{customer.total_due}</td>
                     <td>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 flex-wrap">
                         <QuickCallRecord
                           customerId={customer.id}
                           customerName={customer.full_name}
@@ -151,6 +170,23 @@ export default function Reminders() {
                           amount={customer.packages?.monthly_price || customer.total_due}
                           variant="icon"
                           pppoeUsername={pppoeUsername}
+                        />
+                        <EmailButton
+                          phone={customer.phone}
+                          customerName={customer.full_name}
+                          userId={customer.user_id}
+                          packageName={customer.packages?.name || 'Internet'}
+                          expiryDate={new Date(customer.expiry_date)}
+                          amount={customer.packages?.monthly_price || customer.total_due}
+                          variant="icon"
+                          pppoeUsername={pppoeUsername}
+                        />
+                        <QuickPaymentRecord
+                          customerId={customer.id}
+                          customerName={customer.full_name}
+                          dueAmount={customer.total_due}
+                          monthlyPrice={customer.packages?.monthly_price || 0}
+                          onSuccess={fetchData}
                         />
                       </div>
                     </td>
@@ -178,11 +214,11 @@ export default function Reminders() {
     <DashboardLayout>
       <div className="page-header">
         <h1 className="page-title">Reminders</h1>
-        <p className="page-description">Send payment reminders to customers via WhatsApp</p>
+        <p className="page-description">Send payment reminders to customers via WhatsApp, Email & SMS</p>
       </div>
 
       <Tabs defaultValue="schedule" className="space-y-6">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="schedule">Reminder Schedule</TabsTrigger>
           <TabsTrigger value="logs">Reminder Logs</TabsTrigger>
         </TabsList>
@@ -191,7 +227,7 @@ export default function Reminders() {
           {renderCustomerTable(threeDaysBefore, "3 Days Before Expiry")}
           {renderCustomerTable(oneDayBefore, "1 Day Before Expiry")}
           {renderCustomerTable(expiryDay, "Expiring Today")}
-          {renderCustomerTable(threeDaysOverdue, "3 Days Overdue")}
+          {renderCustomerTable(threeDaysOverdue, "3+ Days Overdue")}
         </TabsContent>
 
         <TabsContent value="logs">
@@ -202,7 +238,7 @@ export default function Reminders() {
                 <tr>
                   <th>Date</th>
                   <th>Customer</th>
-                  <th>Type</th>
+                  <th className="hidden sm:table-cell">Type</th>
                   <th>Channel</th>
                 </tr>
               </thead>
@@ -225,7 +261,7 @@ export default function Reminders() {
                           </p>
                         </div>
                       </td>
-                      <td>
+                      <td className="hidden sm:table-cell">
                         <span className="status-badge bg-blue-100 text-blue-700">
                           {log.reminder_type.replace('_', ' ')}
                         </span>
