@@ -43,6 +43,12 @@ interface Router {
   name: string;
 }
 
+interface MikrotikUser {
+  id: string;
+  username: string;
+  status: 'enabled' | 'disabled';
+}
+
 interface Customer {
   id: string;
   user_id: string;
@@ -60,6 +66,7 @@ interface Customer {
   packages: Package | null;
   areas: Area | null;
   routers: Router | null;
+  mikrotik_users: MikrotikUser[] | null;
 }
 
 export default function Customers() {
@@ -78,6 +85,8 @@ export default function Customers() {
     open: false,
     userId: "",
     password: "",
+    pppoeUsername: "",
+    pppoePassword: "",
   });
 
   // Form state
@@ -90,7 +99,10 @@ export default function Customers() {
     router_id: "",
     package_id: "",
     password: "",
+    pppoe_username: "",
+    pppoe_password: "",
   });
+  const [showPppoePassword, setShowPppoePassword] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -99,15 +111,15 @@ export default function Customers() {
   const fetchData = async () => {
     try {
       const [customersRes, packagesRes, areasRes, routersRes] = await Promise.all([
-        // Use customers_safe view to prevent password_hash exposure
-        supabase.from('customers_safe').select('*, packages(*), areas(*), routers(*)').order('created_at', { ascending: false }),
+        // Use customers_safe view and join mikrotik_users_safe for PPPoE username
+        supabase.from('customers_safe').select('*, packages(*), areas(*), routers(*), mikrotik_users:mikrotik_users_safe(id, username, status)').order('created_at', { ascending: false }),
         supabase.from('packages').select('*').eq('is_active', true),
         supabase.from('areas').select('*'),
         supabase.from('routers').select('*').eq('is_active', true),
       ]);
 
       if (customersRes.error) throw customersRes.error;
-      setCustomers(customersRes.data as Customer[] || []);
+      setCustomers(customersRes.data as unknown as Customer[] || []);
       setPackages(packagesRes.data || []);
       setAreas(areasRes.data || []);
       setRouters(routersRes.data || []);
@@ -123,10 +135,12 @@ export default function Customers() {
     }
   };
 
-  const generatePassword = () => {
+  const generatePassword = (forField: 'password' | 'pppoe_password' = 'password') => {
     // Cryptographically secure password generation
-    const length = 16;
-    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    const length = forField === 'pppoe_password' ? 12 : 16;
+    const charset = forField === 'pppoe_password' 
+      ? 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+      : 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
     const randomValues = new Uint8Array(length);
     crypto.getRandomValues(randomValues);
     
@@ -134,7 +148,7 @@ export default function Customers() {
     for (let i = 0; i < length; i++) {
       password += charset[randomValues[i] % charset.length];
     }
-    setFormData({ ...formData, password });
+    setFormData({ ...formData, [forField]: password });
   };
 
   const generateUserId = async (): Promise<string> => {
@@ -183,6 +197,14 @@ export default function Customers() {
       if (formData.password.length < 12) {
         throw new Error('Password must be at least 12 characters long');
       }
+
+      // Validate PPPoE credentials
+      if (!formData.pppoe_username || formData.pppoe_username.trim().length < 3) {
+        throw new Error('PPPoE Username must be at least 3 characters');
+      }
+      if (!formData.pppoe_password || formData.pppoe_password.length < 6) {
+        throw new Error('PPPoE Password must be at least 6 characters');
+      }
       
       const selectedPackage = packages.find(p => p.id === formData.package_id);
       if (!selectedPackage) throw new Error('Please select a package');
@@ -197,7 +219,14 @@ export default function Customers() {
       
       if (hashError) throw new Error('Failed to secure password');
 
-      const { error } = await supabase.from('customers').insert({
+      // Hash PPPoE password
+      const { data: hashedPppoePassword, error: pppoeHashError } = await supabase
+        .rpc('hash_password', { raw_password: formData.pppoe_password });
+      
+      if (pppoeHashError) throw new Error('Failed to secure PPPoE password');
+
+      // Create customer
+      const { data: newCustomer, error } = await supabase.from('customers').insert({
         user_id: userId,
         full_name: formData.full_name,
         phone: formData.phone,
@@ -211,15 +240,32 @@ export default function Customers() {
         expiry_date: format(expiryDate, 'yyyy-MM-dd'),
         status: 'active',
         total_due: selectedPackage.monthly_price,
-      });
+      }).select('id').single();
 
       if (error) throw error;
+
+      // Create mikrotik_users entry for PPPoE credentials
+      const { error: mikrotikError } = await supabase.from('mikrotik_users').insert({
+        customer_id: newCustomer.id,
+        username: formData.pppoe_username,
+        password_encrypted: hashedPppoePassword,
+        router_id: formData.router_id || null,
+        profile: selectedPackage.name,
+        status: 'enabled',
+      });
+
+      if (mikrotikError) {
+        console.error('Failed to create PPPoE user:', mikrotikError);
+        // Don't throw - customer is created, just log the error
+      }
 
       // Show secure credentials modal instead of toast
       setCredentialsModal({
         open: true,
         userId: userId,
         password: formData.password,
+        pppoeUsername: formData.pppoe_username,
+        pppoePassword: formData.pppoe_password,
       });
 
       setDialogOpen(false);
@@ -232,6 +278,8 @@ export default function Customers() {
         router_id: "",
         package_id: "",
         password: "",
+        pppoe_username: "",
+        pppoe_password: "",
       });
       fetchData();
     } catch (error) {
@@ -244,9 +292,11 @@ export default function Customers() {
   };
 
   const filteredCustomers = customers.filter(customer => {
+    const pppoeUsername = customer.mikrotik_users?.[0]?.username || '';
     const matchesSearch = 
       customer.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.user_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      pppoeUsername.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.phone.includes(searchTerm);
     
     const matchesStatus = statusFilter === "all" || customer.status === statusFilter;
@@ -371,7 +421,7 @@ export default function Customers() {
                   </Select>
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Password *</Label>
+                  <Label>Portal Password *</Label>
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <Input
@@ -390,14 +440,49 @@ export default function Customers() {
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
                     </div>
-                    <Button type="button" variant="outline" onClick={generatePassword}>
+                    <Button type="button" variant="outline" onClick={() => generatePassword('password')}>
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Generate
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    This password will only be shown once during creation
+                    Password for customer portal login
                   </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>PPPoE Username *</Label>
+                  <Input
+                    value={formData.pppoe_username}
+                    onChange={(e) => setFormData({ ...formData, pppoe_username: e.target.value })}
+                    placeholder="e.g., customer_pppoe"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>PPPoE Password *</Label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        type={showPppoePassword ? "text" : "password"}
+                        value={formData.pppoe_password}
+                        onChange={(e) => setFormData({ ...formData, pppoe_password: e.target.value })}
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full"
+                        onClick={() => setShowPppoePassword(!showPppoePassword)}
+                      >
+                        {showPppoePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <Button type="button" variant="outline" onClick={() => generatePassword('pppoe_password')}>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Generate
+                    </Button>
+                  </div>
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-4">
@@ -416,7 +501,7 @@ export default function Customers() {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by name, ID, or phone..."
+            placeholder="Search by name, PPPoE username, or phone..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -441,7 +526,7 @@ export default function Customers() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>User ID</th>
+              <th>PPPoE Username</th>
               <th>Name</th>
               <th>Phone</th>
               <th>Package</th>
@@ -461,7 +546,9 @@ export default function Customers() {
             ) : (
               filteredCustomers.map((customer) => (
                 <tr key={customer.id}>
-                  <td className="font-mono text-sm">{customer.user_id}</td>
+                  <td className="font-mono text-sm">
+                    {customer.mikrotik_users?.[0]?.username || <span className="text-muted-foreground">Not set</span>}
+                  </td>
                   <td className="font-medium">{customer.full_name}</td>
                   <td>{customer.phone}</td>
                   <td>{customer.packages?.name || 'N/A'}</td>
@@ -496,10 +583,12 @@ export default function Customers() {
         onOpenChange={(open) => setCredentialsModal({ ...credentialsModal, open })}
         userId={credentialsModal.userId}
         password={credentialsModal.password}
+        pppoeUsername={credentialsModal.pppoeUsername}
+        pppoePassword={credentialsModal.pppoePassword}
         onConfirm={() => {
           toast({
             title: "Customer created successfully",
-            description: `User ID: ${credentialsModal.userId}`,
+            description: `PPPoE Username: ${credentialsModal.pppoeUsername}`,
           });
         }}
       />
