@@ -45,12 +45,20 @@ export class DummyMikrotikAdapter implements IMikrotikService {
     await this.simulateDelay(200);
 
     try {
+      // Hash password using database function (bcrypt)
+      const { data: hashedPassword, error: hashError } = await supabase
+        .rpc('hash_password', { raw_password: user.password });
+      
+      if (hashError) {
+        throw new Error('Failed to secure password');
+      }
+
       const { error } = await supabase
         .from('mikrotik_users')
         .insert({
           customer_id: user.userId,
           username: user.username,
-          password_encrypted: user.password, // In real implementation, encrypt this
+          password_encrypted: hashedPassword,
           profile: user.profile,
           status: 'enabled',
           router_id: this.routerId,

@@ -44,6 +44,11 @@ export default function Auth() {
     setLoading(true);
 
     try {
+      // Validate password strength
+      if (password.length < 8) {
+        throw new Error('Password must be at least 8 characters long');
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -56,17 +61,17 @@ export default function Auth() {
       if (error) throw error;
 
       if (data.user) {
-        // Create profile and assign admin role for first user
-        await supabase.from('profiles').insert({
+        // Create profile - role assignment is handled by RLS policies
+        // First user gets admin role via policy, subsequent users are blocked
+        // until an admin assigns them a role
+        const { error: profileError } = await supabase.from('profiles').insert({
           user_id: data.user.id,
           full_name: fullName
         });
 
-        // Assign admin role
-        await supabase.from('user_roles').insert({
-          user_id: data.user.id,
-          role: 'admin'
-        });
+        if (profileError) {
+          console.error('Profile creation error:', profileError);
+        }
 
         toast({
           title: "Account created!",

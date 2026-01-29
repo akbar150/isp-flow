@@ -74,12 +74,21 @@ export default function Routers() {
     e.preventDefault();
 
     try {
+      // Hash password if provided using database function
+      let hashedPassword = null;
+      if (formData.password) {
+        const { data, error: hashError } = await supabase
+          .rpc('hash_password', { raw_password: formData.password });
+        if (hashError) throw new Error('Failed to secure password');
+        hashedPassword = data;
+      }
+
       const routerData = {
         name: formData.name,
         ip_address: formData.ip_address || null,
         port: parseInt(formData.port) || 8728,
         username: formData.username || null,
-        password_encrypted: formData.password || null,
+        password_encrypted: hashedPassword,
         mode: formData.mode,
         is_active: formData.is_active,
       };

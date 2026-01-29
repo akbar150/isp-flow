@@ -145,6 +145,13 @@ export type Database = {
             referencedRelation: "routers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "customers_router_id_fkey"
+            columns: ["router_id"]
+            isOneToOne: false
+            referencedRelation: "routers_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       mikrotik_users: {
@@ -193,10 +200,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "mikrotik_users_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "mikrotik_users_router_id_fkey"
             columns: ["router_id"]
             isOneToOne: false
             referencedRelation: "routers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mikrotik_users_router_id_fkey"
+            columns: ["router_id"]
+            isOneToOne: false
+            referencedRelation: "routers_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -282,6 +303,13 @@ export type Database = {
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "payments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       profiles: {
@@ -342,6 +370,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reminder_logs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -429,7 +464,193 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      customers_safe: {
+        Row: {
+          address: string | null
+          alt_phone: string | null
+          area_id: string | null
+          auto_renew: boolean | null
+          billing_start_date: string | null
+          created_at: string | null
+          expiry_date: string | null
+          full_name: string | null
+          id: string | null
+          package_id: string | null
+          phone: string | null
+          router_id: string | null
+          status: Database["public"]["Enums"]["customer_status"] | null
+          total_due: number | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          address?: string | null
+          alt_phone?: string | null
+          area_id?: string | null
+          auto_renew?: boolean | null
+          billing_start_date?: string | null
+          created_at?: string | null
+          expiry_date?: string | null
+          full_name?: string | null
+          id?: string | null
+          package_id?: string | null
+          phone?: string | null
+          router_id?: string | null
+          status?: Database["public"]["Enums"]["customer_status"] | null
+          total_due?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          address?: string | null
+          alt_phone?: string | null
+          area_id?: string | null
+          auto_renew?: boolean | null
+          billing_start_date?: string | null
+          created_at?: string | null
+          expiry_date?: string | null
+          full_name?: string | null
+          id?: string | null
+          package_id?: string | null
+          phone?: string | null
+          router_id?: string | null
+          status?: Database["public"]["Enums"]["customer_status"] | null
+          total_due?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_area_id_fkey"
+            columns: ["area_id"]
+            isOneToOne: false
+            referencedRelation: "areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_router_id_fkey"
+            columns: ["router_id"]
+            isOneToOne: false
+            referencedRelation: "routers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_router_id_fkey"
+            columns: ["router_id"]
+            isOneToOne: false
+            referencedRelation: "routers_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mikrotik_users_safe: {
+        Row: {
+          created_at: string | null
+          customer_id: string | null
+          id: string | null
+          last_synced_at: string | null
+          profile: string | null
+          router_id: string | null
+          status: Database["public"]["Enums"]["mikrotik_user_status"] | null
+          updated_at: string | null
+          username: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string | null
+          last_synced_at?: string | null
+          profile?: string | null
+          router_id?: string | null
+          status?: Database["public"]["Enums"]["mikrotik_user_status"] | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string | null
+          last_synced_at?: string | null
+          profile?: string | null
+          router_id?: string | null
+          status?: Database["public"]["Enums"]["mikrotik_user_status"] | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mikrotik_users_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mikrotik_users_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mikrotik_users_router_id_fkey"
+            columns: ["router_id"]
+            isOneToOne: false
+            referencedRelation: "routers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mikrotik_users_router_id_fkey"
+            columns: ["router_id"]
+            isOneToOne: false
+            referencedRelation: "routers_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      routers_safe: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          ip_address: string | null
+          is_active: boolean | null
+          mode: Database["public"]["Enums"]["router_mode"] | null
+          name: string | null
+          port: number | null
+          updated_at: string | null
+          username: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string | null
+          ip_address?: string | null
+          is_active?: boolean | null
+          mode?: Database["public"]["Enums"]["router_mode"] | null
+          name?: string | null
+          port?: number | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string | null
+          ip_address?: string | null
+          is_active?: boolean | null
+          mode?: Database["public"]["Enums"]["router_mode"] | null
+          name?: string | null
+          port?: number | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       generate_customer_user_id: { Args: never; Returns: string }
@@ -438,6 +659,11 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      hash_password: { Args: { raw_password: string }; Returns: string }
+      verify_password: {
+        Args: { hashed_password: string; raw_password: string }
         Returns: boolean
       }
     }

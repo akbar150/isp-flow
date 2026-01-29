@@ -115,10 +115,15 @@ export default function Customers() {
   };
 
   const generatePassword = () => {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    // Cryptographically secure password generation
+    const length = 16;
+    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    const randomValues = new Uint8Array(length);
+    crypto.getRandomValues(randomValues);
+    
     let password = '';
-    for (let i = 0; i < 8; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    for (let i = 0; i < length; i++) {
+      password += charset[randomValues[i] % charset.length];
     }
     setFormData({ ...formData, password });
   };
@@ -136,12 +141,23 @@ export default function Customers() {
     e.preventDefault();
     
     try {
+      // Validate password strength
+      if (formData.password.length < 12) {
+        throw new Error('Password must be at least 12 characters long');
+      }
+      
       const selectedPackage = packages.find(p => p.id === formData.package_id);
       if (!selectedPackage) throw new Error('Please select a package');
 
       const userId = await generateUserId();
       const today = new Date();
       const expiryDate = addDays(today, selectedPackage.validity_days);
+
+      // Hash password using database function (bcrypt)
+      const { data: hashedPassword, error: hashError } = await supabase
+        .rpc('hash_password', { raw_password: formData.password });
+      
+      if (hashError) throw new Error('Failed to secure password');
 
       const { error } = await supabase.from('customers').insert({
         user_id: userId,
@@ -152,7 +168,7 @@ export default function Customers() {
         area_id: formData.area_id || null,
         router_id: formData.router_id || null,
         package_id: formData.package_id,
-        password_hash: formData.password, // In production, hash this
+        password_hash: hashedPassword,
         billing_start_date: format(today, 'yyyy-MM-dd'),
         expiry_date: format(expiryDate, 'yyyy-MM-dd'),
         status: 'active',
