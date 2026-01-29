@@ -25,6 +25,7 @@ import { format, differenceInDays, startOfDay } from "date-fns";
 import { CalendarIcon, Loader2, User, Phone, MapPin, Package, Calendar as CalendarIconAlt, CreditCard, Wifi, Key, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CustomerCallRecords } from "./CustomerCallRecords";
+import { CustomerBillingHistory } from "./CustomerBillingHistory";
 import { StatusBadge } from "./StatusBadge";
 
 interface Package {
@@ -276,10 +277,11 @@ export function CustomerViewDialog({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="mt-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="billing">Billing</TabsTrigger>
             <TabsTrigger value="credentials">Credentials</TabsTrigger>
-            <TabsTrigger value="calls">Call Records</TabsTrigger>
+            <TabsTrigger value="calls">Calls</TabsTrigger>
           </TabsList>
 
           <TabsContent value="details" className="space-y-4 mt-4">
@@ -683,6 +685,13 @@ export function CustomerViewDialog({
                 </div>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="billing" className="mt-4">
+            <CustomerBillingHistory 
+              customerId={customer.id} 
+              customerName={customer.full_name} 
+            />
           </TabsContent>
 
           <TabsContent value="calls" className="mt-4">

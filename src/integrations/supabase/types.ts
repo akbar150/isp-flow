@@ -65,6 +65,66 @@ export type Database = {
         }
         Relationships: []
       }
+      billing_records: {
+        Row: {
+          amount: number
+          amount_paid: number
+          billing_date: string
+          created_at: string
+          customer_id: string
+          due_date: string
+          id: string
+          notes: string | null
+          package_name: string
+          paid_date: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          amount_paid?: number
+          billing_date?: string
+          created_at?: string
+          customer_id: string
+          due_date: string
+          id?: string
+          notes?: string | null
+          package_name: string
+          paid_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          amount_paid?: number
+          billing_date?: string
+          created_at?: string
+          customer_id?: string
+          due_date?: string
+          id?: string
+          notes?: string | null
+          package_name?: string
+          paid_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_records_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_records_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_records: {
         Row: {
           call_date: string
@@ -115,6 +175,7 @@ export type Database = {
           auto_renew: boolean
           billing_start_date: string
           created_at: string
+          email: string | null
           expiry_date: string
           full_name: string
           id: string
@@ -134,6 +195,7 @@ export type Database = {
           auto_renew?: boolean
           billing_start_date?: string
           created_at?: string
+          email?: string | null
           expiry_date: string
           full_name: string
           id?: string
@@ -153,6 +215,7 @@ export type Database = {
           auto_renew?: boolean
           billing_start_date?: string
           created_at?: string
+          email?: string | null
           expiry_date?: string
           full_name?: string
           id?: string

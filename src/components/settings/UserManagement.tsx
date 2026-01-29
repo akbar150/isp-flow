@@ -28,7 +28,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { UserPlus, Trash2, Shield, User, Crown, Pencil, KeyRound } from "lucide-react";
+import { UserPlus, Trash2, Shield, User, Crown, Pencil, KeyRound, Loader2 } from "lucide-react";
 import { z } from "zod";
 
 type AppRole = "super_admin" | "admin" | "staff";
@@ -49,7 +49,7 @@ interface AdminUser {
 }
 
 export function UserManagement() {
-  const { role: currentUserRole } = useAuth();
+  const { role: currentUserRole, user: currentUser } = useAuth();
   const isSuperAdmin = currentUserRole === "super_admin";
 
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -84,6 +84,41 @@ export function UserManagement() {
 
   const fetchUsers = async () => {
     try {
+      setLoading(true);
+      
+      // Get current session for Authorization header
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("Not authenticated");
+      }
+
+      // Fetch users with their emails via edge function
+      const { data: usersData, error: usersError } = await supabase.functions.invoke("manage-user", {
+        body: { action: "list" },
+      });
+
+      if (usersError) {
+        console.error("Edge function error:", usersError);
+        // Fallback to local data
+        await fetchUsersLocally();
+        return;
+      }
+
+      if (usersData?.users) {
+        setUsers(usersData.users);
+      } else {
+        await fetchUsersLocally();
+      }
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      await fetchUsersLocally();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchUsersLocally = async () => {
+    try {
       const { data: rolesData, error: rolesError } = await supabase
         .from("user_roles")
         .select("user_id, role, created_at");
@@ -100,7 +135,7 @@ export function UserManagement() {
         const profile = profilesData.find((p) => p.user_id === role.user_id);
         return {
           id: role.user_id,
-          email: "",
+          email: role.user_id === currentUser?.id ? (currentUser.email || "") : "(email hidden)",
           full_name: profile?.full_name || null,
           role: role.role as AppRole,
           created_at: role.created_at,
@@ -109,14 +144,12 @@ export function UserManagement() {
 
       setUsers(usersWithProfiles);
     } catch (error) {
-      console.error("Error fetching users:", error);
+      console.error("Error fetching users locally:", error);
       toast({
         variant: "destructive",
         title: "Error",
         description: "Failed to fetch users",
       });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -160,12 +193,12 @@ export function UserManagement() {
       setDialogOpen(false);
       setFormData({ email: "", password: "", full_name: "", role: "staff" });
       fetchUsers();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error creating user:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to create user",
+        description: error instanceof Error ? error.message : "Failed to create user",
       });
     } finally {
       setCreating(false);
@@ -182,7 +215,8 @@ export function UserManagement() {
         user_id: selectedUser.id,
       };
 
-      if (editData.email && editData.email !== selectedUser.email) {
+      // Always include fields that can be updated
+      if (editData.email && editData.email !== selectedUser.email && editData.email !== "(email hidden)") {
         updateData.email = editData.email;
       }
       if (editData.full_name && editData.full_name !== selectedUser.full_name) {
@@ -210,12 +244,12 @@ export function UserManagement() {
       setEditDialogOpen(false);
       setSelectedUser(null);
       fetchUsers();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error updating user:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to update user",
+        description: error instanceof Error ? error.message : "Failed to update user",
       });
     } finally {
       setCreating(false);
@@ -240,12 +274,12 @@ export function UserManagement() {
 
       setResetDialogOpen(false);
       setResetEmail("");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error resetting password:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to send password reset",
+        description: error instanceof Error ? error.message : "Failed to send password reset",
       });
     } finally {
       setCreating(false);
@@ -281,12 +315,12 @@ export function UserManagement() {
       });
 
       fetchUsers();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error deleting user:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to delete user",
+        description: error instanceof Error ? error.message : "Failed to delete user",
       });
     }
   };
@@ -294,7 +328,7 @@ export function UserManagement() {
   const openEditDialog = (user: AdminUser) => {
     setSelectedUser(user);
     setEditData({
-      email: user.email,
+      email: user.email !== "(email hidden)" ? user.email : "",
       full_name: user.full_name || "",
       role: user.role,
       password: "",
@@ -324,9 +358,18 @@ export function UserManagement() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-6 w-6 animate-spin mr-2" />
+        <span>Loading users...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h3 className="text-lg font-medium">Admin & Staff Users</h3>
           <p className="text-sm text-muted-foreground">
@@ -334,10 +377,10 @@ export function UserManagement() {
             {isSuperAdmin ? " You have super admin access." : " Only super admins can create admin users."}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline">
+              <Button variant="outline" size="sm">
                 <KeyRound className="h-4 w-4 mr-2" />
                 Reset Password
               </Button>
@@ -358,7 +401,14 @@ export function UserManagement() {
                   />
                 </div>
                 <Button onClick={handleResetPassword} disabled={creating || !resetEmail} className="w-full">
-                  {creating ? "Sending..." : "Send Reset Email"}
+                  {creating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    "Send Reset Email"
+                  )}
                 </Button>
               </div>
             </DialogContent>
@@ -366,7 +416,7 @@ export function UserManagement() {
 
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button size="sm">
                 <UserPlus className="h-4 w-4 mr-2" />
                 Create User
               </Button>
@@ -444,7 +494,14 @@ export function UserManagement() {
                   </Select>
                 </div>
                 <Button onClick={handleCreateUser} disabled={creating} className="w-full">
-                  {creating ? "Creating..." : "Create User"}
+                  {creating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create User"
+                  )}
                 </Button>
               </div>
             </DialogContent>
@@ -459,6 +516,19 @@ export function UserManagement() {
             <DialogTitle>Edit User</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {isSuperAdmin && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-email">Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  placeholder="user@example.com"
+                  value={editData.email}
+                  onChange={(e) => setEditData({ ...editData, email: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">Leave unchanged to keep current email</p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="edit-full_name">Full Name</Label>
               <Input
@@ -512,73 +582,81 @@ export function UserManagement() {
               </div>
             )}
             <Button onClick={handleEditUser} disabled={creating} className="w-full">
-              {creating ? "Saving..." : "Save Changes"}
+              {creating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                "Update User"
+              )}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      <div className="border rounded-lg">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="w-[120px]">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
+      <div className="border rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-8">
-                  Loading users...
-                </TableCell>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ) : users.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} className="text-center py-8">
-                  No admin/staff users found
-                </TableCell>
-              </TableRow>
-            ) : (
-              users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">
-                    {user.full_name || "Unnamed User"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={getRoleBadgeVariant(user.role)}>
-                      {getRoleIcon(user.role)}
-                      {user.role.replace("_", " ")}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {new Date(user.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditDialog(user)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteUser(user.id, user.role)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
+            </TableHeader>
+            <TableBody>
+              {users.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    No users found
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.full_name || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{user.email || "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant={getRoleBadgeVariant(user.role)} className="flex items-center w-fit">
+                        {getRoleIcon(user.role)}
+                        {user.role.replace("_", " ")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {new Date(user.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditDialog(user)}
+                          title="Edit user"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        {(isSuperAdmin || user.role === "staff") && user.id !== currentUser?.id && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteUser(user.id, user.role)}
+                            className="text-destructive hover:text-destructive"
+                            title="Delete user"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );
