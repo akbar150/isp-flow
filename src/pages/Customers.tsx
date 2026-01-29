@@ -136,11 +136,9 @@ export default function Customers() {
   };
 
   const generatePassword = (forField: 'password' | 'pppoe_password' = 'password') => {
-    // Cryptographically secure password generation
-    const length = forField === 'pppoe_password' ? 12 : 16;
-    const charset = forField === 'pppoe_password' 
-      ? 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-      : 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    // Generate alphanumeric password based on field type
+    const length = forField === 'pppoe_password' ? 6 : 8;
+    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     const randomValues = new Uint8Array(length);
     crypto.getRandomValues(randomValues);
     
@@ -193,17 +191,24 @@ export default function Customers() {
         throw new Error('Address too long (max 500 characters)');
       }
 
-      // Validate password strength
-      if (formData.password.length < 12) {
-        throw new Error('Password must be at least 12 characters long');
+      // Validate portal password (min 6 chars, alphanumeric only)
+      if (formData.password.length < 6) {
+        throw new Error('Portal password must be at least 6 characters');
+      }
+      if (!/^[a-zA-Z0-9]+$/.test(formData.password)) {
+        throw new Error('Portal password can only contain letters and numbers');
       }
 
       // Validate PPPoE credentials
       if (!formData.pppoe_username || formData.pppoe_username.trim().length < 3) {
         throw new Error('PPPoE Username must be at least 3 characters');
       }
-      if (!formData.pppoe_password || formData.pppoe_password.length < 6) {
-        throw new Error('PPPoE Password must be at least 6 characters');
+      // PPPoE password: min 4 chars, alphanumeric only
+      if (!formData.pppoe_password || formData.pppoe_password.length < 4) {
+        throw new Error('PPPoE Password must be at least 4 characters');
+      }
+      if (!/^[a-zA-Z0-9]+$/.test(formData.pppoe_password)) {
+        throw new Error('PPPoE Password can only contain letters and numbers');
       }
       
       const selectedPackage = packages.find(p => p.id === formData.package_id);
@@ -446,7 +451,7 @@ export default function Customers() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Password for customer portal login
+                    Min 6 characters, letters and numbers only
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -483,6 +488,9 @@ export default function Customers() {
                       Generate
                     </Button>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Min 4 characters, letters and numbers only
+                  </p>
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-4">
