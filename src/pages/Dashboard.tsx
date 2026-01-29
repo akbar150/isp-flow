@@ -58,9 +58,9 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch customers
+      // Fetch customers using safe view (excludes password_hash)
       const { data: customers, error: customersError } = await supabase
-        .from('customers')
+        .from('customers_safe')
         .select('*, packages(name, monthly_price)');
 
       if (customersError) throw customersError;
