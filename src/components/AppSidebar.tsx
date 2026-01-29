@@ -21,28 +21,27 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useIspSettings } from "@/hooks/useIspSettings";
-
-type AppRole = "super_admin" | "admin" | "staff";
 
 interface NavItem {
   path: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  roles: AppRole[];
+  resource?: string; // Resource for permission check
 }
 
 const navItems: NavItem[] = [
-  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["super_admin", "admin", "staff"] },
-  { path: "/customers", label: "Customers", icon: Users, roles: ["super_admin", "admin", "staff"] },
-  { path: "/packages", label: "Packages", icon: Package, roles: ["super_admin", "admin"] },
-  { path: "/payments", label: "Payments", icon: CreditCard, roles: ["super_admin", "admin", "staff"] },
-  { path: "/reminders", label: "Reminders", icon: Bell, roles: ["super_admin", "admin", "staff"] },
-  { path: "/call-records", label: "Call Records", icon: Phone, roles: ["super_admin", "admin", "staff"] },
-  { path: "/accounting", label: "Accounting", icon: Calculator, roles: ["super_admin", "admin"] },
-  { path: "/reports", label: "Reports", icon: FileBarChart, roles: ["super_admin", "admin", "staff"] },
-  { path: "/routers", label: "Routers", icon: Router, roles: ["super_admin", "admin"] },
-  { path: "/settings", label: "Settings", icon: Settings, roles: ["super_admin", "admin"] },
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/customers", label: "Customers", icon: Users, resource: "customers" },
+  { path: "/packages", label: "Packages", icon: Package, resource: "packages" },
+  { path: "/payments", label: "Payments", icon: CreditCard, resource: "payments" },
+  { path: "/reminders", label: "Reminders", icon: Bell, resource: "reminders" },
+  { path: "/call-records", label: "Call Records", icon: Phone, resource: "call_records" },
+  { path: "/accounting", label: "Accounting", icon: Calculator, resource: "transactions" },
+  { path: "/reports", label: "Reports", icon: FileBarChart, resource: "reports" },
+  { path: "/routers", label: "Routers", icon: Router, resource: "routers" },
+  { path: "/settings", label: "Settings", icon: Settings, resource: "settings" },
 ];
 
 interface AppSidebarProps {
@@ -53,13 +52,21 @@ export function AppSidebar({ className }: AppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { role } = useAuth();
+  const { canRead } = usePermissions();
   const { ispName } = useIspSettings();
   const [collapsed, setCollapsed] = useState(false);
 
-  // Filter navigation items based on user role
-  const visibleNavItems = navItems.filter((item) => 
-    role ? item.roles.includes(role) : false
-  );
+  // Filter navigation items based on user permissions
+  const visibleNavItems = navItems.filter((item) => {
+    // Dashboard is always visible for authenticated users
+    if (!item.resource) return true;
+    
+    // super_admin always sees all items
+    if (role === "super_admin") return true;
+    
+    // Check database permission for read access
+    return canRead(item.resource);
+  });
 
   const handleLogout = async () => {
     await supabase.auth.signOut();

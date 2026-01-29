@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { IspSettingsProvider } from "@/hooks/useIspSettings";
+import { usePermissions } from "@/hooks/usePermissions";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -23,17 +24,17 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-type AppRole = "super_admin" | "admin" | "staff";
-
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRoles?: AppRole[];
+  resource?: string;
+  action?: string;
 }
 
-function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, role, loading } = useAuth();
+function ProtectedRoute({ children, resource, action = "read" }: ProtectedRouteProps) {
+  const { user, role, loading: authLoading } = useAuth();
+  const { hasPermission, loading: permLoading } = usePermissions();
 
-  if (loading) {
+  if (authLoading || permLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
@@ -45,9 +46,15 @@ function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
     return <Navigate to="/auth" replace />;
   }
 
-  // If roles are specified, check if user has permission
-  if (allowedRoles && allowedRoles.length > 0) {
-    if (!role || !allowedRoles.includes(role)) {
+  // If a resource is specified, check permission
+  if (resource) {
+    // super_admin always has access
+    if (role === "super_admin") {
+      return <>{children}</>;
+    }
+    
+    // Check database permission
+    if (!hasPermission(resource, action)) {
       // Redirect to dashboard if user doesn't have permission
       return <Navigate to="/dashboard" replace />;
     }
@@ -72,7 +79,7 @@ function AppRoutes() {
       <Route
         path="/customers"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute resource="customers">
             <Customers />
           </ProtectedRoute>
         }
@@ -80,7 +87,7 @@ function AppRoutes() {
       <Route
         path="/packages"
         element={
-          <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+          <ProtectedRoute resource="packages">
             <Packages />
           </ProtectedRoute>
         }
@@ -88,7 +95,7 @@ function AppRoutes() {
       <Route
         path="/payments"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute resource="payments">
             <Payments />
           </ProtectedRoute>
         }
@@ -96,7 +103,7 @@ function AppRoutes() {
       <Route
         path="/reminders"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute resource="reminders">
             <Reminders />
           </ProtectedRoute>
         }
@@ -104,7 +111,7 @@ function AppRoutes() {
       <Route
         path="/call-records"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute resource="call_records">
             <CallRecords />
           </ProtectedRoute>
         }
@@ -112,7 +119,7 @@ function AppRoutes() {
       <Route
         path="/routers"
         element={
-          <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+          <ProtectedRoute resource="routers">
             <Routers />
           </ProtectedRoute>
         }
@@ -120,7 +127,7 @@ function AppRoutes() {
       <Route
         path="/settings"
         element={
-          <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+          <ProtectedRoute resource="settings">
             <Settings />
           </ProtectedRoute>
         }
@@ -128,7 +135,7 @@ function AppRoutes() {
       <Route
         path="/reports"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute resource="reports">
             <Reports />
           </ProtectedRoute>
         }
@@ -136,7 +143,7 @@ function AppRoutes() {
       <Route
         path="/accounting"
         element={
-          <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+          <ProtectedRoute resource="transactions">
             <Accounting />
           </ProtectedRoute>
         }
