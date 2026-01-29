@@ -651,6 +651,21 @@ export type Database = {
         }
         Relationships: []
       }
+      system_settings_public: {
+        Row: {
+          key: string | null
+          value: Json | null
+        }
+        Insert: {
+          key?: string | null
+          value?: Json | null
+        }
+        Update: {
+          key?: string | null
+          value?: Json | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       generate_customer_user_id: { Args: never; Returns: string }
