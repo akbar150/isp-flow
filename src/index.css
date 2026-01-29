@@ -192,17 +192,17 @@
     @apply bg-[hsl(var(--status-suspended)/0.15)] text-[hsl(var(--status-suspended))];
   }
 
-  /* Data table styles */
+  /* Data table styles - Mobile responsive */
   .data-table {
     @apply w-full text-sm;
   }
 
   .data-table th {
-    @apply text-left font-semibold text-muted-foreground uppercase text-xs tracking-wider py-3 px-4 border-b;
+    @apply text-left font-semibold text-muted-foreground uppercase text-xs tracking-wider py-3 px-2 md:px-4 border-b whitespace-nowrap;
   }
 
   .data-table td {
-    @apply py-3 px-4 border-b border-border/50;
+    @apply py-3 px-2 md:px-4 border-b border-border/50;
   }
 
   .data-table tr:hover td {
@@ -234,27 +234,27 @@
     transform: translateY(-1px);
   }
 
-  /* Page header */
+  /* Page header - Mobile responsive */
   .page-header {
-    @apply mb-6;
+    @apply mb-4 md:mb-6;
   }
 
   .page-title {
-    @apply text-2xl font-bold text-foreground;
+    @apply text-xl md:text-2xl font-bold text-foreground;
   }
 
   .page-description {
-    @apply text-muted-foreground mt-1;
+    @apply text-sm md:text-base text-muted-foreground mt-1;
   }
 
-  /* Form sections */
+  /* Form sections - Mobile responsive */
   .form-section {
-    @apply bg-card rounded-xl p-6;
+    @apply bg-card rounded-xl p-4 md:p-6;
     box-shadow: var(--shadow-card);
   }
 
   .form-section-title {
-    @apply text-lg font-semibold mb-4 pb-3 border-b;
+    @apply text-base md:text-lg font-semibold mb-4 pb-3 border-b;
   }
 
   /* Metric cards with icons */
@@ -313,5 +313,12 @@
 @layer utilities {
   .font-mono {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  
+  /* Mobile responsive utilities */
+  @media (max-width: 640px) {
+    .hide-mobile {
+      display: none !important;
+    }
   }
 }

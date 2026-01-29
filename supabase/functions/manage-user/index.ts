@@ -22,7 +22,7 @@ function getCorsHeaders(req: Request) {
 type AppRole = "super_admin" | "admin" | "staff";
 
 interface ManageUserRequest {
-  action: "create" | "update" | "delete" | "reset_password";
+  action: "create" | "update" | "delete" | "reset_password" | "list";
   user_id?: string;
   email?: string;
   password?: string;
@@ -78,6 +78,56 @@ serve(async (req) => {
     console.log(`Action: ${action}, By: ${requestingRole}, Target: ${user_id || email}`);
 
     switch (action) {
+      case "list": {
+        // List all users with their emails (only for admins)
+        if (!isAdmin) {
+          throw new Error("Unauthorized: Only admins can list users");
+        }
+
+        // Get all auth users
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+        if (authError) {
+          throw new Error(`Failed to list users: ${authError.message}`);
+        }
+
+        // Get all roles
+        const { data: rolesData, error: rolesError } = await supabaseAdmin
+          .from("user_roles")
+          .select("user_id, role, created_at");
+
+        if (rolesError) {
+          throw new Error(`Failed to fetch roles: ${rolesError.message}`);
+        }
+
+        // Get all profiles
+        const { data: profilesData, error: profilesError } = await supabaseAdmin
+          .from("profiles")
+          .select("user_id, full_name");
+
+        if (profilesError) {
+          throw new Error(`Failed to fetch profiles: ${profilesError.message}`);
+        }
+
+        // Combine data - only include users with roles
+        const users = rolesData.map((roleRecord) => {
+          const authUser = authData.users.find(u => u.id === roleRecord.user_id);
+          const profile = profilesData.find(p => p.user_id === roleRecord.user_id);
+          
+          return {
+            id: roleRecord.user_id,
+            email: authUser?.email || "(unknown)",
+            full_name: profile?.full_name || null,
+            role: roleRecord.role as AppRole,
+            created_at: roleRecord.created_at,
+          };
+        });
+
+        return new Response(
+          JSON.stringify({ success: true, users }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+        );
+      }
+
       case "create": {
         if (!isAdmin) {
           throw new Error("Unauthorized: Only admins can create users");
@@ -189,10 +239,23 @@ serve(async (req) => {
 
         // Update profile
         if (full_name) {
-          await supabaseAdmin
+          // Check if profile exists
+          const { data: existingProfile } = await supabaseAdmin
             .from("profiles")
-            .update({ full_name, updated_at: new Date().toISOString() })
-            .eq("user_id", user_id);
+            .select("id")
+            .eq("user_id", user_id)
+            .single();
+
+          if (existingProfile) {
+            await supabaseAdmin
+              .from("profiles")
+              .update({ full_name, updated_at: new Date().toISOString() })
+              .eq("user_id", user_id);
+          } else {
+            await supabaseAdmin
+              .from("profiles")
+              .insert({ user_id, full_name });
+          }
         }
 
         // Update role (only super_admin can change roles)
@@ -317,15 +380,21 @@ serve(async (req) => {
               "Authorization": `Bearer ${resendApiKey}`,
             },
             body: JSON.stringify({
-              from: "Smart ISP <noreply@resend.dev>",
+              from: "Smart ISP <onboarding@resend.dev>",
               to: [email],
               subject: "Reset your password - Smart ISP",
               html: `
-                <h2>Password Reset Request</h2>
-                <p>You requested to reset your password for Smart ISP Billing.</p>
-                <p><a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#3b82f6;color:white;text-decoration:none;border-radius:6px;">Reset Password</a></p>
-                <p>If you didn't request this, you can safely ignore this email.</p>
-                <p>This link will expire in 1 hour.</p>
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #1f2937;">Password Reset Request</h2>
+                  <p style="color: #4b5563;">You requested to reset your password for Smart ISP Billing.</p>
+                  <p style="margin: 24px 0;">
+                    <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#0891b2;color:white;text-decoration:none;border-radius:6px;font-weight:500;">
+                      Reset Password
+                    </a>
+                  </p>
+                  <p style="color: #6b7280;">If you didn't request this, you can safely ignore this email.</p>
+                  <p style="color: #9ca3af; font-size: 12px;">This link will expire in 1 hour.</p>
+                </div>
               `,
             }),
           });
