@@ -30,6 +30,9 @@ const RESOURCES = [
   { key: "areas", label: "Areas/Zones", description: "Area management" },
   { key: "call_records", label: "Call Records", description: "Customer call logs" },
   { key: "reminders", label: "Reminders", description: "Payment reminders" },
+  { key: "reports", label: "Reports", description: "Financial reports" },
+  { key: "transactions", label: "Transactions", description: "Income and expense tracking" },
+  { key: "expense_categories", label: "Expense Categories", description: "Expense category management" },
   { key: "settings", label: "Settings", description: "System settings" },
   { key: "users", label: "User Management", description: "Admin/staff accounts" },
 ];
@@ -81,8 +84,8 @@ export function RolePermissions() {
   };
 
   const togglePermission = (resource: string, action: string) => {
-    // Don't allow modifying admin or super_admin permissions
-    if (activeRole === "admin" || activeRole === "super_admin") return;
+    // Don't allow modifying super_admin permissions
+    if (activeRole === "super_admin") return;
 
     setPermissions((prev) =>
       prev.map((p) => {
@@ -97,10 +100,10 @@ export function RolePermissions() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Get all staff permissions that may have changed
-      const staffPermissions = permissions.filter((p) => p.role === "staff");
+      // Get all admin and staff permissions that may have changed
+      const editablePermissions = permissions.filter((p) => p.role === "staff" || p.role === "admin");
 
-      for (const perm of staffPermissions) {
+      for (const perm of editablePermissions) {
         const { error } = await supabase
           .from("permissions")
           .update({ allowed: perm.allowed })
@@ -165,10 +168,10 @@ export function RolePermissions() {
         </TabsList>
 
         <TabsContent value={activeRole} className="mt-4">
-          {(activeRole === "admin" || activeRole === "super_admin") && (
+          {activeRole === "super_admin" && (
             <div className="mb-4 p-4 bg-muted rounded-lg">
               <p className="text-sm text-muted-foreground">
-                {activeRole === "super_admin" ? "Super Admin" : "Admin"} role has full access to all resources and cannot be modified.
+                Super Admin role has full access to all resources and cannot be modified.
               </p>
             </div>
           )}
@@ -199,7 +202,7 @@ export function RolePermissions() {
                           onCheckedChange={() =>
                             togglePermission(resource.key, action)
                           }
-                          disabled={activeRole === "admin" || activeRole === "super_admin"}
+                          disabled={activeRole === "super_admin"}
                         />
                       </div>
                     ))}

@@ -15,6 +15,7 @@ import Reminders from "./pages/Reminders";
 import CallRecords from "./pages/CallRecords";
 import Routers from "./pages/Routers";
 import Settings from "./pages/Settings";
+import Reports from "./pages/Reports";
 import CustomerLogin from "./pages/CustomerLogin";
 import CustomerPortal from "./pages/CustomerPortal";
 import NotFound from "./pages/NotFound";
@@ -120,6 +121,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
             <Settings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reports"
+        element={
+          <ProtectedRoute>
+            <Reports />
           </ProtectedRoute>
         }
       />
