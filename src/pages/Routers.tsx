@@ -74,6 +74,39 @@ export default function Routers() {
     e.preventDefault();
 
     try {
+      // Input validation
+      if (!formData.name || formData.name.trim().length < 3) {
+        throw new Error('Router name must be at least 3 characters');
+      }
+      if (formData.name.length > 100) {
+        throw new Error('Router name too long (max 100 characters)');
+      }
+
+      const port = parseInt(formData.port);
+      if (isNaN(port) || port < 1 || port > 65535) {
+        throw new Error('Port must be between 1 and 65535');
+      }
+
+      // IP validation for real mode
+      if (formData.mode === 'real' && formData.ip_address) {
+        const ipRegex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
+        if (!ipRegex.test(formData.ip_address)) {
+          throw new Error('Invalid IP address format');
+        }
+        const octets = formData.ip_address.split('.');
+        const validOctets = octets.every(octet => {
+          const num = parseInt(octet);
+          return num >= 0 && num <= 255;
+        });
+        if (!validOctets) {
+          throw new Error('Invalid IP address - each octet must be 0-255');
+        }
+      }
+
+      if (formData.username && formData.username.length > 50) {
+        throw new Error('Username too long (max 50 characters)');
+      }
+
       // Hash password if provided using database function
       let hashedPassword = null;
       if (formData.password) {
@@ -84,9 +117,9 @@ export default function Routers() {
       }
 
       const routerData = {
-        name: formData.name,
+        name: formData.name.trim(),
         ip_address: formData.ip_address || null,
-        port: parseInt(formData.port) || 8728,
+        port: port,
         username: formData.username || null,
         password_encrypted: hashedPassword,
         mode: formData.mode,

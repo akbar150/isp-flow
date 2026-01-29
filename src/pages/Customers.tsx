@@ -99,7 +99,8 @@ export default function Customers() {
   const fetchData = async () => {
     try {
       const [customersRes, packagesRes, areasRes, routersRes] = await Promise.all([
-        supabase.from('customers').select('*, packages(*), areas(*), routers(*)').order('created_at', { ascending: false }),
+        // Use customers_safe view to prevent password_hash exposure
+        supabase.from('customers_safe').select('*, packages(*), areas(*), routers(*)').order('created_at', { ascending: false }),
         supabase.from('packages').select('*').eq('is_active', true),
         supabase.from('areas').select('*'),
         supabase.from('routers').select('*').eq('is_active', true),
@@ -137,18 +138,47 @@ export default function Customers() {
   };
 
   const generateUserId = async (): Promise<string> => {
-    const { count } = await supabase
-      .from('customers')
-      .select('*', { count: 'exact', head: true });
-    
-    const nextNum = (count || 0) + 1;
-    return `ISP${String(nextNum).padStart(5, '0')}`;
+    // Use database function with sequence to prevent race conditions
+    const { data, error } = await supabase.rpc('generate_customer_user_id');
+    if (error) throw new Error('Failed to generate user ID');
+    return data;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
+      // Comprehensive input validation
+      if (!formData.full_name || formData.full_name.trim().length < 3) {
+        throw new Error('Full name must be at least 3 characters');
+      }
+      if (formData.full_name.length > 100) {
+        throw new Error('Full name too long (max 100 characters)');
+      }
+
+      // Phone validation (Bangladesh format or international)
+      const phoneRegex = /^(\+?880)?[0-9]{10,11}$/;
+      const cleanPhone = formData.phone.replace(/[\s-]/g, '');
+      if (!phoneRegex.test(cleanPhone)) {
+        throw new Error('Invalid phone number format');
+      }
+
+      // Alt phone validation if provided
+      if (formData.alt_phone && formData.alt_phone.trim()) {
+        const cleanAltPhone = formData.alt_phone.replace(/[\s-]/g, '');
+        if (!phoneRegex.test(cleanAltPhone)) {
+          throw new Error('Invalid alternative phone number format');
+        }
+      }
+
+      // Address validation
+      if (!formData.address || formData.address.trim().length < 10) {
+        throw new Error('Address must be at least 10 characters');
+      }
+      if (formData.address.length > 500) {
+        throw new Error('Address too long (max 500 characters)');
+      }
+
       // Validate password strength
       if (formData.password.length < 12) {
         throw new Error('Password must be at least 12 characters long');

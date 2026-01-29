@@ -65,11 +65,35 @@ export default function Packages() {
     e.preventDefault();
 
     try {
+      // Input validation
+      const speedMbps = parseInt(formData.speed_mbps);
+      const monthlyPrice = parseFloat(formData.monthly_price);
+      const validityDays = parseInt(formData.validity_days);
+
+      if (!formData.name || formData.name.trim().length < 3) {
+        throw new Error('Package name must be at least 3 characters');
+      }
+      if (formData.name.length > 50) {
+        throw new Error('Package name too long (max 50 characters)');
+      }
+
+      if (isNaN(speedMbps) || speedMbps <= 0 || speedMbps > 10000) {
+        throw new Error('Speed must be between 1 and 10,000 Mbps');
+      }
+
+      if (isNaN(monthlyPrice) || monthlyPrice <= 0 || monthlyPrice > 999999) {
+        throw new Error('Price must be between ৳1 and ৳999,999');
+      }
+
+      if (isNaN(validityDays) || validityDays <= 0 || validityDays > 365) {
+        throw new Error('Validity must be between 1 and 365 days');
+      }
+
       const packageData = {
-        name: formData.name,
-        speed_mbps: parseInt(formData.speed_mbps),
-        monthly_price: parseFloat(formData.monthly_price),
-        validity_days: parseInt(formData.validity_days),
+        name: formData.name.trim(),
+        speed_mbps: speedMbps,
+        monthly_price: monthlyPrice,
+        validity_days: validityDays,
         description: formData.description || null,
         is_active: formData.is_active,
       };
