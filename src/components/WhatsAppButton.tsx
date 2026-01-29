@@ -9,8 +9,8 @@ import {
   DialogDescription, 
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { useState } from "react";
-import { getWhatsAppUrl, generateWhatsAppMessage } from "@/services/billing/billingService";
+import { useState, useEffect, useMemo } from "react";
+import { getWhatsAppUrl } from "@/services/billing/billingService";
 import { useIspSettings } from "@/hooks/useIspSettings";
 
 interface WhatsAppButtonProps {
@@ -26,13 +26,23 @@ interface WhatsAppButtonProps {
 }
 
 // Apply template variables to a message template
+// Supports both {ISPName} and {ISP Name} formats for backwards compatibility
 function applyTemplateVars(
   template: string,
   vars: Record<string, string>
 ): string {
   let result = template;
   for (const [key, value] of Object.entries(vars)) {
+    // Replace both formats: {ISPName} and {ISP Name}
     result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+  }
+  // Also handle legacy {ISP Name} format
+  if (vars.ISPName) {
+    result = result.replace(/\{ISP Name\}/g, vars.ISPName);
+  }
+  // Handle {user_id} as alias for {CustomerID}
+  if (vars.CustomerID) {
+    result = result.replace(/\{user_id\}/g, vars.CustomerID);
   }
   return result;
 }
@@ -48,7 +58,8 @@ export function WhatsAppButton({
   pppoeUsername,
   pppoePassword
 }: WhatsAppButtonProps) {
-  const { ispName, whatsappTemplate } = useIspSettings();
+  const { ispName, whatsappTemplate, loading } = useIspSettings();
+  const [open, setOpen] = useState(false);
   
   const formattedDate = expiryDate.toLocaleDateString('en-GB', {
     day: '2-digit',
@@ -56,8 +67,8 @@ export function WhatsAppButton({
     year: 'numeric'
   });
   
-  // Build template variables
-  const templateVars: Record<string, string> = {
+  // Build template variables - memoized for performance
+  const templateVars = useMemo(() => ({
     CustomerName: customerName,
     CustomerID: userId,
     PPPoEUsername: pppoeUsername || userId,
@@ -66,13 +77,22 @@ export function WhatsAppButton({
     ExpiryDate: formattedDate,
     Amount: String(amount),
     ISPName: ispName,
-  };
+  }), [customerName, userId, pppoeUsername, pppoePassword, packageName, formattedDate, amount, ispName]);
   
-  // Use saved template if available, otherwise use default
-  const defaultMessage = applyTemplateVars(whatsappTemplate, templateVars);
+  // Calculate message from template - reactively updates when template or vars change
+  const computedMessage = useMemo(() => {
+    return applyTemplateVars(whatsappTemplate, templateVars);
+  }, [whatsappTemplate, templateVars]);
 
-  const [message, setMessage] = useState(defaultMessage);
-  const [open, setOpen] = useState(false);
+  // State for editable message - initialize with computed message
+  const [message, setMessage] = useState(computedMessage);
+
+  // Update message when computed message changes (template or settings update)
+  useEffect(() => {
+    if (!loading) {
+      setMessage(computedMessage);
+    }
+  }, [computedMessage, loading]);
 
   const handleSend = () => {
     const url = getWhatsAppUrl(phone, message);

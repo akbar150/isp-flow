@@ -12,6 +12,7 @@ import {
   Wifi, LogOut, User, CreditCard, Calendar, Package, Phone, MapPin,
   Clock, AlertTriangle, CheckCircle, Loader2, Lock, History
 } from "lucide-react";
+import { useIspSettings } from "@/hooks/useIspSettings";
 
 interface CustomerData {
   id: string;
@@ -39,6 +40,7 @@ interface Payment {
 
 export default function CustomerPortal() {
   const navigate = useNavigate();
+  const { ispName } = useIspSettings();
   const [customer, setCustomer] = useState<CustomerData | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -198,7 +200,7 @@ export default function CustomerPortal() {
               <Wifi className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-semibold">Smart ISP</h1>
+              <h1 className="font-semibold">{ispName}</h1>
               <p className="text-xs text-muted-foreground">Customer Portal</p>
             </div>
           </div>
