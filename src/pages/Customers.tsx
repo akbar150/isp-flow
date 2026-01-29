@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
+import { CredentialsModal } from "@/components/CredentialsModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,6 +72,13 @@ export default function Customers() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  
+  // Credentials modal state (secure password display)
+  const [credentialsModal, setCredentialsModal] = useState({
+    open: false,
+    userId: "",
+    password: "",
+  });
 
   // Form state
   const [formData, setFormData] = useState({
@@ -177,9 +185,11 @@ export default function Customers() {
 
       if (error) throw error;
 
-      toast({
-        title: "Customer created",
-        description: `User ID: ${userId} | Password: ${formData.password}`,
+      // Show secure credentials modal instead of toast
+      setCredentialsModal({
+        open: true,
+        userId: userId,
+        password: formData.password,
       });
 
       setDialogOpen(false);
@@ -449,6 +459,20 @@ export default function Customers() {
           </tbody>
         </table>
       </div>
+
+      {/* Secure Credentials Modal */}
+      <CredentialsModal
+        open={credentialsModal.open}
+        onOpenChange={(open) => setCredentialsModal({ ...credentialsModal, open })}
+        userId={credentialsModal.userId}
+        password={credentialsModal.password}
+        onConfirm={() => {
+          toast({
+            title: "Customer created successfully",
+            description: `User ID: ${credentialsModal.userId}`,
+          });
+        }}
+      />
     </DashboardLayout>
   );
 }

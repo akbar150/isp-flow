@@ -17,15 +17,25 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 
-const navItems = [
-  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/customers", label: "Customers", icon: Users },
-  { path: "/packages", label: "Packages", icon: Package },
-  { path: "/payments", label: "Payments", icon: CreditCard },
-  { path: "/reminders", label: "Reminders", icon: Bell },
-  { path: "/routers", label: "Routers", icon: Router },
-  { path: "/settings", label: "Settings", icon: Settings },
+type AppRole = "admin" | "staff";
+
+interface NavItem {
+  path: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles: AppRole[];
+}
+
+const navItems: NavItem[] = [
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "staff"] },
+  { path: "/customers", label: "Customers", icon: Users, roles: ["admin", "staff"] },
+  { path: "/packages", label: "Packages", icon: Package, roles: ["admin"] },
+  { path: "/payments", label: "Payments", icon: CreditCard, roles: ["admin", "staff"] },
+  { path: "/reminders", label: "Reminders", icon: Bell, roles: ["admin", "staff"] },
+  { path: "/routers", label: "Routers", icon: Router, roles: ["admin"] },
+  { path: "/settings", label: "Settings", icon: Settings, roles: ["admin"] },
 ];
 
 interface AppSidebarProps {
@@ -35,7 +45,13 @@ interface AppSidebarProps {
 export function AppSidebar({ className }: AppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { role } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+
+  // Filter navigation items based on user role
+  const visibleNavItems = navItems.filter((item) => 
+    role ? item.roles.includes(role) : false
+  );
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -65,7 +81,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto custom-scrollbar">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
             <Link
