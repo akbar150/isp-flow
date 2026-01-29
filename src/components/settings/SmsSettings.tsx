@@ -20,7 +20,8 @@ export function SmsSettings() {
     routemobile_password: "",
     routemobile_sender_id: "",
     routemobile_route: "1",
-    sms_template: `Dear {CustomerName}, your internet package {PackageName} expires on {ExpiryDate}. Due: ৳{Amount}. Pay now to avoid disconnection. - {ISPName}`,
+    sms_template: `প্রিয় {CustomerName}, আপনার ইন্টারনেট প্যাকেজ {PackageName} এর মেয়াদ {ExpiryDate} তারিখে শেষ হবে। বকেয়া: ৳{Amount}। সংযোগ বিচ্ছিন্ন এড়াতে পেমেন্ট করুন। - {ISPName}`,
+    sms_template_en: `Dear {CustomerName}, your internet package {PackageName} expires on {ExpiryDate}. Due: ৳{Amount}. Pay now to avoid disconnection. - {ISPName}`,
   });
 
   useEffect(() => {
@@ -44,6 +45,7 @@ export function SmsSettings() {
           routemobile_sender_id: settingsMap.routemobile_sender_id || "",
           routemobile_route: settingsMap.routemobile_route || "1",
           sms_template: settingsMap.sms_template || settings.sms_template,
+          sms_template_en: settingsMap.sms_template_en || settings.sms_template_en,
         });
       }
     } catch (error) {
@@ -63,6 +65,7 @@ export function SmsSettings() {
         { key: "routemobile_sender_id", value: JSON.stringify(settings.routemobile_sender_id) },
         { key: "routemobile_route", value: JSON.stringify(settings.routemobile_route) },
         { key: "sms_template", value: JSON.stringify(settings.sms_template) },
+        { key: "sms_template_en", value: JSON.stringify(settings.sms_template_en) },
       ];
 
       for (const update of updates) {
@@ -191,11 +194,26 @@ export function SmsSettings() {
           </div>
 
           <div className="space-y-2">
-            <Label>SMS Template</Label>
+            <Label>SMS Template (বাংলা / Bangla)</Label>
             <Textarea
               value={settings.sms_template}
               onChange={(e) =>
                 setSettings({ ...settings, sms_template: e.target.value })
+              }
+              className="min-h-[100px] font-mono text-sm"
+              dir="auto"
+            />
+            <p className="text-xs text-muted-foreground">
+              বাংলা ইউনিকোড সমর্থিত। Unicode characters supported.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>SMS Template (English)</Label>
+            <Textarea
+              value={settings.sms_template_en}
+              onChange={(e) =>
+                setSettings({ ...settings, sms_template_en: e.target.value })
               }
               className="min-h-[100px] font-mono text-sm"
             />

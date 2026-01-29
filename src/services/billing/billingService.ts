@@ -153,7 +153,7 @@ export async function processPayment(
 }
 
 /**
- * Generate WhatsApp message for reminder
+ * Generate WhatsApp message for reminder with Unicode/Bangla support
  */
 export function generateWhatsAppMessage(
   customerName: string,
@@ -167,20 +167,31 @@ export function generateWhatsAppMessage(
 ): string {
   const formattedDate = format(expiryDate, 'dd MMM yyyy');
   
-  let message = `Dear ${customerName},
-PPPoE Username: ${pppoeUsername || userId}`;
+  // WhatsApp supports Unicode natively - using bold (*text*) and monospace (```text```)
+  let message = `🔔 *পেমেন্ট রিমাইন্ডার / Payment Reminder*
+
+প্রিয় *${customerName}*,
+
+📋 *অ্যাকাউন্ট তথ্য / Account Details:*
+━━━━━━━━━━━━━━━━
+👤 PPPoE Username: \`${pppoeUsername || userId}\``;
 
   if (pppoePassword) {
-    message += `\nPPPoE Password: ${pppoePassword}`;
+    message += `\n🔑 PPPoE Password: \`${pppoePassword}\``;
   }
   
-  message += `\nCustomer ID: ${userId}
+  message += `
+🆔 Customer ID: \`${userId}\`
+📦 Package: *${packageName}*
+📅 মেয়াদ উত্তীর্ণ / Expires: *${formattedDate}*
+💰 বকেয়া / Due Amount: *৳${amount}*
+━━━━━━━━━━━━━━━━
 
-Your internet package ${packageName}, will expire on ${formattedDate}.
+⚠️ সংযোগ বিচ্ছিন্ন এড়াতে অনুগ্রহ করে পেমেন্ট করুন।
+Please pay to avoid disconnection.
 
-Please pay ৳${amount} to avoid disconnection.
-
-– ${ispName}`;
+ধন্যবাদ / Thank you
+*${ispName}* 🌐`;
 
   return message;
 }

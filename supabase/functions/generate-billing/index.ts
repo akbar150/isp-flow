@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 interface Customer {
@@ -15,12 +15,12 @@ interface Customer {
   status: string;
   total_due: number;
   package_id: string | null;
-}
-
-interface Package {
-  id: string;
-  monthly_price: number;
-  validity_days: number;
+  packages: {
+    id: string;
+    name: string;
+    monthly_price: number;
+    validity_days: number;
+  } | null;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -57,10 +57,11 @@ const handler = async (req: Request): Promise<Response> => {
     const results = {
       processed: 0,
       billsGenerated: 0,
+      billingRecordsCreated: 0,
       errors: [] as string[],
     };
 
-    for (const customer of customers || []) {
+    for (const customer of (customers || []) as Customer[]) {
       try {
         const expiryDate = new Date(customer.expiry_date);
         expiryDate.setHours(0, 0, 0, 0);
@@ -70,7 +71,7 @@ const handler = async (req: Request): Promise<Response> => {
           continue;
         }
 
-        const pkg = customer.packages as Package | null;
+        const pkg = customer.packages;
         if (!pkg) {
           console.log(`Customer ${customer.user_id} has no package assigned`);
           continue;
@@ -79,39 +80,62 @@ const handler = async (req: Request): Promise<Response> => {
         // Calculate how many days overdue
         const daysOverdue = Math.floor((today.getTime() - expiryDate.getTime()) / (1000 * 60 * 60 * 24));
         
-        // Only add to due if it's the exact expiry day (billing cycle completion)
-        // This prevents adding dues multiple times for the same period
-        if (daysOverdue === 0) {
-          // Update status based on payment history
-          let newStatus = 'expired';
-          
-          // Add monthly price to total due
-          const newTotalDue = customer.total_due + pkg.monthly_price;
-          
-          const { error: updateError } = await supabase
-            .from('customers')
-            .update({
-              total_due: newTotalDue,
-              status: newStatus,
-            })
-            .eq('id', customer.id);
+        // Check if a billing record already exists for this period
+        const { data: existingBill } = await supabase
+          .from('billing_records')
+          .select('id')
+          .eq('customer_id', customer.id)
+          .eq('billing_date', customer.expiry_date)
+          .single();
 
-          if (updateError) {
-            throw new Error(`Failed to update customer ${customer.user_id}: ${updateError.message}`);
+        // Only generate bill if it doesn't exist yet
+        if (!existingBill && daysOverdue >= 0) {
+          // Create billing record
+          const { error: billingError } = await supabase
+            .from('billing_records')
+            .insert({
+              customer_id: customer.id,
+              billing_date: customer.expiry_date,
+              amount: pkg.monthly_price,
+              package_name: pkg.name,
+              status: 'unpaid',
+              amount_paid: 0,
+              due_date: customer.expiry_date,
+            });
+
+          if (billingError) {
+            console.error(`Failed to create billing record for ${customer.user_id}:`, billingError.message);
+          } else {
+            results.billingRecordsCreated++;
           }
 
-          console.log(`Generated bill for ${customer.user_id}: ৳${pkg.monthly_price} added, total due: ৳${newTotalDue}`);
-          results.billsGenerated++;
-        } else if (daysOverdue > 0) {
-          // Just update status for overdue customers
-          const { error: statusError } = await supabase
+          // Add monthly price to total due (only if it's within reasonable overdue period)
+          if (daysOverdue === 0) {
+            const newTotalDue = customer.total_due + pkg.monthly_price;
+            
+            const { error: updateError } = await supabase
+              .from('customers')
+              .update({
+                total_due: newTotalDue,
+                status: 'expired',
+              })
+              .eq('id', customer.id);
+
+            if (updateError) {
+              throw new Error(`Failed to update customer ${customer.user_id}: ${updateError.message}`);
+            }
+
+            console.log(`Generated bill for ${customer.user_id}: ৳${pkg.monthly_price} added, total due: ৳${newTotalDue}`);
+            results.billsGenerated++;
+          }
+        }
+        
+        // Update status for overdue customers
+        if (daysOverdue > 0 && customer.status !== 'expired') {
+          await supabase
             .from('customers')
             .update({ status: 'expired' })
             .eq('id', customer.id);
-
-          if (statusError) {
-            console.error(`Failed to update status for ${customer.user_id}: ${statusError.message}`);
-          }
         }
 
         results.processed++;
@@ -127,7 +151,7 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Processed ${results.processed} customers, generated ${results.billsGenerated} bills`,
+        message: `Processed ${results.processed} customers, generated ${results.billsGenerated} bills, created ${results.billingRecordsCreated} billing records`,
         details: results,
       }),
       {

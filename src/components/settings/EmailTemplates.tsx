@@ -14,9 +14,24 @@ export function EmailTemplates() {
   const [settings, setSettings] = useState({
     email_from_name: "Smart ISP",
     email_from_address: "",
-    email_subject_reminder: "Payment Reminder - {ISPName}",
-    email_subject_welcome: "Welcome to {ISPName}",
-    email_template_reminder: `Dear {CustomerName},
+    email_subject_reminder: "পেমেন্ট রিমাইন্ডার / Payment Reminder - {ISPName}",
+    email_subject_welcome: "স্বাগতম / Welcome to {ISPName}",
+    email_template_reminder: `প্রিয় {CustomerName},
+
+আপনার ইন্টারনেট প্যাকেজ "{PackageName}" এর মেয়াদ {ExpiryDate} তারিখে শেষ হবে।
+
+অ্যাকাউন্ট তথ্য:
+• PPPoE Username: {PPPoEUsername}
+• Customer ID: {CustomerID}
+• বকেয়া পরিমাণ: ৳{Amount}
+
+সংযোগ বিচ্ছিন্ন এড়াতে অনুগ্রহ করে পেমেন্ট করুন।
+
+{ISPName} বেছে নেওয়ার জন্য ধন্যবাদ।
+
+---
+
+Dear {CustomerName},
 
 Your internet package "{PackageName}" will expire on {ExpiryDate}.
 
@@ -150,14 +165,18 @@ Thank you for choosing {ISPName}.`,
           </div>
 
           <div className="space-y-2">
-            <Label>Reminder Email Template</Label>
+            <Label>Reminder Email Template (বাংলা + English)</Label>
             <Textarea
               value={settings.email_template_reminder}
               onChange={(e) =>
                 setSettings({ ...settings, email_template_reminder: e.target.value })
               }
-              className="min-h-[200px] font-mono text-sm"
+              className="min-h-[300px] font-mono text-sm"
+              dir="auto"
             />
+            <p className="text-xs text-muted-foreground">
+              বাংলা ইউনিকোড সমর্থিত। Unicode characters fully supported.
+            </p>
           </div>
 
           <div className="p-4 bg-muted rounded-lg">

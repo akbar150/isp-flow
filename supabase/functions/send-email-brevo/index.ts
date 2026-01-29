@@ -21,10 +21,12 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
+    // Try Resend first (preferred), fall back to Brevo
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
     const brevoApiKey = Deno.env.get("BREVO_API_KEY");
     
-    if (!brevoApiKey) {
-      throw new Error("BREVO_API_KEY is not configured");
+    if (!resendApiKey && !brevoApiKey) {
+      throw new Error("No email API key configured (RESEND_API_KEY or BREVO_API_KEY)");
     }
 
     const { to, subject, htmlContent, textContent, senderName, senderEmail }: EmailRequest = await req.json();
@@ -36,13 +38,45 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Sending email to: ${to}, subject: ${subject}`);
 
-    // Send email using Brevo API
+    // Use Resend API (preferred - no IP restrictions)
+    if (resendApiKey) {
+      const resendResponse = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${resendApiKey}`,
+        },
+        body: JSON.stringify({
+          from: `${senderName || "ISP Billing System"} <onboarding@resend.dev>`,
+          to: [to],
+          subject: subject,
+          html: htmlContent,
+          text: textContent || undefined,
+        }),
+      });
+
+      if (!resendResponse.ok) {
+        const errorData = await resendResponse.json();
+        console.error("Resend API error:", errorData);
+        throw new Error(`Resend API error: ${JSON.stringify(errorData)}`);
+      }
+
+      const data = await resendResponse.json();
+      console.log("Email sent successfully via Resend:", data);
+
+      return new Response(JSON.stringify({ success: true, messageId: data?.id }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Fallback to Brevo API
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
         "Accept": "application/json",
-        "Content-Type": "application/json",
-        "api-key": brevoApiKey,
+        "Content-Type": "application/json; charset=utf-8",
+        "api-key": brevoApiKey!,
       },
       body: JSON.stringify({
         sender: {
@@ -63,7 +97,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const result = await response.json();
-    console.log("Email sent successfully:", result);
+    console.log("Email sent successfully via Brevo:", result);
 
     return new Response(JSON.stringify({ success: true, messageId: result.messageId }), {
       status: 200,
