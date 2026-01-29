@@ -878,6 +878,13 @@ export type Database = {
     }
     Functions: {
       generate_customer_user_id: { Args: never; Returns: string }
+      get_public_system_settings: {
+        Args: never
+        Returns: {
+          key: string
+          value: Json
+        }[]
+      }
       has_permission: {
         Args: { _action: string; _resource: string; _user_id: string }
         Returns: boolean
