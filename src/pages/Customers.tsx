@@ -8,6 +8,7 @@ import { CustomerEditDialog } from "@/components/CustomerEditDialog";
 import { CustomerViewDialog } from "@/components/CustomerViewDialog";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { QuickPaymentRecord } from "@/components/QuickPaymentRecord";
+import { BulkCustomerUpload } from "@/components/BulkCustomerUpload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -387,14 +388,21 @@ export default function Customers() {
           <h1 className="page-title">Customers</h1>
           <p className="page-description">Manage your ISP customers</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Add Customer</span>
-              <span className="sm:hidden">Add</span>
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <BulkCustomerUpload
+            packages={packages}
+            areas={areas}
+            routers={routers}
+            onSuccess={fetchData}
+          />
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">Add Customer</span>
+                <span className="sm:hidden">Add</span>
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Customer</DialogTitle>
@@ -564,6 +572,7 @@ export default function Customers() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Filters */}
