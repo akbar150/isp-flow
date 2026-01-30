@@ -35,6 +35,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Plus, Search, Eye, EyeOff, RefreshCw, MoreHorizontal, Edit, Trash2, UserCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { calculateBillingInfo } from "@/lib/billingUtils";
@@ -86,7 +87,8 @@ interface Customer {
 type SortDirection = 'asc' | 'desc' | null;
 
 export default function Customers() {
-  const { isAdmin, isSuperAdmin } = useAuth();
+  const { isSuperAdmin } = useAuth();
+  const { canRead, canUpdate, canDelete } = usePermissions();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -363,7 +365,10 @@ export default function Customers() {
       return dateSortDirection === 'asc' ? dateA - dateB : dateB - dateA;
     });
 
-  const canEdit = isAdmin || isSuperAdmin;
+  // Permission-based access control
+  const canViewDetails = isSuperAdmin || canRead("customers");
+  const canEditCustomer = isSuperAdmin || canUpdate("customers");
+  const canDeleteCustomer = isSuperAdmin || canDelete("customers");
 
   if (loading) {
     return (
@@ -635,7 +640,16 @@ export default function Customers() {
                     </td>
                     <td>
                       <div>
-                        <p className="font-medium">{customer.full_name}</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setViewingCustomer(customer);
+                            setViewDialogOpen(true);
+                          }}
+                          className="font-medium text-left hover:text-primary hover:underline transition-colors cursor-pointer"
+                        >
+                          {customer.full_name}
+                        </button>
                         <p className="text-xs text-muted-foreground sm:hidden font-mono">{pppoeUsername}</p>
                       </div>
                     </td>
@@ -687,7 +701,23 @@ export default function Customers() {
                           monthlyPrice={customer.packages?.monthly_price || 0}
                           onSuccess={fetchData}
                         />
-                        {canEdit && (
+                        {/* View Details - always visible for users with read permission */}
+                        {canViewDetails && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              setViewingCustomer(customer);
+                              setViewDialogOpen(true);
+                            }}
+                            title="View Details"
+                          >
+                            <UserCircle className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {/* Actions dropdown - visible for users with edit/delete permissions */}
+                        {(canEditCustomer || canDeleteCustomer) && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -695,32 +725,29 @@ export default function Customers() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setViewingCustomer(customer);
-                                  setViewDialogOpen(true);
-                                }}
-                              >
-                                <UserCircle className="h-4 w-4 mr-2" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setEditingCustomer(customer);
-                                  setEditDialogOpen(true);
-                                }}
-                              >
-                                <Edit className="h-4 w-4 mr-2" />
-                                Quick Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => handleDelete(customer)}
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
+                              {canEditCustomer && (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setEditingCustomer(customer);
+                                    setEditDialogOpen(true);
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Quick Edit
+                                </DropdownMenuItem>
+                              )}
+                              {canDeleteCustomer && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => handleDelete(customer)}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         )}
@@ -743,7 +770,7 @@ export default function Customers() {
         areas={areas}
         routers={routers}
         onSuccess={fetchData}
-        canEdit={canEdit}
+        canEdit={canEditCustomer}
       />
 
       {/* Edit Customer Dialog */}
