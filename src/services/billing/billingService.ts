@@ -213,21 +213,37 @@ function sanitizeForWhatsAppUrl(message: string): string {
     .replace(/\n{3,}/g, '\n\n');
 }
 
+function formatWhatsAppPhone(phone: string): string {
+  const cleanPhone = phone.replace(/[^0-9+]/g, '');
+  // Ensure it starts with country code, but without leading +
+  const formattedPhone = cleanPhone.startsWith('+')
+    ? cleanPhone.slice(1)
+    : cleanPhone.startsWith('0')
+      ? '88' + cleanPhone.slice(1)
+      : cleanPhone;
+
+  return formattedPhone;
+}
+
 /**
  * Get WhatsApp click-to-send URL
  */
 export function getWhatsAppUrl(phone: string, message: string): string {
-  // Clean phone number (remove spaces, dashes, etc.)
-  const cleanPhone = phone.replace(/[^0-9+]/g, '');
-  // Ensure it starts with country code
-  const formattedPhone = cleanPhone.startsWith('+') 
-    ? cleanPhone.slice(1) 
-    : cleanPhone.startsWith('0') 
-      ? '88' + cleanPhone.slice(1)
-      : cleanPhone;
+  const formattedPhone = formatWhatsAppPhone(phone);
   
   // Sanitize message to fix URL parsing issues with emojis
   const sanitizedMessage = sanitizeForWhatsAppUrl(message);
   
   return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(sanitizedMessage)}`;
+}
+
+/**
+ * Mobile deep-link that opens the native WhatsApp app directly.
+ * This avoids WhatsApp Web re-parsing/re-encoding in some browsers.
+ */
+export function getWhatsAppDeepLink(phone: string, message: string): string {
+  const formattedPhone = formatWhatsAppPhone(phone);
+  const sanitizedMessage = sanitizeForWhatsAppUrl(message);
+
+  return `whatsapp://send?phone=${formattedPhone}&text=${encodeURIComponent(sanitizedMessage)}`;
 }

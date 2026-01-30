@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useState, useEffect, useMemo } from "react";
-import { getWhatsAppUrl } from "@/services/billing/billingService";
+import { getWhatsAppDeepLink, getWhatsAppUrl } from "@/services/billing/billingService";
 import { useIspSettings } from "@/hooks/useIspSettings";
 
 interface WhatsAppButtonProps {
@@ -110,11 +110,30 @@ export function WhatsAppButton({
     console.log("Emojis found:", emojiMatches.slice(0, 5).join(', '));
     console.log("Emoji codepoints:", emojiMatches.slice(0, 5).map(e => e.codePointAt(0)?.toString(16)));
     
-    const url = getWhatsAppUrl(phone, message);
-    console.log("WhatsApp URL length:", url.length);
-    console.log("WhatsApp URL:", url);
-    
-    window.open(url, '_blank');
+    const webUrl = getWhatsAppUrl(phone, message);
+    const deepLink = getWhatsAppDeepLink(phone, message);
+
+    console.log("WhatsApp URL length:", webUrl.length);
+    console.log("WhatsApp Web URL:", webUrl);
+    console.log("WhatsApp Deep Link:", deepLink);
+
+    // On mobile, prefer the native WhatsApp deep-link to avoid WhatsApp Web
+    // re-parsing the URL (which can turn emojis into replacement characters on some devices).
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile) {
+      // Fallback to web URL if deep-link isn't handled (WhatsApp not installed, etc.)
+      const fallbackTimer = window.setTimeout(() => {
+        window.open(webUrl, "_blank");
+      }, 800);
+
+      window.location.href = deepLink;
+
+      // Best-effort cleanup (may not run if the deep-link is handled immediately)
+      window.setTimeout(() => window.clearTimeout(fallbackTimer), 1200);
+    } else {
+      window.open(webUrl, "_blank");
+    }
+
     setOpen(false);
   };
 
