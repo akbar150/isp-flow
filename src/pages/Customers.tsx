@@ -668,90 +668,94 @@ export default function Customers() {
                       <StatusBadge status={billingInfo.status} />
                     </td>
                     <td>
-                      <div className="flex items-center gap-1 flex-wrap">
-                        <QuickCallRecord
-                          customerId={customer.id}
-                          customerName={customer.full_name}
-                          onSuccess={fetchData}
-                        />
-                        <WhatsAppButton
-                          phone={customer.phone}
-                          customerName={customer.full_name}
-                          userId={customer.user_id}
-                          packageName={customer.packages?.name || 'Internet'}
-                          expiryDate={new Date(customer.expiry_date)}
-                          amount={customer.packages?.monthly_price || customer.total_due}
-                          variant="icon"
-                          pppoeUsername={pppoeUsername}
-                        />
-                        <EmailButton
-                          phone={customer.phone}
-                          customerName={customer.full_name}
-                          userId={customer.user_id}
-                          packageName={customer.packages?.name || 'Internet'}
-                          expiryDate={new Date(customer.expiry_date)}
-                          amount={customer.packages?.monthly_price || customer.total_due}
-                          variant="icon"
-                          pppoeUsername={pppoeUsername}
-                        />
-                        <QuickPaymentRecord
-                          customerId={customer.id}
-                          customerName={customer.full_name}
-                          dueAmount={customer.total_due}
-                          monthlyPrice={customer.packages?.monthly_price || 0}
-                          onSuccess={fetchData}
-                        />
-                        {/* View Details - always visible for users with read permission */}
-                        {canViewDetails && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => {
-                              setViewingCustomer(customer);
-                              setViewDialogOpen(true);
-                            }}
-                            title="View Details"
-                          >
-                            <UserCircle className="h-4 w-4" />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
-                        )}
-                        {/* Actions dropdown - visible for users with edit/delete permissions */}
-                        {(canEditCustomer || canDeleteCustomer) && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {canEditCustomer && (
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setEditingCustomer(customer);
-                                    setEditDialogOpen(true);
-                                  }}
-                                >
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Quick Edit
-                                </DropdownMenuItem>
-                              )}
-                              {canDeleteCustomer && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    onClick={() => handleDelete(customer)}
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
-                      </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          {/* View Details */}
+                          {canViewDetails && (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setViewingCustomer(customer);
+                                setViewDialogOpen(true);
+                              }}
+                            >
+                              <UserCircle className="h-4 w-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                          )}
+                          
+                          {canViewDetails && <DropdownMenuSeparator />}
+                          
+                          {/* Quick Actions */}
+                          <QuickCallRecord
+                            customerId={customer.id}
+                            customerName={customer.full_name}
+                            onSuccess={fetchData}
+                            variant="dropdown"
+                          />
+                          <QuickPaymentRecord
+                            customerId={customer.id}
+                            customerName={customer.full_name}
+                            dueAmount={customer.total_due}
+                            monthlyPrice={customer.packages?.monthly_price || 0}
+                            onSuccess={fetchData}
+                            variant="dropdown"
+                          />
+                          
+                          <DropdownMenuSeparator />
+                          
+                          {/* Communication */}
+                          <WhatsAppButton
+                            phone={customer.phone}
+                            customerName={customer.full_name}
+                            userId={customer.user_id}
+                            packageName={customer.packages?.name || 'Internet'}
+                            expiryDate={new Date(customer.expiry_date)}
+                            amount={customer.packages?.monthly_price || customer.total_due}
+                            variant="dropdown"
+                            pppoeUsername={pppoeUsername}
+                          />
+                          <EmailButton
+                            phone={customer.phone}
+                            customerName={customer.full_name}
+                            userId={customer.user_id}
+                            packageName={customer.packages?.name || 'Internet'}
+                            expiryDate={new Date(customer.expiry_date)}
+                            amount={customer.packages?.monthly_price || customer.total_due}
+                            variant="dropdown"
+                            pppoeUsername={pppoeUsername}
+                          />
+                          
+                          {/* Edit/Delete - only for users with permission */}
+                          {(canEditCustomer || canDeleteCustomer) && <DropdownMenuSeparator />}
+                          
+                          {canEditCustomer && (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setEditingCustomer(customer);
+                                setEditDialogOpen(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4 mr-2" />
+                              Quick Edit
+                            </DropdownMenuItem>
+                          )}
+                          
+                          {canDeleteCustomer && (
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => handleDelete(customer)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 );

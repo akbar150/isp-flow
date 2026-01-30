@@ -8,6 +8,7 @@ import {
   DialogTrigger,
   DialogDescription, 
 } from "@/components/ui/dialog";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { useState, useEffect, useMemo } from "react";
 import { getWhatsAppDeepLink, getWhatsAppUrl } from "@/services/billing/billingService";
@@ -20,7 +21,7 @@ interface WhatsAppButtonProps {
   packageName: string;
   expiryDate: Date;
   amount: number;
-  variant?: 'default' | 'icon';
+  variant?: 'default' | 'icon' | 'dropdown';
   pppoeUsername?: string;
   pppoePassword?: string;
 }
@@ -137,41 +138,59 @@ export function WhatsAppButton({
     setOpen(false);
   };
 
+  const dialogContent = (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Send WhatsApp Reminder</DialogTitle>
+        <DialogDescription>
+          Edit the message below before sending. Uses WhatsApp formatting: *bold*, _italic_, ~strikethrough~
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-4 mt-4">
+        <div>
+          <p className="text-sm text-muted-foreground mb-2">
+            Sending to: <span className="font-medium text-foreground">{phone}</span>
+          </p>
+          <Textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            className="min-h-[280px] font-mono text-sm"
+          />
+          <p className="text-xs text-muted-foreground mt-2">
+            💡 Tip: Use *bold*, _italic_, ~strikethrough~, and ```code``` for formatting
+          </p>
+        </div>
+        <Button onClick={handleSend} className="whatsapp-btn w-full">
+          <MessageCircle className="h-4 w-4" />
+          Open WhatsApp
+        </Button>
+      </div>
+    </DialogContent>
+  );
+
+  if (variant === 'dropdown') {
+    return (
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+            <MessageCircle className="h-4 w-4 mr-2 text-[hsl(142,70%,45%)]" />
+            Send WhatsApp
+          </DropdownMenuItem>
+        </DialogTrigger>
+        {dialogContent}
+      </Dialog>
+    );
+  }
+
   if (variant === 'icon') {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+        <DialogTrigger asChild>
           <Button size="icon" variant="ghost" className="h-8 w-8 text-[hsl(142,70%,45%)]">
             <MessageCircle className="h-4 w-4" />
           </Button>
         </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Send WhatsApp Reminder</DialogTitle>
-            <DialogDescription>
-              Edit the message below before sending. Uses WhatsApp formatting: *bold*, _italic_, ~strikethrough~
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">
-                Sending to: <span className="font-medium text-foreground">{phone}</span>
-              </p>
-              <Textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                className="min-h-[280px] font-mono text-sm"
-              />
-              <p className="text-xs text-muted-foreground mt-2">
-                💡 Tip: Use *bold*, _italic_, ~strikethrough~, and ```code``` for formatting
-              </p>
-            </div>
-            <Button onClick={handleSend} className="whatsapp-btn w-full">
-              <MessageCircle className="h-4 w-4" />
-              Open WhatsApp
-            </Button>
-          </div>
-        </DialogContent>
+        {dialogContent}
       </Dialog>
     );
   }
@@ -184,33 +203,7 @@ export function WhatsAppButton({
           WhatsApp
         </button>
       </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Send WhatsApp Reminder</DialogTitle>
-          <DialogDescription>
-            Edit the message below before sending. Uses WhatsApp formatting: *bold*, _italic_, ~strikethrough~
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 mt-4">
-          <div>
-            <p className="text-sm text-muted-foreground mb-2">
-              Sending to: <span className="font-medium text-foreground">{phone}</span>
-            </p>
-            <Textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              className="min-h-[280px] font-mono text-sm"
-            />
-            <p className="text-xs text-muted-foreground mt-2">
-              💡 Tip: Use *bold*, _italic_, ~strikethrough~, and ```code``` for formatting
-            </p>
-          </div>
-          <Button onClick={handleSend} className="whatsapp-btn w-full">
-            <MessageCircle className="h-4 w-4" />
-            Open WhatsApp
-          </Button>
-        </div>
-      </DialogContent>
+      {dialogContent}
     </Dialog>
   );
 }

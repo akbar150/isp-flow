@@ -1,4 +1,4 @@
-import { Mail } from "lucide-react";
+import { Mail, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { 
   Dialog, 
@@ -8,6 +8,7 @@ import {
   DialogTrigger,
   DialogDescription, 
 } from "@/components/ui/dialog";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +17,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useIspSettings } from "@/hooks/useIspSettings";
 import { format } from "date-fns";
-import { Loader2 } from "lucide-react";
 
 interface EmailButtonProps {
   email?: string;
@@ -26,7 +26,7 @@ interface EmailButtonProps {
   packageName: string;
   expiryDate: Date;
   amount: number;
-  variant?: 'default' | 'icon';
+  variant?: 'default' | 'icon' | 'dropdown';
   pppoeUsername?: string;
 }
 
@@ -166,6 +166,70 @@ export function EmailButton({
     }
   };
 
+  const dialogContent = (
+    <DialogContent className="max-w-lg">
+      <DialogHeader>
+        <DialogTitle>Send Email Reminder</DialogTitle>
+        <DialogDescription>
+          Send a payment reminder email to the customer
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-4 mt-4">
+        <div className="space-y-2">
+          <Label>Customer Email *</Label>
+          <Input
+            type="email"
+            value={customerEmail}
+            onChange={(e) => setCustomerEmail(e.target.value)}
+            placeholder="customer@example.com"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Subject</Label>
+          <Input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Message Preview</Label>
+          <Textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            className="min-h-[200px] font-mono text-sm"
+          />
+        </div>
+        <Button onClick={handleSend} disabled={sending} className="w-full">
+          {sending ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Sending...
+            </>
+          ) : (
+            <>
+              <Mail className="h-4 w-4 mr-2" />
+              Send Email
+            </>
+          )}
+        </Button>
+      </div>
+    </DialogContent>
+  );
+
+  if (variant === 'dropdown') {
+    return (
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+            <Mail className="h-4 w-4 mr-2 text-primary" />
+            Send Email
+          </DropdownMenuItem>
+        </DialogTrigger>
+        {dialogContent}
+      </Dialog>
+    );
+  }
+
   if (variant === 'icon') {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
@@ -174,53 +238,7 @@ export function EmailButton({
             <Mail className="h-4 w-4" />
           </Button>
         </DialogTrigger>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Send Email Reminder</DialogTitle>
-            <DialogDescription>
-              Send a payment reminder email to the customer
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>Customer Email *</Label>
-              <Input
-                type="email"
-                value={customerEmail}
-                onChange={(e) => setCustomerEmail(e.target.value)}
-                placeholder="customer@example.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Subject</Label>
-              <Input
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Message Preview</Label>
-              <Textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                className="min-h-[200px] font-mono text-sm"
-              />
-            </div>
-            <Button onClick={handleSend} disabled={sending} className="w-full">
-              {sending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Mail className="h-4 w-4 mr-2" />
-                  Send Email
-                </>
-              )}
-            </Button>
-          </div>
-        </DialogContent>
+        {dialogContent}
       </Dialog>
     );
   }
@@ -233,53 +251,7 @@ export function EmailButton({
           Email
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Send Email Reminder</DialogTitle>
-          <DialogDescription>
-            Send a payment reminder email to the customer
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 mt-4">
-          <div className="space-y-2">
-            <Label>Customer Email *</Label>
-            <Input
-              type="email"
-              value={customerEmail}
-              onChange={(e) => setCustomerEmail(e.target.value)}
-              placeholder="customer@example.com"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Subject</Label>
-            <Input
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Message Preview</Label>
-            <Textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              className="min-h-[200px] font-mono text-sm"
-            />
-          </div>
-          <Button onClick={handleSend} disabled={sending} className="w-full">
-            {sending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Sending...
-              </>
-            ) : (
-              <>
-                <Mail className="h-4 w-4 mr-2" />
-                Send Email
-              </>
-            )}
-          </Button>
-        </div>
-      </DialogContent>
+      {dialogContent}
     </Dialog>
   );
 }
