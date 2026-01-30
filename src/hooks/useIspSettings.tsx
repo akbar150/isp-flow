@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import api from "@/lib/api";
 import { decodeSettingValue } from "@/lib/settingsValue";
 
 interface IspSettings {
@@ -50,9 +50,9 @@ const defaultEmailTemplate = `প্রিয় {CustomerName},
 const defaultSmsTemplate = `প্রিয় {CustomerName}, আপনার ইন্টারনেট প্যাকেজ {PackageName} এর মেয়াদ {ExpiryDate} তারিখে শেষ হবে। বকেয়া: ৳{Amount}। সংযোগ বিচ্ছিন্ন এড়াতে পেমেন্ট করুন। - {ISPName}`;
 
 const IspSettingsContext = createContext<IspSettings>({
-  ispName: "Smart ISP",
+  ispName: "EasyLink",
   whatsappTemplate: defaultWhatsAppTemplate,
-  emailFromName: "Smart ISP",
+  emailFromName: "EasyLink",
   emailFromAddress: "",
   emailSubjectReminder: "পেমেন্ট রিমাইন্ডার / Payment Reminder - {ISPName}",
   emailTemplateReminder: defaultEmailTemplate,
@@ -64,9 +64,9 @@ const IspSettingsContext = createContext<IspSettings>({
 
 export function IspSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<IspSettings>({
-    ispName: "Smart ISP",
+    ispName: "EasyLink",
     whatsappTemplate: defaultWhatsAppTemplate,
-    emailFromName: "Smart ISP",
+    emailFromName: "EasyLink",
     emailFromAddress: "",
     emailSubjectReminder: "পেমেন্ট রিমাইন্ডার / Payment Reminder - {ISPName}",
     emailTemplateReminder: defaultEmailTemplate,
@@ -78,26 +78,11 @@ export function IspSettingsProvider({ children }: { children: ReactNode }) {
 
   const fetchSettings = async () => {
     try {
-      // Prefer backend RPC (works for both authenticated + unauthenticated)
-      let data: Array<{ key: string | null; value: unknown }> | null = null;
-
-      const rpcRes = await supabase.rpc("get_public_system_settings");
-      if (!rpcRes.error && rpcRes.data) {
-        data = rpcRes.data as Array<{ key: string | null; value: unknown }>;
-      } else {
-        // Fallback: try authenticated table, then public view.
-        const authRes = await supabase.from("system_settings").select("key, value");
-        if (authRes.error) {
-          const publicRes = await supabase.from("system_settings_public").select("key, value");
-          data = (publicRes.data || null) as Array<{ key: string | null; value: unknown }> | null;
-        } else {
-          data = (authRes.data || null) as Array<{ key: string | null; value: unknown }> | null;
-        }
-      }
-
-      if (data) {
+      const response = await api.get("/settings/public");
+      
+      if (response.data.success && response.data.settings) {
         const settingsMap: Record<string, string> = {};
-        data.forEach((s: { key: string | null; value: unknown }) => {
+        response.data.settings.forEach((s: { key: string; value: unknown }) => {
           if (s.key) {
             settingsMap[s.key] = decodeSettingValue(s.value);
           }
@@ -126,22 +111,6 @@ export function IspSettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchSettings();
-
-    // Subscribe to changes
-    const channel = supabase
-      .channel("system_settings_changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "system_settings" },
-        () => {
-          fetchSettings();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
 
   // Provide refetch function in context

@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/supabase/client";
+import api from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { Phone } from "lucide-react";
 
@@ -53,21 +53,20 @@ export function CallRecordDialog({
 
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const { error } = await supabase.from("call_records").insert({
+      const response = await api.post("/activity/call-records", {
         customer_id: customerId,
         notes: notes.trim(),
-        called_by: user?.id || null,
         call_date: new Date().toISOString(),
       });
 
-      if (error) throw error;
-
-      toast({ title: "Call record saved successfully" });
-      setNotes("");
-      onOpenChange(false);
-      onSuccess?.();
+      if (response.data.success) {
+        toast({ title: "Call record saved successfully" });
+        setNotes("");
+        onOpenChange(false);
+        onSuccess?.();
+      } else {
+        throw new Error(response.data.error);
+      }
     } catch (error) {
       console.error("Error saving call record:", error);
       toast({
