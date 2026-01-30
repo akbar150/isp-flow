@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import api from "@/lib/api";
 import { useAuth } from "./useAuth";
 
 interface Permission {
@@ -24,16 +24,12 @@ export function usePermissions() {
 
   const fetchPermissions = async () => {
     try {
-      const { data, error } = await supabase
-        .from("permissions")
-        .select("resource, action, allowed")
-        .eq("role", role);
+      const response = await api.get(`/settings/permissions/${role}`);
 
-      if (error) {
-        console.error("Error fetching permissions:", error);
-        setPermissions([]);
+      if (response.data.success) {
+        setPermissions(response.data.permissions || []);
       } else {
-        setPermissions(data || []);
+        setPermissions([]);
       }
     } catch (error) {
       console.error("Error fetching permissions:", error);

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,22 +32,6 @@ const resetSchema = z.object({
   phone: z.string().min(10, "Phone number is required"),
 });
 
-interface CustomerData {
-  id: string;
-  user_id: string;
-  full_name: string;
-  phone: string;
-  address: string;
-  status: string;
-  expiry_date: string;
-  total_due: number;
-  package: {
-    name: string;
-    speed_mbps: number;
-    monthly_price: number;
-  } | null;
-}
-
 export default function CustomerLogin() {
   const navigate = useNavigate();
   const { ispName, loading: settingsLoading } = useIspSettings();
@@ -55,8 +39,8 @@ export default function CustomerLogin() {
   const [activeTab, setActiveTab] = useState("login");
   const [errors, setErrors] = useState<Record<string, string>>({});
   
-  // Show loading placeholder while settings load to prevent "Smart ISP" flash
   const displayName = settingsLoading ? "Loading..." : ispName;
+  
   // Login state
   const [loginData, setLoginData] = useState({ user_id: "", password: "" });
 
@@ -89,18 +73,15 @@ export default function CustomerLogin() {
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke("customer-auth", {
-        body: { action: "login", ...loginData },
-      });
+      const response = await api.post("/customer-auth/login", loginData);
 
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
+      if (!response.data.success) throw new Error(response.data.error);
 
       // Store customer session in localStorage
-      localStorage.setItem("customer_session", JSON.stringify(data.customer));
-      localStorage.setItem("customer_token", data.session_token);
+      localStorage.setItem("customer_session", JSON.stringify(response.data.customer));
+      localStorage.setItem("customer_token", response.data.token);
 
-      toast({ title: "Login successful", description: `Welcome back, ${data.customer.full_name}!` });
+      toast({ title: "Login successful", description: `Welcome back, ${response.data.customer.full_name}!` });
       navigate("/customer-portal");
     } catch (error) {
       toast({
@@ -130,27 +111,23 @@ export default function CustomerLogin() {
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke("customer-auth", {
-        body: {
-          action: "register",
-          full_name: registerData.full_name,
-          phone: registerData.phone,
-          password: registerData.password,
-          address: registerData.address,
-        },
+      const response = await api.post("/customer-auth/register", {
+        full_name: registerData.full_name,
+        phone: registerData.phone,
+        password: registerData.password,
+        address: registerData.address,
       });
 
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
+      if (!response.data.success) throw new Error(response.data.error);
 
       toast({
         title: "Registration Successful!",
-        description: data.message,
+        description: response.data.message,
       });
 
       // Switch to login tab
       setActiveTab("login");
-      setLoginData({ user_id: data.customer.user_id, password: "" });
+      setLoginData({ user_id: response.data.customer.user_id, password: "" });
       setRegisterData({ full_name: "", phone: "", password: "", confirm_password: "", address: "" });
     } catch (error) {
       toast({
@@ -180,22 +157,18 @@ export default function CustomerLogin() {
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke("customer-auth", {
-        body: { action: "reset_password", ...resetData },
-      });
-
-      if (error) throw error;
+      const response = await api.post("/customer-auth/reset-password", resetData);
 
       toast({
         title: "Password Reset",
-        description: data.message,
+        description: response.data.message,
       });
 
       // If temp password was returned (dev mode), show it
-      if (data.temp_password) {
+      if (response.data.temp_password) {
         toast({
           title: "Temporary Password",
-          description: `Your temporary password is: ${data.temp_password}`,
+          description: `Your temporary password is: ${response.data.temp_password}`,
         });
       }
 

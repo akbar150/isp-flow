@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from "@/integrations/supabase/client";
+import api from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2 } from "lucide-react";
 import { UserManagement } from "@/components/settings/UserManagement";
@@ -23,7 +23,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
 
   const [settings, setSettings] = useState({
-    isp_name: "Smart ISP",
+    isp_name: "EasyLink",
     whatsapp_template: `🔔 *পেমেন্ট রিমাইন্ডার / Payment Reminder*
 
 প্রিয় *{CustomerName}*,
@@ -51,15 +51,15 @@ Please pay to avoid disconnection.
 
   const fetchData = async () => {
     try {
-      const settingsRes = await supabase.from('system_settings').select('*');
+      const response = await api.get('/settings');
 
-      if (settingsRes.data) {
+      if (response.data.success && response.data.settings) {
         const settingsMap: Record<string, string> = {};
-        settingsRes.data.forEach(s => {
+        response.data.settings.forEach((s: { key: string; value: unknown }) => {
           settingsMap[s.key] = decodeSettingValue(s.value);
         });
         setSettings({
-          isp_name: settingsMap.isp_name || "Smart ISP",
+          isp_name: settingsMap.isp_name || "EasyLink",
           whatsapp_template: settingsMap.whatsapp_template || settings.whatsapp_template,
         });
       }
@@ -75,23 +75,20 @@ Please pay to avoid disconnection.
     try {
       const normalizedWhatsapp = normalizeTemplateVars(settings.whatsapp_template);
 
-      await Promise.all([
-        supabase.from('system_settings').upsert({ 
-          key: 'isp_name', 
-          value: settings.isp_name,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'key' }),
-        supabase.from('system_settings').upsert({ 
-          key: 'whatsapp_template', 
-          value: normalizedWhatsapp,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'key' }),
-      ]);
+      const response = await api.put('/settings', {
+        settings: [
+          { key: 'isp_name', value: settings.isp_name },
+          { key: 'whatsapp_template', value: normalizedWhatsapp },
+        ]
+      });
 
-      // Update local state so the textarea matches what will be sent.
-      setSettings((prev) => ({ ...prev, whatsapp_template: normalizedWhatsapp }));
-
-      toast({ title: "Settings saved successfully" });
+      if (response.data.success) {
+        // Update local state so the textarea matches what will be sent.
+        setSettings((prev) => ({ ...prev, whatsapp_template: normalizedWhatsapp }));
+        toast({ title: "Settings saved successfully" });
+      } else {
+        throw new Error(response.data.error);
+      }
     } catch (error) {
       toast({
         title: "Error",

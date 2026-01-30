@@ -19,7 +19,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { supabase } from "@/integrations/supabase/client";
+import api from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -63,13 +63,8 @@ export default function Packages() {
 
   const fetchPackages = async () => {
     try {
-      const { data, error } = await supabase
-        .from('packages')
-        .select('*')
-        .order('monthly_price', { ascending: true });
-
-      if (error) throw error;
-      setPackages(data || []);
+      const response = await api.get('/packages');
+      setPackages(response.data.packages || []);
     } catch (error) {
       console.error('Error fetching packages:', error);
     } finally {
@@ -115,17 +110,19 @@ export default function Packages() {
       };
 
       if (editingPackage) {
-        const { error } = await supabase
-          .from('packages')
-          .update(packageData)
-          .eq('id', editingPackage.id);
-
-        if (error) throw error;
-        toast({ title: "Package updated successfully" });
+        const response = await api.put(`/packages/${editingPackage.id}`, packageData);
+        if (response.data.success) {
+          toast({ title: "Package updated successfully" });
+        } else {
+          throw new Error(response.data.error);
+        }
       } else {
-        const { error } = await supabase.from('packages').insert(packageData);
-        if (error) throw error;
-        toast({ title: "Package created successfully" });
+        const response = await api.post('/packages', packageData);
+        if (response.data.success) {
+          toast({ title: "Package created successfully" });
+        } else {
+          throw new Error(response.data.error);
+        }
       }
 
       setDialogOpen(false);
@@ -173,10 +170,13 @@ export default function Packages() {
     if (!confirm("Are you sure you want to delete this package?")) return;
 
     try {
-      const { error } = await supabase.from('packages').delete().eq('id', id);
-      if (error) throw error;
-      toast({ title: "Package deleted" });
-      fetchPackages();
+      const response = await api.delete(`/packages/${id}`);
+      if (response.data.success) {
+        toast({ title: "Package deleted" });
+        fetchPackages();
+      } else {
+        throw new Error(response.data.error);
+      }
     } catch (error) {
       toast({
         title: "Error",

@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
+import api from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { Plus, Edit2, Trash2, Wifi, WifiOff, Router as RouterIcon } from "lucide-react";
 import { MikrotikServiceFactory } from "@/services/mikrotik/MikrotikServiceFactory";
@@ -56,13 +56,8 @@ export default function Routers() {
 
   const fetchRouters = async () => {
     try {
-      const { data, error } = await supabase
-        .from('routers')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setRouters(data || []);
+      const response = await api.get('/routers');
+      setRouters(response.data.routers || []);
     } catch (error) {
       console.error('Error fetching routers:', error);
     } finally {
@@ -107,37 +102,30 @@ export default function Routers() {
         throw new Error('Username too long (max 50 characters)');
       }
 
-      // Hash password if provided using database function
-      let hashedPassword = null;
-      if (formData.password) {
-        const { data, error: hashError } = await supabase
-          .rpc('hash_password', { raw_password: formData.password });
-        if (hashError) throw new Error('Failed to secure password');
-        hashedPassword = data;
-      }
-
       const routerData = {
         name: formData.name.trim(),
         ip_address: formData.ip_address || null,
         port: port,
         username: formData.username || null,
-        password_encrypted: hashedPassword,
+        password: formData.password || null,
         mode: formData.mode,
         is_active: formData.is_active,
       };
 
       if (editingRouter) {
-        const { error } = await supabase
-          .from('routers')
-          .update(routerData)
-          .eq('id', editingRouter.id);
-
-        if (error) throw error;
-        toast({ title: "Router updated successfully" });
+        const response = await api.put(`/routers/${editingRouter.id}`, routerData);
+        if (response.data.success) {
+          toast({ title: "Router updated successfully" });
+        } else {
+          throw new Error(response.data.error);
+        }
       } else {
-        const { error } = await supabase.from('routers').insert(routerData);
-        if (error) throw error;
-        toast({ title: "Router added successfully" });
+        const response = await api.post('/routers', routerData);
+        if (response.data.success) {
+          toast({ title: "Router added successfully" });
+        } else {
+          throw new Error(response.data.error);
+        }
       }
 
       setDialogOpen(false);
@@ -170,10 +158,13 @@ export default function Routers() {
     if (!confirm("Are you sure you want to delete this router?")) return;
 
     try {
-      const { error } = await supabase.from('routers').delete().eq('id', id);
-      if (error) throw error;
-      toast({ title: "Router deleted" });
-      fetchRouters();
+      const response = await api.delete(`/routers/${id}`);
+      if (response.data.success) {
+        toast({ title: "Router deleted" });
+        fetchRouters();
+      } else {
+        throw new Error(response.data.error);
+      }
     } catch (error) {
       toast({
         title: "Error",

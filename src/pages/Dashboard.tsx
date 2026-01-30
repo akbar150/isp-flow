@@ -4,7 +4,7 @@ import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
-import { supabase } from "@/integrations/supabase/client";
+import api from "@/lib/api";
 import { useIspSettings } from "@/hooks/useIspSettings";
 import { 
   Users, 
@@ -68,12 +68,13 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch customers using safe view (excludes password_hash) with mikrotik_users
-      const { data: customers, error: customersError } = await supabase
-        .from('customers_safe')
-        .select('*, packages(name, monthly_price), mikrotik_users:mikrotik_users_safe(id, username, status)');
+      // Fetch dashboard stats from API
+      const [customersRes, paymentsRes] = await Promise.all([
+        api.get('/customers'),
+        api.get('/payments/today'),
+      ]);
 
-      if (customersError) throw customersError;
+      const customers = customersRes.data.customers || [];
 
       // Calculate stats using actual billing date logic
       const today = startOfDay(new Date());
@@ -86,7 +87,7 @@ export default function Dashboard() {
       let expiredCount = 0;
       const expiringList: Customer[] = [];
 
-      customers?.forEach(customer => {
+      customers.forEach((customer: Customer) => {
         const expiryDate = startOfDay(new Date(customer.expiry_date));
         const isBillingPassed = isBefore(expiryDate, today) || expiryDate.getTime() === today.getTime();
         
@@ -99,23 +100,16 @@ export default function Dashboard() {
           expiredCount++;
         } else if (expiryDate <= threeDaysFromNow) {
           expiringCount++;
-          expiringList.push(customer as Customer);
+          expiringList.push(customer);
         } else {
           activeCount++;
         }
       });
 
-      // Fetch today's payments
-      const todayStr = format(new Date(), 'yyyy-MM-dd');
-      const { data: payments } = await supabase
-        .from('payments')
-        .select('amount')
-        .gte('payment_date', todayStr);
-
-      const todayCollections = payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
+      const todayCollections = paymentsRes.data.total || 0;
 
       setStats({
-        totalUsers: customers?.length || 0,
+        totalUsers: customers.length || 0,
         activeUsers: activeCount,
         expiringUsers: expiringCount,
         expiredUsers: expiredCount,
