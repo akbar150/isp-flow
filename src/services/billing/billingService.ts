@@ -197,6 +197,23 @@ Please pay to avoid disconnection.
 }
 
 /**
+ * Sanitize message for WhatsApp URL - removes problematic Unicode characters
+ * that can cause URL parsing issues (especially with emojis)
+ */
+function sanitizeForWhatsAppUrl(message: string): string {
+  return message
+    // Replace Unicode line separators with standard newlines
+    .replace(/\u2028/g, '\n')  // Line Separator
+    .replace(/\u2029/g, '\n')  // Paragraph Separator
+    // Remove zero-width characters that can cause issues
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    // Replace non-breaking spaces with regular spaces
+    .replace(/\u00A0/g, ' ')
+    // Normalize multiple newlines
+    .replace(/\n{3,}/g, '\n\n');
+}
+
+/**
  * Get WhatsApp click-to-send URL
  */
 export function getWhatsAppUrl(phone: string, message: string): string {
@@ -209,5 +226,8 @@ export function getWhatsAppUrl(phone: string, message: string): string {
       ? '88' + cleanPhone.slice(1)
       : cleanPhone;
   
-  return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+  // Sanitize message to fix URL parsing issues with emojis
+  const sanitizedMessage = sanitizeForWhatsAppUrl(message);
+  
+  return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(sanitizedMessage)}`;
 }
