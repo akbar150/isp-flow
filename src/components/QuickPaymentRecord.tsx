@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Banknote, Loader2 } from "lucide-react";
@@ -27,6 +28,7 @@ interface QuickPaymentRecordProps {
   dueAmount: number;
   monthlyPrice: number;
   onSuccess: () => void;
+  variant?: "icon" | "dropdown";
 }
 
 export function QuickPaymentRecord({
@@ -35,6 +37,7 @@ export function QuickPaymentRecord({
   dueAmount,
   monthlyPrice,
   onSuccess,
+  variant = "icon",
 }: QuickPaymentRecordProps) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -94,12 +97,21 @@ export function QuickPaymentRecord({
     }
   };
 
+  const triggerElement = variant === "dropdown" ? (
+    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+      <Banknote className="h-4 w-4 mr-2 text-[hsl(var(--status-active))]" />
+      Record Payment
+    </DropdownMenuItem>
+  ) : (
+    <Button size="icon" variant="ghost" className="h-8 w-8 text-[hsl(var(--status-active))]">
+      <Banknote className="h-4 w-4" />
+    </Button>
+  );
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="icon" variant="ghost" className="h-8 w-8 text-[hsl(var(--status-active))]">
-          <Banknote className="h-4 w-4" />
-        </Button>
+        {triggerElement}
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>

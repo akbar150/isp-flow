@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Phone, Loader2 } from "lucide-react";
@@ -33,7 +34,7 @@ interface QuickCallRecordProps {
   customerId: string;
   customerName: string;
   onSuccess?: () => void;
-  variant?: "icon" | "button";
+  variant?: "icon" | "button" | "dropdown";
 }
 
 export function QuickCallRecord({
@@ -91,6 +92,65 @@ export function QuickCallRecord({
       setSaving(false);
     }
   };
+
+  // For dropdown variant, render as a DropdownMenuItem that triggers the popover
+  if (variant === "dropdown") {
+    return (
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+            <Phone className="h-4 w-4 mr-2" />
+            Add Call Record
+          </DropdownMenuItem>
+        </PopoverTrigger>
+        <PopoverContent className="w-80" align="end" side="left">
+          <div className="space-y-3">
+            <div className="font-medium text-sm">Quick Call Record</div>
+            <p className="text-xs text-muted-foreground">{customerName}</p>
+            
+            <Select value={outcome} onValueChange={setOutcome}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select outcome..." />
+              </SelectTrigger>
+              <SelectContent>
+                {CALL_OUTCOMES.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="কল নোট... (optional)"
+              className="min-h-[80px] text-sm"
+            />
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => setOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="flex-1"
+                onClick={handleSubmit}
+                disabled={saving || !outcome}
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+              </Button>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

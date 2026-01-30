@@ -12,9 +12,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Edit2, Trash2 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
+import { Plus, Edit2, Trash2, MoreVertical } from "lucide-react";
 
 interface Package {
   id: string;
@@ -27,6 +36,8 @@ interface Package {
 }
 
 export default function Packages() {
+  const { isSuperAdmin } = useAuth();
+  const { canCreate, canUpdate, canDelete } = usePermissions();
   const [packages, setPackages] = useState<Package[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -40,6 +51,11 @@ export default function Packages() {
     description: "",
     is_active: true,
   });
+
+  // Permission checks
+  const canCreatePackage = isSuperAdmin || canCreate("packages");
+  const canEditPackage = isSuperAdmin || canUpdate("packages");
+  const canDeletePackage = isSuperAdmin || canDelete("packages");
 
   useEffect(() => {
     fetchPackages();
@@ -125,6 +141,14 @@ export default function Packages() {
   };
 
   const handleEdit = (pkg: Package) => {
+    if (!canEditPackage) {
+      toast({
+        title: "Access Denied",
+        description: "You don't have permission to edit packages",
+        variant: "destructive",
+      });
+      return;
+    }
     setEditingPackage(pkg);
     setFormData({
       name: pkg.name,
@@ -138,6 +162,14 @@ export default function Packages() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canDeletePackage) {
+      toast({
+        title: "Access Denied",
+        description: "You don't have permission to delete packages",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!confirm("Are you sure you want to delete this package?")) return;
 
     try {
@@ -183,90 +215,92 @@ export default function Packages() {
           <h1 className="page-title">Internet Packages</h1>
           <p className="page-description">Manage your service packages and pricing</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) resetForm();
-        }}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Package
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {editingPackage ? "Edit Package" : "Add New Package"}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label>Package Name *</Label>
-                <Input
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., Standard Plan"
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+        {canCreatePackage && (
+          <Dialog open={dialogOpen} onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) resetForm();
+          }}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Package
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>
+                  {editingPackage ? "Edit Package" : "Add New Package"}
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
-                  <Label>Speed (Mbps) *</Label>
+                  <Label>Package Name *</Label>
+                  <Input
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g., Standard Plan"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Speed (Mbps) *</Label>
+                    <Input
+                      type="number"
+                      value={formData.speed_mbps}
+                      onChange={(e) => setFormData({ ...formData, speed_mbps: e.target.value })}
+                      placeholder="20"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Monthly Price (৳) *</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={formData.monthly_price}
+                      onChange={(e) => setFormData({ ...formData, monthly_price: e.target.value })}
+                      placeholder="500"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Validity Days *</Label>
                   <Input
                     type="number"
-                    value={formData.speed_mbps}
-                    onChange={(e) => setFormData({ ...formData, speed_mbps: e.target.value })}
-                    placeholder="20"
+                    value={formData.validity_days}
+                    onChange={(e) => setFormData({ ...formData, validity_days: e.target.value })}
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Monthly Price (৳) *</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.monthly_price}
-                    onChange={(e) => setFormData({ ...formData, monthly_price: e.target.value })}
-                    placeholder="500"
-                    required
+                  <Label>Description</Label>
+                  <Textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Package features and details..."
                   />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Validity Days *</Label>
-                <Input
-                  type="number"
-                  value={formData.validity_days}
-                  onChange={(e) => setFormData({ ...formData, validity_days: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Package features and details..."
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <Switch
-                  checked={formData.is_active}
-                  onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-                />
-                <Label>Active</Label>
-              </div>
-              <div className="flex justify-end gap-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">
-                  {editingPackage ? "Update" : "Create"} Package
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={formData.is_active}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                  />
+                  <Label>Active</Label>
+                </div>
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit">
+                    {editingPackage ? "Update" : "Create"} Package
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {/* Packages Grid */}
@@ -281,8 +315,43 @@ export default function Packages() {
               key={pkg.id}
               className={`form-section relative ${!pkg.is_active ? 'opacity-60' : ''}`}
             >
+              {/* Actions dropdown - only show if user has edit or delete permission */}
+              {(canEditPackage || canDeletePackage) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="absolute top-2 right-2 h-8 w-8"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {canEditPackage && (
+                      <DropdownMenuItem onClick={() => handleEdit(pkg)}>
+                        <Edit2 className="h-4 w-4 mr-2" />
+                        Edit
+                      </DropdownMenuItem>
+                    )}
+                    {canDeletePackage && (
+                      <>
+                        {canEditPackage && <DropdownMenuSeparator />}
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => handleDelete(pkg.id)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              
               {!pkg.is_active && (
-                <span className="absolute top-3 right-3 text-xs bg-muted px-2 py-1 rounded">
+                <span className="absolute top-3 left-3 text-xs bg-muted px-2 py-1 rounded">
                   Inactive
                 </span>
               )}
@@ -297,25 +366,6 @@ export default function Packages() {
                 <p>🚀 Speed: {pkg.speed_mbps} Mbps</p>
                 <p>📅 Validity: {pkg.validity_days} days</p>
                 {pkg.description && <p>📋 {pkg.description}</p>}
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => handleEdit(pkg)}
-                >
-                  <Edit2 className="h-4 w-4 mr-1" />
-                  Edit
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                  onClick={() => handleDelete(pkg.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
               </div>
             </div>
           ))
