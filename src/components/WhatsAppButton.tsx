@@ -95,11 +95,23 @@ export function WhatsAppButton({
   }, [computedMessage, loading]);
 
   const handleSend = () => {
-    // Log the message to help debug emoji issues
-    console.log("WhatsApp message being sent:", message);
+    // Debug: Check for any character issues
+    console.log("=== WhatsApp Debug ===");
+    console.log("Raw message:", message);
     console.log("Message length:", message.length);
     
+    // Check for any replacement characters or encoding issues
+    const hasReplacementChar = message.includes('\uFFFD');
+    const hasQuestionMark = /[\?\uFFFD]/.test(message);
+    console.log("Has replacement char (�):", hasReplacementChar);
+    
+    // Log first few emoji codepoints to verify encoding
+    const emojiMatches = message.match(/[\u{1F300}-\u{1F9FF}]/gu) || [];
+    console.log("Emojis found:", emojiMatches.slice(0, 5).join(', '));
+    console.log("Emoji codepoints:", emojiMatches.slice(0, 5).map(e => e.codePointAt(0)?.toString(16)));
+    
     const url = getWhatsAppUrl(phone, message);
+    console.log("WhatsApp URL length:", url.length);
     console.log("WhatsApp URL:", url);
     
     window.open(url, '_blank');
