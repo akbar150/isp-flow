@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,13 +45,8 @@ export function AreaManagement() {
 
   const fetchAreas = async () => {
     try {
-      const { data, error } = await supabase
-        .from("areas")
-        .select("*")
-        .order("name");
-
-      if (error) throw error;
-      setAreas(data || []);
+      const { data } = await api.get('/areas');
+      setAreas(data.areas || []);
     } catch (error) {
       console.error("Error fetching areas:", error);
       toast({
@@ -78,23 +73,16 @@ export function AreaManagement() {
 
     try {
       if (editingArea) {
-        const { error } = await supabase
-          .from("areas")
-          .update({
-            name: formData.name.trim(),
-            description: formData.description.trim() || null,
-          })
-          .eq("id", editingArea.id);
-
-        if (error) throw error;
-        toast({ title: "Success", description: "Area updated" });
-      } else {
-        const { error } = await supabase.from("areas").insert({
+        await api.put(`/areas/${editingArea.id}`, {
           name: formData.name.trim(),
           description: formData.description.trim() || null,
         });
-
-        if (error) throw error;
+        toast({ title: "Success", description: "Area updated" });
+      } else {
+        await api.post('/areas', {
+          name: formData.name.trim(),
+          description: formData.description.trim() || null,
+        });
         toast({ title: "Success", description: "Area added" });
       }
 
@@ -118,8 +106,7 @@ export function AreaManagement() {
     }
 
     try {
-      const { error } = await supabase.from("areas").delete().eq("id", id);
-      if (error) throw error;
+      await api.delete(`/areas/${id}`);
       toast({ title: "Success", description: "Area deleted" });
       fetchAreas();
     } catch (error: unknown) {
