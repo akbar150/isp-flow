@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,15 +81,8 @@ export default function CustomerPortal() {
 
   const fetchPayments = async (customerId: string) => {
     try {
-      const { data, error } = await supabase
-        .from("payments")
-        .select("id, amount, payment_date, method, transaction_id")
-        .eq("customer_id", customerId)
-        .order("payment_date", { ascending: false })
-        .limit(20);
-
-      if (error) throw error;
-      setPayments(data || []);
+      const { data } = await api.get(`/customer-auth/payments/${customerId}`);
+      setPayments(data.payments || []);
     } catch (error) {
       console.error("Error fetching payments:", error);
     } finally {
@@ -124,18 +117,14 @@ export default function CustomerPortal() {
 
     setUpdating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("customer-auth", {
-        body: {
-          action: "update_profile",
-          user_id: customer.user_id,
-          password: profileData.current_password,
-          phone: profileData.phone !== customer.phone ? profileData.phone : undefined,
-          address: profileData.address !== customer.address ? profileData.address : undefined,
-          new_password: profileData.new_password || undefined,
-        },
+      const { data } = await api.post("/customer-auth/update-profile", {
+        user_id: customer.user_id,
+        password: profileData.current_password,
+        phone: profileData.phone !== customer.phone ? profileData.phone : undefined,
+        address: profileData.address !== customer.address ? profileData.address : undefined,
+        new_password: profileData.new_password || undefined,
       });
 
-      if (error) throw error;
       if (!data.success) throw new Error(data.error);
 
       // Update local storage

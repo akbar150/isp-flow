@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -85,86 +85,17 @@ export function UserManagement() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      
-      // Get current session for Authorization header
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error("Not authenticated");
-      }
-
-      // Fetch users with their emails via edge function
-      const { data: usersData, error: usersError } = await supabase.functions.invoke("manage-user", {
-        body: { action: "list" },
-      });
-
-      if (usersError) {
-        console.error("Edge function network error:", usersError);
-        toast({
-          variant: "destructive",
-          title: "Connection Error",
-          description: "Failed to connect to the server. Using local data.",
-        });
-        await fetchUsersLocally();
-        return;
-      }
-
-      if (usersData?.success === false) {
-        console.error("Edge function returned error:", usersData.error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: usersData.error || "Failed to load users",
-        });
-        await fetchUsersLocally();
-        return;
-      }
-
-      if (usersData?.users) {
-        setUsers(usersData.users);
-      } else {
-        await fetchUsersLocally();
-      }
+      const { data } = await api.get('/users');
+      setUsers(data.users || []);
     } catch (error) {
       console.error("Error fetching users:", error);
-      await fetchUsersLocally();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchUsersLocally = async () => {
-    try {
-      const { data: rolesData, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("user_id, role, created_at");
-
-      if (rolesError) throw rolesError;
-
-      const { data: profilesData, error: profilesError } = await supabase
-        .from("profiles")
-        .select("user_id, full_name");
-
-      if (profilesError) throw profilesError;
-
-      const usersWithProfiles: AdminUser[] = rolesData.map((role) => {
-        const profile = profilesData.find((p) => p.user_id === role.user_id);
-        return {
-          id: role.user_id,
-          email: role.user_id === currentUser?.id ? (currentUser.email || "") : "(email hidden)",
-          full_name: profile?.full_name || null,
-          role: role.role as AppRole,
-          created_at: role.created_at,
-        };
-      });
-
-      setUsers(usersWithProfiles);
-    } catch (error) {
-      console.error("Error fetching users locally:", error);
       toast({
         variant: "destructive",
         title: "Error",
         description: "Failed to fetch users",
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -193,11 +124,8 @@ export function UserManagement() {
 
     setCreating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("manage-user", {
-        body: { action: "create", ...formData },
-      });
+      const { data } = await api.post('/users', formData);
 
-      if (error) throw error;
       if (!data.success) throw new Error(data.error);
 
       toast({
@@ -225,12 +153,8 @@ export function UserManagement() {
 
     setCreating(true);
     try {
-      const updateData: Record<string, unknown> = {
-        action: "update",
-        user_id: selectedUser.id,
-      };
+      const updateData: Record<string, unknown> = {};
 
-      // Always include fields that can be updated
       if (editData.email && editData.email !== selectedUser.email && editData.email !== "(email hidden)") {
         updateData.email = editData.email;
       }
@@ -244,11 +168,8 @@ export function UserManagement() {
         updateData.role = editData.role;
       }
 
-      const { data, error } = await supabase.functions.invoke("manage-user", {
-        body: updateData,
-      });
+      const { data } = await api.put(`/users/${selectedUser.id}`, updateData);
 
-      if (error) throw error;
       if (!data.success) throw new Error(data.error);
 
       toast({
@@ -276,11 +197,7 @@ export function UserManagement() {
 
     setCreating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("manage-user", {
-        body: { action: "reset_password", email: resetEmail },
-      });
-
-      if (error) throw error;
+      const { data } = await api.post('/auth/reset-password', { email: resetEmail });
 
       toast({
         title: "Password Reset Sent",
@@ -317,11 +234,8 @@ export function UserManagement() {
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke("manage-user", {
-        body: { action: "delete", user_id: userId },
-      });
+      const { data } = await api.delete(`/users/${userId}`);
 
-      if (error) throw error;
       if (!data.success) throw new Error(data.error);
 
       toast({
@@ -524,49 +438,101 @@ export function UserManagement() {
         </div>
       </div>
 
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>User</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {users.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  No users found
+                </TableCell>
+              </TableRow>
+            ) : (
+              users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>
+                    <div>
+                      <p className="font-medium">{user.full_name || "No name"}</p>
+                      <p className="text-sm text-muted-foreground">{user.email}</p>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={getRoleBadgeVariant(user.role)} className="flex items-center w-fit">
+                      {getRoleIcon(user.role)}
+                      {user.role.replace("_", " ")}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {new Date(user.created_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => openEditDialog(user)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      {user.id !== currentUser?.id && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteUser(user.id, user.role)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
       {/* Edit User Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+      <Dialog open={editDialogOpen} onOpenChange={(open) => {
+        setEditDialogOpen(open);
+        if (!open) setSelectedUser(null);
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-email">Email</Label>
+              <Label>Email</Label>
               <Input
-                id="edit-email"
                 type="email"
-                placeholder="user@example.com"
                 value={editData.email}
                 onChange={(e) => setEditData({ ...editData, email: e.target.value })}
-                disabled={!isSuperAdmin}
               />
-              {!isSuperAdmin && (
-                <p className="text-xs text-muted-foreground">Only Super Admins can change email addresses</p>
-              )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-full_name">Full Name</Label>
+              <Label>Full Name</Label>
               <Input
-                id="edit-full_name"
-                placeholder="John Doe"
                 value={editData.full_name}
                 onChange={(e) => setEditData({ ...editData, full_name: e.target.value })}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-password">New Password (leave blank to keep current)</Label>
+              <Label>New Password (leave blank to keep current)</Label>
               <Input
-                id="edit-password"
                 type="password"
-                placeholder="••••••••"
                 value={editData.password}
                 onChange={(e) => setEditData({ ...editData, password: e.target.value })}
+                placeholder="••••••••"
               />
             </div>
-            {isSuperAdmin && selectedUser && (
+            {isSuperAdmin && (
               <div className="space-y-2">
-                <Label htmlFor="edit-role">Role</Label>
+                <Label>Role</Label>
                 <Select
                   value={editData.role}
                   onValueChange={(value: AppRole) => setEditData({ ...editData, role: value })}
@@ -575,24 +541,9 @@ export function UserManagement() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="super_admin">
-                      <div className="flex items-center gap-2">
-                        <Crown className="h-4 w-4" />
-                        Super Admin
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="admin">
-                      <div className="flex items-center gap-2">
-                        <Shield className="h-4 w-4" />
-                        Admin
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="staff">
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4" />
-                        Staff
-                      </div>
-                    </SelectItem>
+                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="staff">Staff</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -610,70 +561,6 @@ export function UserManagement() {
           </div>
         </DialogContent>
       </Dialog>
-
-      <div className="border rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    No users found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.full_name || "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{user.email || "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={getRoleBadgeVariant(user.role)} className="flex items-center w-fit">
-                        {getRoleIcon(user.role)}
-                        {user.role.replace("_", " ")}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {new Date(user.created_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEditDialog(user)}
-                          title="Edit user"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        {(isSuperAdmin || user.role === "staff") && user.id !== currentUser?.id && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteUser(user.id, user.role)}
-                            className="text-destructive hover:text-destructive"
-                            title="Delete user"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
     </div>
   );
 }

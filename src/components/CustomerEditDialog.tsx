@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { supabase } from "@/integrations/supabase/client";
+import api from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { CalendarIcon, Loader2 } from "lucide-react";
@@ -112,23 +112,18 @@ export function CustomerEditDialog({
 
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("customers")
-        .update({
-          full_name: formData.full_name,
-          phone: formData.phone,
-          alt_phone: formData.alt_phone || null,
-          address: formData.address,
-          area_id: formData.area_id || null,
-          router_id: formData.router_id || null,
-          package_id: formData.package_id || null,
-          status: formData.status,
-          billing_start_date: format(formData.billing_start_date, "yyyy-MM-dd"),
-          expiry_date: format(formData.expiry_date, "yyyy-MM-dd"),
-        })
-        .eq("id", customer.id);
-
-      if (error) throw error;
+      await api.put(`/customers/${customer.id}`, {
+        full_name: formData.full_name,
+        phone: formData.phone,
+        alt_phone: formData.alt_phone || null,
+        address: formData.address,
+        area_id: formData.area_id || null,
+        router_id: formData.router_id || null,
+        package_id: formData.package_id || null,
+        status: formData.status,
+        billing_start_date: format(formData.billing_start_date, "yyyy-MM-dd"),
+        expiry_date: format(formData.expiry_date, "yyyy-MM-dd"),
+      });
 
       toast({ title: "Customer updated successfully" });
       onOpenChange(false);
