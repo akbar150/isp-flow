@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Save, Smartphone, Shield } from "lucide-react";
 
@@ -26,15 +26,21 @@ export function FirebaseOtpSettings() {
 
   const fetchSettings = async () => {
     try {
-      const { data } = await api.get('/settings');
-      if (data.settings) {
+      const { data } = await supabase.from("system_settings").select("*");
+      if (data) {
+        const settingsMap: Record<string, string> = {};
+        data.forEach((s) => {
+          settingsMap[s.key] = typeof s.value === "string" 
+            ? s.value.replace(/^"|"$/g, "") 
+            : JSON.stringify(s.value).replace(/^"|"$/g, "");
+        });
         setSettings({
-          firebase_otp_enabled: data.settings.firebase_otp_enabled === true || data.settings.firebase_otp_enabled === "true",
-          firebase_api_key: data.settings.firebase_api_key || "",
-          firebase_auth_domain: data.settings.firebase_auth_domain || "",
-          firebase_project_id: data.settings.firebase_project_id || "",
-          firebase_app_id: data.settings.firebase_app_id || "",
-          firebase_messaging_sender_id: data.settings.firebase_messaging_sender_id || "",
+          firebase_otp_enabled: settingsMap.firebase_otp_enabled === "true",
+          firebase_api_key: settingsMap.firebase_api_key || "",
+          firebase_auth_domain: settingsMap.firebase_auth_domain || "",
+          firebase_project_id: settingsMap.firebase_project_id || "",
+          firebase_app_id: settingsMap.firebase_app_id || "",
+          firebase_messaging_sender_id: settingsMap.firebase_messaging_sender_id || "",
         });
       }
     } catch (error) {
@@ -47,14 +53,21 @@ export function FirebaseOtpSettings() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await api.put('/settings', {
-        firebase_otp_enabled: settings.firebase_otp_enabled,
-        firebase_api_key: settings.firebase_api_key,
-        firebase_auth_domain: settings.firebase_auth_domain,
-        firebase_project_id: settings.firebase_project_id,
-        firebase_app_id: settings.firebase_app_id,
-        firebase_messaging_sender_id: settings.firebase_messaging_sender_id,
-      });
+      const updates = [
+        { key: "firebase_otp_enabled", value: JSON.stringify(settings.firebase_otp_enabled) },
+        { key: "firebase_api_key", value: JSON.stringify(settings.firebase_api_key) },
+        { key: "firebase_auth_domain", value: JSON.stringify(settings.firebase_auth_domain) },
+        { key: "firebase_project_id", value: JSON.stringify(settings.firebase_project_id) },
+        { key: "firebase_app_id", value: JSON.stringify(settings.firebase_app_id) },
+        { key: "firebase_messaging_sender_id", value: JSON.stringify(settings.firebase_messaging_sender_id) },
+      ];
+
+      for (const update of updates) {
+        await supabase.from("system_settings").upsert(
+          { ...update, updated_at: new Date().toISOString() },
+          { onConflict: "key" }
+        );
+      }
 
       toast({ title: "Firebase OTP settings saved successfully" });
     } catch (error) {

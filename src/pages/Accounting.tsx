@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
@@ -28,13 +29,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import {
   TrendingUp,
   TrendingDown,
+  Plus,
   DollarSign,
   Wallet,
   Building,
@@ -66,6 +68,7 @@ interface Category {
   name: string;
   description: string | null;
   is_active: boolean;
+  type?: "income" | "expense";
 }
 
 interface PaymentSummary {
@@ -148,17 +151,41 @@ export default function Accounting() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/reports/accounting', {
-        params: {
-          start_date: dateFilter.start,
-          end_date: dateFilter.end,
-        },
-      });
+      const [transactionsRes, expenseCategoriesRes, paymentsRes] = await Promise.all([
+        supabase
+          .from("transactions")
+          .select("*, expense_categories(name)")
+          .gte("transaction_date", dateFilter.start)
+          .lte("transaction_date", dateFilter.end)
+          .order("transaction_date", { ascending: false }),
+        supabase
+          .from("expense_categories")
+          .select("*")
+          .eq("is_active", true)
+          .order("name"),
+        supabase
+          .from("payments")
+          .select("*, customers(user_id, full_name)")
+          .gte("payment_date", dateFilter.start)
+          .lte("payment_date", dateFilter.end)
+          .order("payment_date", { ascending: false }),
+      ]);
 
-      setTransactions(data.transactions || []);
-      setExpenseCategories(data.categories || []);
-      setIncomeCategories(data.categories || []);
-      setPayments(data.payments || []);
+      if (transactionsRes.error) throw transactionsRes.error;
+
+      const typedTransactions = (transactionsRes.data || []).map((t) => ({
+        ...t,
+        type: t.type as "income" | "expense",
+      }));
+
+      setTransactions(typedTransactions);
+      setExpenseCategories(expenseCategoriesRes.data || []);
+      
+      // Use expense categories for income too (for now) or filter by category purpose
+      // In future, could add a "category_type" field to distinguish
+      setIncomeCategories(expenseCategoriesRes.data || []);
+      
+      setPayments(paymentsRes.data as Payment[] || []);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
@@ -181,13 +208,19 @@ export default function Accounting() {
         category_id: formData.category_id || null,
         description: formData.description || null,
         transaction_date: formData.transaction_date,
+        created_by: user?.id,
       };
 
       if (editingTransaction) {
-        await api.put(`/reports/transactions/${editingTransaction.id}`, transactionData);
+        const { error } = await supabase
+          .from("transactions")
+          .update(transactionData)
+          .eq("id", editingTransaction.id);
+        if (error) throw error;
         toast({ title: "Success", description: "Transaction updated" });
       } else {
-        await api.post('/reports/transactions', transactionData);
+        const { error } = await supabase.from("transactions").insert(transactionData);
+        if (error) throw error;
         toast({ title: "Success", description: "Transaction added" });
       }
 
@@ -208,7 +241,8 @@ export default function Accounting() {
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this transaction?")) return;
     try {
-      await api.delete(`/reports/transactions/${id}`);
+      const { error } = await supabase.from("transactions").delete().eq("id", id);
+      if (error) throw error;
       toast({ title: "Success", description: "Transaction deleted" });
       fetchData();
     } catch (error: unknown) {
@@ -466,7 +500,7 @@ export default function Accounting() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="all">All</SelectItem>
               <SelectItem value="income">Income</SelectItem>
               <SelectItem value="expense">Expense</SelectItem>
             </SelectContent>
@@ -474,217 +508,297 @@ export default function Accounting() {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-green-500" />
-              Total Income
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</div>
-            <p className="text-xs text-muted-foreground">Payments + Other Income</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-red-500" />
-              Total Expenses
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{formatCurrency(totalExpense)}</div>
-            <p className="text-xs text-muted-foreground">All expenses</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
-              {formatCurrency(netProfit)}
-            </div>
-            <p className="text-xs text-muted-foreground">Income - Expenses</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Transactions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{filteredTransactions.length}</div>
-            <p className="text-xs text-muted-foreground">This period</p>
-          </CardContent>
-        </Card>
-      </div>
-
       {loading ? (
-        <div className="flex items-center justify-center py-12">
+        <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <Tabs defaultValue="transactions" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="transactions">Transactions ({filteredTransactions.length})</TabsTrigger>
-            <TabsTrigger value="summary">Summary</TabsTrigger>
-          </TabsList>
+        <>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Payment Collections
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold text-green-600">
+                  {formatCurrency(totalPaymentIncome)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  From customer payments
+                </p>
+              </CardContent>
+            </Card>
 
-          <TabsContent value="transactions" className="space-y-4">
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={exportTransactionsCSV}>
-                <Download className="h-4 w-4 mr-2" />
-                CSV
-              </Button>
-              <Button variant="outline" size="sm" onClick={exportTransactionsPDF}>
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
-              </Button>
-            </div>
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Method</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTransactions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                        No transactions found for this period
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredTransactions.map((t) => (
-                      <TableRow key={t.id}>
-                        <TableCell>{format(new Date(t.transaction_date), "dd MMM yyyy")}</TableCell>
-                        <TableCell>
-                          <span className={`px-2 py-1 rounded-full text-xs ${
-                            t.type === "income" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                          }`}>
-                            {t.type}
-                          </span>
-                        </TableCell>
-                        <TableCell>{t.expense_categories?.name || "-"}</TableCell>
-                        <TableCell className="max-w-xs truncate">{t.description || "-"}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {getPaymentMethodIcon(t.payment_method)}
-                            <span className="capitalize">{t.payment_method.replace("_", " ")}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className={`text-right font-medium ${
-                          t.type === "income" ? "text-green-600" : "text-red-600"
-                        }`}>
-                          {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => openEditDialog(t)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(t.id)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Other Income
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold text-blue-600">
+                  {formatCurrency(totalTransactionIncome)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  External income entries
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Total Expenses
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold text-red-600">
+                  {formatCurrency(totalExpense)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  All recorded expenses
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className={netProfit >= 0 ? "border-green-200 bg-green-50/50" : "border-red-200 bg-red-50/50"}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Net {netProfit >= 0 ? "Profit" : "Loss"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className={`text-2xl font-bold ${netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  {formatCurrency(Math.abs(netProfit))}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Income - Expenses
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Tabs defaultValue="transactions" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="transactions">Transactions</TabsTrigger>
+              <TabsTrigger value="summary">Summary</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="transactions">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>All Transactions</CardTitle>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={exportTransactionsCSV}>
+                      <Download className="h-4 w-4 mr-1" />
+                      CSV
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={exportTransactionsPDF}>
+                      <FileText className="h-4 w-4 mr-1" />
+                      PDF
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Method</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </TabsContent>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredTransactions.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center text-muted-foreground">
+                            No transactions found
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredTransactions.map((t) => (
+                          <TableRow key={t.id}>
+                            <TableCell>
+                              {format(new Date(t.transaction_date), "dd MMM yyyy")}
+                            </TableCell>
+                            <TableCell>
+                              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
+                                t.type === "income" 
+                                  ? "bg-green-100 text-green-700" 
+                                  : "bg-red-100 text-red-700"
+                              }`}>
+                                {t.type === "income" ? (
+                                  <TrendingUp className="h-3 w-3" />
+                                ) : (
+                                  <TrendingDown className="h-3 w-3" />
+                                )}
+                                {t.type}
+                              </span>
+                            </TableCell>
+                            <TableCell>{t.expense_categories?.name || "-"}</TableCell>
+                            <TableCell>
+                              <span className="inline-flex items-center gap-1">
+                                {getPaymentMethodIcon(t.payment_method)}
+                                {t.payment_method.replace("_", " ")}
+                              </span>
+                            </TableCell>
+                            <TableCell className="max-w-xs truncate">
+                              {t.description || "-"}
+                            </TableCell>
+                            <TableCell className={`text-right font-medium ${
+                              t.type === "income" ? "text-green-600" : "text-red-600"
+                            }`}>
+                              {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openEditDialog(t)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDelete(t.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-          <TabsContent value="summary" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Payment Methods</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {paymentMethodSummary.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No payments in this period</p>
-                  ) : (
+            <TabsContent value="summary">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Income by Category</CardTitle>
+                  </CardHeader>
+                  <CardContent>
                     <div className="space-y-3">
-                      {paymentMethodSummary.map((method) => (
-                        <div key={method.method} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                          <div className="flex items-center gap-3">
-                            {getPaymentMethodIcon(method.method)}
+                      {/* Payment collections as a category */}
+                      <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                        <div>
+                          <p className="font-medium">Customer Payments</p>
+                          <p className="text-sm text-muted-foreground">{payments.length} payments</p>
+                        </div>
+                        <p className="font-bold text-green-600">{formatCurrency(totalPaymentIncome)}</p>
+                      </div>
+                      {incomeCategorySummary.map((item) => (
+                        <div key={item.category} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                          <div>
+                            <p className="font-medium">{item.category}</p>
+                            <p className="text-sm text-muted-foreground">{item.count} entries</p>
+                          </div>
+                          <p className="font-bold text-green-600">{formatCurrency(item.total)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Expenses by Category</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {categorySummary.length === 0 ? (
+                        <p className="text-muted-foreground text-center py-4">No expenses recorded</p>
+                      ) : (
+                        categorySummary.map((item) => (
+                          <div key={item.category} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                             <div>
-                              <p className="font-medium capitalize">{method.method.replace("_", " ")}</p>
-                              <p className="text-xs text-muted-foreground">{method.count} payments</p>
+                              <p className="font-medium">{item.category}</p>
+                              <p className="text-sm text-muted-foreground">{item.count} entries</p>
                             </div>
+                            <p className="font-bold text-red-600">{formatCurrency(item.total)}</p>
                           </div>
-                          <span className="font-bold text-green-600">{formatCurrency(method.total)}</span>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
-                  )}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Expense Categories</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {categorySummary.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No expenses in this period</p>
-                  ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Collections by Payment Method</CardTitle>
+                  </CardHeader>
+                  <CardContent>
                     <div className="space-y-3">
-                      {categorySummary.map((cat) => (
-                        <div key={cat.category} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                          <div>
-                            <p className="font-medium">{cat.category}</p>
-                            <p className="text-xs text-muted-foreground">{cat.count} transactions</p>
+                      {paymentMethodSummary.length === 0 ? (
+                        <p className="text-muted-foreground text-center py-4">No payments recorded</p>
+                      ) : (
+                        paymentMethodSummary.map((item) => (
+                          <div key={item.method} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              {getPaymentMethodIcon(item.method)}
+                              <div>
+                                <p className="font-medium capitalize">{item.method.replace("_", " ")}</p>
+                                <p className="text-sm text-muted-foreground">{item.count} payments</p>
+                              </div>
+                            </div>
+                            <p className="font-bold">{formatCurrency(item.total)}</p>
                           </div>
-                          <span className="font-bold text-red-600">{formatCurrency(cat.total)}</span>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
-                  )}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Income Categories</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {incomeCategorySummary.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No other income in this period</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {incomeCategorySummary.map((cat) => (
-                        <div key={cat.category} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                          <div>
-                            <p className="font-medium">{cat.category}</p>
-                            <p className="text-xs text-muted-foreground">{cat.count} transactions</p>
-                          </div>
-                          <span className="font-bold text-green-600">{formatCurrency(cat.total)}</span>
-                        </div>
-                      ))}
+                <Card className={netProfit >= 0 ? "border-green-300" : "border-red-300"}>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Profit & Loss Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                        <span>Total Income</span>
+                        <span className="font-bold text-green-600">{formatCurrency(totalIncome)}</span>
+                      </div>
+                      <div className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
+                        <span>Total Expenses</span>
+                        <span className="font-bold text-red-600">-{formatCurrency(totalExpense)}</span>
+                      </div>
+                      <hr />
+                      <div className={`flex justify-between items-center p-4 rounded-lg ${
+                        netProfit >= 0 ? "bg-green-100" : "bg-red-100"
+                      }`}>
+                        <span className="font-medium text-lg">
+                          Net {netProfit >= 0 ? "Profit" : "Loss"}
+                        </span>
+                        <span className={`font-bold text-2xl ${
+                          netProfit >= 0 ? "text-green-700" : "text-red-700"
+                        }`}>
+                          {formatCurrency(Math.abs(netProfit))}
+                        </span>
+                      </div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-        </Tabs>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </>
       )}
 
-      {/* Transaction Dialog */}
+      {/* Add/Edit Transaction Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => {
         setDialogOpen(open);
         if (!open) {
@@ -698,52 +812,49 @@ export default function Accounting() {
               {editingTransaction ? "Edit Transaction" : `Add ${formData.type === "income" ? "Income" : "Expense"}`}
             </DialogTitle>
             <DialogDescription>
-              {editingTransaction ? "Update the transaction details below" : "Enter the transaction details below"}
+              {formData.type === "income" 
+                ? "Record external income or other revenue sources"
+                : "Record business expenses and costs"
+              }
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value: "income" | "expense") =>
-                  setFormData({ ...formData, type: value, category_id: "" })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="income">Income</SelectItem>
-                  <SelectItem value="expense">Expense</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <Select
+                  value={formData.type}
+                  onValueChange={(v) => setFormData({ ...formData, type: v as "income" | "expense", category_id: "" })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="income">Income</SelectItem>
+                    <SelectItem value="expense">Expense</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <Label>Amount *</Label>
                 <Input
                   type="number"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  placeholder="0.00"
                   required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Date</Label>
-                <Input
-                  type="date"
-                  value={formData.transaction_date}
-                  onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
+                  min="0"
+                  step="0.01"
                 />
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Payment Method</Label>
                 <Select
                   value={formData.payment_method}
-                  onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
+                  onValueChange={(v) => setFormData({ ...formData, payment_method: v })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -759,7 +870,7 @@ export default function Accounting() {
                 <Label>Category</Label>
                 <Select
                   value={formData.category_id}
-                  onValueChange={(value) => setFormData({ ...formData, category_id: value })}
+                  onValueChange={(v) => setFormData({ ...formData, category_id: v })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select category" />
@@ -774,16 +885,27 @@ export default function Accounting() {
                 </Select>
               </div>
             </div>
+
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={formData.transaction_date}
+                onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
+              />
+            </div>
+
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Optional description..."
+                placeholder="Optional notes..."
               />
             </div>
+
             <Button type="submit" className="w-full">
-              {editingTransaction ? "Update" : "Add"} Transaction
+              {editingTransaction ? "Update Transaction" : "Add Transaction"}
             </Button>
           </form>
         </DialogContent>

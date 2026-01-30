@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { Phone, Plus, User } from "lucide-react";
 import { format } from "date-fns";
 import { CallRecordDialog } from "./CallRecordDialog";
@@ -25,8 +25,14 @@ export function CustomerCallRecords({ customerId, customerName }: CustomerCallRe
 
   const fetchRecords = async () => {
     try {
-      const response = await api.get(`/activity/call-records/${customerId}`);
-      setRecords(response.data.records || []);
+      const { data, error } = await supabase
+        .from("call_records")
+        .select("*")
+        .eq("customer_id", customerId)
+        .order("call_date", { ascending: false });
+
+      if (error) throw error;
+      setRecords(data || []);
     } catch (error) {
       console.error("Error fetching call records:", error);
     } finally {

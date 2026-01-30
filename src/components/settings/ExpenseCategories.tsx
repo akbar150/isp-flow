@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,8 +56,13 @@ export function ExpenseCategories() {
 
   const fetchCategories = async () => {
     try {
-      const { data } = await api.get('/reports/expense-categories');
-      setCategories(data.categories || []);
+      const { data, error } = await supabase
+        .from("expense_categories")
+        .select("*")
+        .order("name");
+
+      if (error) throw error;
+      setCategories(data || []);
     } catch (error) {
       console.error("Error fetching categories:", error);
       toast({
@@ -84,18 +89,25 @@ export function ExpenseCategories() {
 
     try {
       if (editingCategory) {
-        await api.put(`/reports/expense-categories/${editingCategory.id}`, {
-          name: formData.name.trim(),
-          description: formData.description.trim() || null,
-          is_active: formData.is_active,
-        });
+        const { error } = await supabase
+          .from("expense_categories")
+          .update({
+            name: formData.name.trim(),
+            description: formData.description.trim() || null,
+            is_active: formData.is_active,
+          })
+          .eq("id", editingCategory.id);
+
+        if (error) throw error;
         toast({ title: "Success", description: "Category updated" });
       } else {
-        await api.post('/reports/expense-categories', {
+        const { error } = await supabase.from("expense_categories").insert({
           name: formData.name.trim(),
           description: formData.description.trim() || null,
           is_active: formData.is_active,
         });
+
+        if (error) throw error;
         toast({ title: "Success", description: "Category added" });
       }
 
@@ -103,12 +115,12 @@ export function ExpenseCategories() {
       setEditingCategory(null);
       resetForm();
       fetchCategories();
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error("Error saving category:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save category",
+        description: error.message || "Failed to save category",
       });
     }
   };
@@ -119,34 +131,38 @@ export function ExpenseCategories() {
     }
 
     try {
-      await api.delete(`/reports/expense-categories/${id}`);
+      const { error } = await supabase.from("expense_categories").delete().eq("id", id);
+      if (error) throw error;
       toast({ title: "Success", description: "Category deleted" });
       fetchCategories();
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error("Error deleting category:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete category",
+        description: error.message || "Failed to delete category",
       });
     }
   };
 
   const handleToggleActive = async (category: ExpenseCategory) => {
     try {
-      await api.put(`/reports/expense-categories/${category.id}`, {
-        is_active: !category.is_active,
-      });
+      const { error } = await supabase
+        .from("expense_categories")
+        .update({ is_active: !category.is_active })
+        .eq("id", category.id);
+
+      if (error) throw error;
       toast({
         title: "Success",
         description: `Category ${category.is_active ? "disabled" : "enabled"}`,
       });
       fetchCategories();
-    } catch (error: unknown) {
+    } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update category",
+        description: error.message || "Failed to update category",
       });
     }
   };

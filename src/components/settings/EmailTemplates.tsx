@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Save, Mail, Server, Eye, EyeOff, Loader2, TestTube } from "lucide-react";
 import { useIspSettings } from "@/hooks/useIspSettings";
+import { decodeSettingValue } from "@/lib/settingsValue";
 
 export function EmailTemplates() {
   const { ispName } = useIspSettings();
@@ -70,19 +71,23 @@ Thank you for choosing {ISPName}.`,
 
   const fetchSettings = async () => {
     try {
-      const { data } = await api.get('/settings');
-      if (data.settings) {
+      const { data } = await supabase.from("system_settings").select("*");
+      if (data) {
+        const settingsMap: Record<string, string> = {};
+        data.forEach((s) => {
+          settingsMap[s.key] = decodeSettingValue(s.value);
+        });
         setSettings({
-          email_from_name: data.settings.email_from_name || ispName || "",
-          email_from_address: data.settings.email_from_address || "",
-          email_subject_reminder: data.settings.email_subject_reminder || settings.email_subject_reminder,
-          email_subject_welcome: data.settings.email_subject_welcome || settings.email_subject_welcome,
-          email_template_reminder: data.settings.email_template_reminder || settings.email_template_reminder,
+          email_from_name: settingsMap.email_from_name || ispName || "",
+          email_from_address: settingsMap.email_from_address || "",
+          email_subject_reminder: settingsMap.email_subject_reminder || settings.email_subject_reminder,
+          email_subject_welcome: settingsMap.email_subject_welcome || settings.email_subject_welcome,
+          email_template_reminder: settingsMap.email_template_reminder || settings.email_template_reminder,
         });
         setSmtpSettings({
-          smtp_server: data.settings.smtp_server || "",
-          smtp_port: data.settings.smtp_port || "587",
-          smtp_username: data.settings.smtp_username || "",
+          smtp_server: settingsMap.smtp_server || "",
+          smtp_port: settingsMap.smtp_port || "587",
+          smtp_username: settingsMap.smtp_username || "",
           smtp_password: "", // Never load password - only set new
         });
       }
@@ -96,13 +101,20 @@ Thank you for choosing {ISPName}.`,
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await api.put('/settings', {
-        email_from_name: settings.email_from_name,
-        email_from_address: settings.email_from_address,
-        email_subject_reminder: settings.email_subject_reminder,
-        email_subject_welcome: settings.email_subject_welcome,
-        email_template_reminder: settings.email_template_reminder,
-      });
+      const updates = [
+        { key: "email_from_name", value: settings.email_from_name },
+        { key: "email_from_address", value: settings.email_from_address },
+        { key: "email_subject_reminder", value: settings.email_subject_reminder },
+        { key: "email_subject_welcome", value: settings.email_subject_welcome },
+        { key: "email_template_reminder", value: settings.email_template_reminder },
+      ];
+
+      for (const update of updates) {
+        await supabase.from("system_settings").upsert(
+          { ...update, updated_at: new Date().toISOString() },
+          { onConflict: "key" }
+        );
+      }
 
       toast({ title: "Email templates saved successfully" });
     } catch (error) {
@@ -119,18 +131,39 @@ Thank you for choosing {ISPName}.`,
   const saveSmtpSettings = async () => {
     setSaving(true);
     try {
-      const settingsToSave: Record<string, string> = {
-        smtp_server: smtpSettings.smtp_server,
-        smtp_port: smtpSettings.smtp_port,
-        smtp_username: smtpSettings.smtp_username,
-      };
+      // Save non-sensitive SMTP settings directly
+      const updates = [
+        { key: "smtp_server", value: smtpSettings.smtp_server },
+        { key: "smtp_port", value: smtpSettings.smtp_port },
+        { key: "smtp_username", value: smtpSettings.smtp_username },
+      ];
 
-      // Only include password if provided
-      if (smtpSettings.smtp_password) {
-        settingsToSave.smtp_password = smtpSettings.smtp_password;
+      for (const update of updates) {
+        await supabase.from("system_settings").upsert(
+          { ...update, updated_at: new Date().toISOString() },
+          { onConflict: "key" }
+        );
       }
 
-      await api.put('/settings', settingsToSave);
+      // Encrypt and save password if provided
+      if (smtpSettings.smtp_password) {
+        const { data: encryptedData, error: encryptError } = await supabase
+          .rpc("encrypt_smtp_password", { plain_password: smtpSettings.smtp_password });
+
+        if (encryptError) {
+          throw new Error("Failed to encrypt password");
+        }
+
+        await supabase.from("system_settings").upsert(
+          { 
+            key: "smtp_password_encrypted", 
+            // Store as a proper jsonb string (NOT JSON.stringify) to avoid extra escaping.
+            value: encryptedData,
+            updated_at: new Date().toISOString() 
+          },
+          { onConflict: "key" }
+        );
+      }
 
       toast({ title: "SMTP settings saved successfully" });
       setSmtpSettings(prev => ({ ...prev, smtp_password: "" }));
@@ -158,16 +191,52 @@ Thank you for choosing {ISPName}.`,
 
     setTesting(true);
     try {
-      const { data } = await api.post('/reminders/test-email', {
-        to: testEmail,
-        subject: `Test Email from ${ispName || "ISP Billing"}`,
-        senderName: settings.email_from_name || ispName,
-        senderEmail: settings.email_from_address || undefined,
+      const { data, error } = await supabase.functions.invoke("send-email-brevo", {
+        body: {
+          to: testEmail,
+          subject: `Test Email from ${ispName || "ISP Billing"}`,
+          senderName: settings.email_from_name || ispName,
+          senderEmail: settings.email_from_address || undefined,
+          htmlContent: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%); padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">${ispName || "ISP Billing"}</h1>
+              </div>
+              <div style="padding: 30px; background: #f9fafb;">
+                <h2 style="color: #1f2937;">✅ Email Configuration Test</h2>
+                <p style="color: #4b5563;">If you received this email, your SMTP settings are working correctly!</p>
+                <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
+                  <h3 style="color: #1f2937; margin-top: 0;">Configuration Details</h3>
+                  <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                      <td style="padding: 8px 0; color: #6b7280;">SMTP Server:</td>
+                      <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${smtpSettings.smtp_server || "Using API"}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px 0; color: #6b7280;">From Name:</td>
+                      <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${settings.email_from_name || ispName}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px 0; color: #6b7280;">From Email:</td>
+                      <td style="padding: 8px 0; color: #1f2937; font-weight: 600;">${settings.email_from_address || "Default"}</td>
+                    </tr>
+                  </table>
+                </div>
+                <p style="color: #6b7280; margin-top: 30px;">Best Regards,<br><strong>${ispName || "ISP Billing"} Team</strong></p>
+              </div>
+              <div style="background: #1f2937; padding: 15px; text-align: center;">
+                <p style="color: #9ca3af; margin: 0; font-size: 12px;">© ${new Date().getFullYear()} ${ispName || "ISP Billing"}. All rights reserved.</p>
+              </div>
+            </div>
+          `,
+        },
       });
+
+      if (error) throw error;
 
       toast({
         title: "Test email sent!",
-        description: `Check ${testEmail} for the test message.`,
+        description: `Check ${testEmail} for the test message. Provider: ${data?.provider || "unknown"}`,
       });
     } catch (error) {
       console.error("Error sending test email:", error);
@@ -382,7 +451,7 @@ Thank you for choosing {ISPName}.`,
               <code className="bg-background px-2 py-1 rounded">{"{PackageName}"}</code>
               <span>Internet package name</span>
               <code className="bg-background px-2 py-1 rounded">{"{ExpiryDate}"}</code>
-              <span>Expiry date</span>
+              <span>Subscription expiry date</span>
               <code className="bg-background px-2 py-1 rounded">{"{Amount}"}</code>
               <span>Due amount</span>
               <code className="bg-background px-2 py-1 rounded">{"{ISPName}"}</code>

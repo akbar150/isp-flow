@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
@@ -38,6 +38,7 @@ import {
   Plus,
   DollarSign,
   Wallet,
+  CreditCard,
   Building,
   Loader2,
   Edit,
@@ -110,6 +111,12 @@ interface CallRecord {
   mikrotik_users?: MikrotikUser[] | null;
 }
 
+interface CustomerOption {
+  id: string;
+  user_id: string;
+  mikrotik_users: MikrotikUser[] | null;
+}
+
 export default function Reports() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -166,17 +173,66 @@ export default function Reports() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/reports/transactions', {
-        params: {
-          start_date: dateFilter.start,
-          end_date: dateFilter.end,
-        },
+      const [transactionsRes, categoriesRes, paymentsRes, callRecordsRes, customersRes] = await Promise.all([
+        supabase
+          .from("transactions")
+          .select("*, expense_categories(name)")
+          .gte("transaction_date", dateFilter.start)
+          .lte("transaction_date", dateFilter.end)
+          .order("transaction_date", { ascending: false }),
+        supabase
+          .from("expense_categories")
+          .select("*")
+          .eq("is_active", true)
+          .order("name"),
+        supabase
+          .from("payments")
+          .select("*, customers(user_id, full_name)")
+          .gte("payment_date", dateFilter.start)
+          .lte("payment_date", dateFilter.end)
+          .order("payment_date", { ascending: false }),
+        supabase
+          .from("call_records")
+          .select("*, customers(user_id, full_name)")
+          .gte("call_date", dateFilter.start)
+          .lte("call_date", dateFilter.end + "T23:59:59")
+          .order("call_date", { ascending: false }),
+        supabase
+          .from("customers_safe")
+          .select("id, user_id, mikrotik_users:mikrotik_users_safe(id, username)"),
+      ]);
+
+      if (transactionsRes.error) throw transactionsRes.error;
+      if (categoriesRes.error) throw categoriesRes.error;
+
+      const typedTransactions = (transactionsRes.data || []).map((t) => ({
+        ...t,
+        type: t.type as "income" | "expense",
+      }));
+
+      // Enrich payments with PPPoE usernames
+      const customersData = customersRes.data as CustomerOption[] || [];
+      const enrichedPayments = (paymentsRes.data || []).map(payment => {
+        const customer = customersData.find(c => c.user_id === payment.customers?.user_id);
+        return {
+          ...payment,
+          mikrotik_users: customer?.mikrotik_users,
+        };
       });
 
-      setTransactions(data.transactions || []);
-      setPayments(data.payments || []);
-      setCallRecords(data.callRecords || []);
-      setCategories(data.categories || []);
+      // Enrich call records with PPPoE usernames
+      const enrichedCallRecords = (callRecordsRes.data || []).map(record => {
+        const customer = customersData.find(c => c.user_id === record.customers?.user_id);
+        return {
+          ...record,
+          mikrotik_users: customer?.mikrotik_users,
+        };
+      });
+
+      setTransactions(typedTransactions);
+      setCategories(categoriesRes.data || []);
+      setPayments(enrichedPayments as Payment[]);
+      setCallRecords(enrichedCallRecords as CallRecord[]);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
@@ -199,13 +255,19 @@ export default function Reports() {
         category_id: formData.type === "expense" && formData.category_id ? formData.category_id : null,
         description: formData.description || null,
         transaction_date: formData.transaction_date,
+        created_by: user?.id,
       };
 
       if (editingTransaction) {
-        await api.put(`/reports/transactions/${editingTransaction.id}`, transactionData);
+        const { error } = await supabase
+          .from("transactions")
+          .update(transactionData)
+          .eq("id", editingTransaction.id);
+        if (error) throw error;
         toast({ title: "Success", description: "Transaction updated" });
       } else {
-        await api.post('/reports/transactions', transactionData);
+        const { error } = await supabase.from("transactions").insert(transactionData);
+        if (error) throw error;
         toast({ title: "Success", description: "Transaction added" });
       }
 
@@ -226,7 +288,8 @@ export default function Reports() {
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this transaction?")) return;
     try {
-      await api.delete(`/reports/transactions/${id}`);
+      const { error } = await supabase.from("transactions").delete().eq("id", id);
+      if (error) throw error;
       toast({ title: "Success", description: "Transaction deleted" });
       fetchData();
     } catch (error: unknown) {
@@ -436,459 +499,520 @@ export default function Reports() {
 
   return (
     <DashboardLayout>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Reports</h1>
-          <p className="page-description">View payments, call records, and transactions</p>
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Financial Reports</h1>
+            <p className="text-muted-foreground">Track income, expenses, and profit/loss</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={monthFilter} onValueChange={setMonthFilter}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="current">This Month</SelectItem>
+                <SelectItem value="previous">Last Month</SelectItem>
+                <SelectItem value="last3">Last 3 Months</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+            {monthFilter === "custom" && (
+              <>
+                <Input
+                  type="date"
+                  value={dateFilter.start}
+                  onChange={(e) => setDateFilter((prev) => ({ ...prev, start: e.target.value }))}
+                  className="w-auto"
+                />
+                <span className="text-muted-foreground">to</span>
+                <Input
+                  type="date"
+                  value={dateFilter.end}
+                  onChange={(e) => setDateFilter((prev) => ({ ...prev, end: e.target.value }))}
+                  className="w-auto"
+                />
+              </>
+            )}
+            <Dialog open={dialogOpen} onOpenChange={(open) => {
+              setDialogOpen(open);
+              if (!open) {
+                setEditingTransaction(null);
+                resetForm();
+              }
+            }}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Transaction
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>
+                    {editingTransaction ? "Edit Transaction" : "Add Transaction"}
+                  </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Type</Label>
+                      <Select
+                        value={formData.type}
+                        onValueChange={(value: "income" | "expense") =>
+                          setFormData((prev) => ({ ...prev, type: value }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="income">Income</SelectItem>
+                          <SelectItem value="expense">Expense</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Amount</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={formData.amount}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Payment Method</Label>
+                      <Select
+                        value={formData.payment_method}
+                        onValueChange={(value) =>
+                          setFormData((prev) => ({ ...prev, payment_method: value }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">Cash</SelectItem>
+                          <SelectItem value="bkash">bKash</SelectItem>
+                          <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Date</Label>
+                      <Input
+                        type="date"
+                        value={formData.transaction_date}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, transaction_date: e.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  {formData.type === "expense" && (
+                    <div className="space-y-2">
+                      <Label>Category</Label>
+                      <Select
+                        value={formData.category_id}
+                        onValueChange={(value) =>
+                          setFormData((prev) => ({ ...prev, category_id: value }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>
+                              {cat.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Textarea
+                      value={formData.description}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, description: e.target.value }))
+                      }
+                      placeholder="Optional description..."
+                    />
+                  </div>
+                  <Button type="submit" className="w-full">
+                    {editingTransaction ? "Update Transaction" : "Add Transaction"}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) {
-            setEditingTransaction(null);
-            resetForm();
-          }
-        }}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Transaction
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {editingTransaction ? "Edit Transaction" : "Add Transaction"}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Type</Label>
-                <Select
-                  value={formData.type}
-                  onValueChange={(value: "income" | "expense") =>
-                    setFormData({ ...formData, type: value, category_id: "" })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="income">Income</SelectItem>
-                    <SelectItem value="expense">Expense</SelectItem>
-                  </SelectContent>
-                </Select>
+
+        {/* Summary Cards - Profit/Loss */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Payment Collections</CardTitle>
+              <TrendingUp className="h-4 w-4 text-green-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">{formatCurrency(totalPaymentIncome)}</div>
+              <p className="text-xs text-muted-foreground">
+                {payments.length} customer payments
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Other Income</CardTitle>
+              <DollarSign className="h-4 w-4 text-blue-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">{formatCurrency(totalTransactionIncome)}</div>
+              <p className="text-xs text-muted-foreground">
+                {transactions.filter((t) => t.type === "income").length} transactions
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+              <TrendingDown className="h-4 w-4 text-red-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-600">{formatCurrency(totalExpense)}</div>
+              <p className="text-xs text-muted-foreground">
+                {transactions.filter((t) => t.type === "expense").length} transactions
+              </p>
+            </CardContent>
+          </Card>
+          <Card className={netProfit >= 0 ? "border-green-200 bg-green-50/50" : "border-red-200 bg-red-50/50"}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">
+                {netProfit >= 0 ? "Net Profit" : "Net Loss"}
+              </CardTitle>
+              <CreditCard className={`h-4 w-4 ${netProfit >= 0 ? "text-green-500" : "text-red-500"}`} />
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                {formatCurrency(Math.abs(netProfit))}
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Amount *</Label>
-                  <Input
-                    type="number"
-                    value={formData.amount}
-                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Date</Label>
-                  <Input
-                    type="date"
-                    value={formData.transaction_date}
-                    onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Payment Method</Label>
-                  <Select
-                    value={formData.payment_method}
-                    onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
+              <p className="text-xs text-muted-foreground">
+                Income ৳{totalIncome.toLocaleString()} - Expenses ৳{totalExpense.toLocaleString()}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Tabs defaultValue="payments" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="payments">Payments</TabsTrigger>
+            <TabsTrigger value="transactions">Transactions</TabsTrigger>
+            <TabsTrigger value="by-method">By Payment Method</TabsTrigger>
+            <TabsTrigger value="by-category">By Category</TabsTrigger>
+            <TabsTrigger value="call-logs" className="flex items-center gap-1">
+              <Phone className="h-4 w-4" />
+              Call Logs
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="payments">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Customer Payments</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue placeholder="All Methods" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all">All Methods</SelectItem>
                       <SelectItem value="cash">Cash</SelectItem>
                       <SelectItem value="bkash">bKash</SelectItem>
                       <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Button variant="outline" size="sm" onClick={exportPaymentsCSV}>
+                    <Download className="h-4 w-4 mr-1" />
+                    CSV
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={exportPaymentsPDF}>
+                    <FileText className="h-4 w-4 mr-1" />
+                    PDF
+                  </Button>
                 </div>
-                {formData.type === "expense" && (
-                  <div className="space-y-2">
-                    <Label>Category</Label>
-                    <Select
-                      value={formData.category_id}
-                      onValueChange={(value) => setFormData({ ...formData, category_id: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id}>
-                            {cat.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Optional description..."
-                />
-              </div>
-              <Button type="submit" className="w-full">
-                {editingTransaction ? "Update" : "Add"} Transaction
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-wrap gap-4 mb-6">
-        <div className="flex items-center gap-2">
-          <Label>Period:</Label>
-          <Select value={monthFilter} onValueChange={(v) => {
-            setMonthFilter(v);
-            if (v === "custom") return;
-          }}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="current">Current Month</SelectItem>
-              <SelectItem value="previous">Previous Month</SelectItem>
-              <SelectItem value="last3">Last 3 Months</SelectItem>
-              <SelectItem value="custom">Custom</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {monthFilter === "custom" && (
-          <>
-            <div className="flex items-center gap-2">
-              <Label>From:</Label>
-              <Input
-                type="date"
-                value={dateFilter.start}
-                onChange={(e) => setDateFilter({ ...dateFilter, start: e.target.value })}
-                className="w-auto"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Label>To:</Label>
-              <Input
-                type="date"
-                value={dateFilter.end}
-                onChange={(e) => setDateFilter({ ...dateFilter, end: e.target.value })}
-                className="w-auto"
-              />
-            </div>
-          </>
-        )}
-
-        <div className="flex items-center gap-2">
-          <Label>Payment Method:</Label>
-          <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Methods</SelectItem>
-              <SelectItem value="cash">Cash</SelectItem>
-              <SelectItem value="bkash">bKash</SelectItem>
-              <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-green-500" />
-              Total Income
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</div>
-            <p className="text-xs text-muted-foreground">Payments + Other Income</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-red-500" />
-              Total Expenses
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{formatCurrency(totalExpense)}</div>
-            <p className="text-xs text-muted-foreground">All expenses</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
-              {formatCurrency(netProfit)}
-            </div>
-            <p className="text-xs text-muted-foreground">Income - Expenses</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Phone className="h-4 w-4" />
-              Call Records
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{callRecords.length}</div>
-            <p className="text-xs text-muted-foreground">This period</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : (
-        <Tabs defaultValue="payments" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="payments">Payments ({filteredPayments.length})</TabsTrigger>
-            <TabsTrigger value="calls">Call Records ({callRecords.length})</TabsTrigger>
-            <TabsTrigger value="transactions">Transactions ({transactions.length})</TabsTrigger>
-            <TabsTrigger value="summary">Summary</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="payments" className="space-y-4">
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={exportPaymentsCSV}>
-                <Download className="h-4 w-4 mr-2" />
-                CSV
-              </Button>
-              <Button variant="outline" size="sm" onClick={exportPaymentsPDF}>
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
-              </Button>
-            </div>
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>PPPoE Username</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Method</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPayments.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        No payments found for this period
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredPayments.map((payment) => (
-                      <TableRow key={payment.id}>
-                        <TableCell>{format(new Date(payment.payment_date), "dd MMM yyyy")}</TableCell>
-                        <TableCell className="font-mono">{payment.mikrotik_users?.[0]?.username || "-"}</TableCell>
-                        <TableCell>{payment.customers?.full_name || "-"}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {getPaymentMethodIcon(payment.method)}
-                            <span className="capitalize">{payment.method.replace("_", " ")}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(payment.amount)}</TableCell>
+                ) : filteredPayments.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No payments found for the selected period
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>PPPoE Username</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Method</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="calls" className="space-y-4">
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={exportCallRecordsCSV}>
-                <Download className="h-4 w-4 mr-2" />
-                CSV
-              </Button>
-              <Button variant="outline" size="sm" onClick={exportCallRecordsPDF}>
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
-              </Button>
-            </div>
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date/Time</TableHead>
-                    <TableHead>PPPoE Username</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Notes</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {callRecords.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                        No call records found for this period
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    callRecords.map((record) => (
-                      <TableRow key={record.id}>
-                        <TableCell>{format(new Date(record.call_date), "dd MMM yyyy HH:mm")}</TableCell>
-                        <TableCell className="font-mono">{record.mikrotik_users?.[0]?.username || "-"}</TableCell>
-                        <TableCell>{record.customers?.full_name || "-"}</TableCell>
-                        <TableCell className="max-w-xs truncate">{record.notes}</TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="transactions" className="space-y-4">
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={exportTransactionsCSV}>
-                <Download className="h-4 w-4 mr-2" />
-                CSV
-              </Button>
-              <Button variant="outline" size="sm" onClick={exportTransactionsPDF}>
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
-              </Button>
-            </div>
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Method</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                        No transactions found for this period
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    transactions.map((t) => (
-                      <TableRow key={t.id}>
-                        <TableCell>{format(new Date(t.transaction_date), "dd MMM yyyy")}</TableCell>
-                        <TableCell>
-                          <span className={`px-2 py-1 rounded-full text-xs ${
-                            t.type === "income" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                          }`}>
-                            {t.type}
-                          </span>
-                        </TableCell>
-                        <TableCell>{t.expense_categories?.name || "-"}</TableCell>
-                        <TableCell className="max-w-xs truncate">{t.description || "-"}</TableCell>
-                        <TableCell className="capitalize">{t.payment_method.replace("_", " ")}</TableCell>
-                        <TableCell className={`text-right font-medium ${
-                          t.type === "income" ? "text-green-600" : "text-red-600"
-                        }`}>
-                          {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => openEditDialog(t)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(t.id)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="summary" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Payment Methods</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {paymentMethodSummary.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No payments in this period</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {paymentMethodSummary.map((method) => (
-                        <div key={method.method} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                          <div className="flex items-center gap-3">
-                            {getPaymentMethodIcon(method.method)}
-                            <div>
-                              <p className="font-medium capitalize">{method.method.replace("_", " ")}</p>
-                              <p className="text-xs text-muted-foreground">{method.count} payments</p>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredPayments.map((payment) => (
+                        <TableRow key={payment.id}>
+                          <TableCell>{format(new Date(payment.payment_date), "dd MMM yyyy")}</TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {payment.mikrotik_users?.[0]?.username || (
+                              <span className="text-muted-foreground">Not set</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <p className="font-medium">{payment.customers?.full_name}</p>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getPaymentMethodIcon(payment.method)}
+                              <span className="capitalize">{payment.method.replace("_", " ")}</span>
                             </div>
-                          </div>
-                          <span className="font-bold text-green-600">{formatCurrency(method.total)}</span>
-                        </div>
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-green-600">
+                            {formatCurrency(payment.amount)}
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Expense Categories</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {categorySummary.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No expenses in this period</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {categorySummary.map((cat) => (
-                        <div key={cat.category} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                          <div>
-                            <p className="font-medium">{cat.category}</p>
-                            <p className="text-xs text-muted-foreground">{cat.count} transactions</p>
-                          </div>
-                          <span className="font-bold text-red-600">{formatCurrency(cat.total)}</span>
-                        </div>
+          <TabsContent value="transactions">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>All Transactions</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={exportTransactionsCSV}>
+                    <Download className="h-4 w-4 mr-1" />
+                    CSV
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={exportTransactionsPDF}>
+                    <FileText className="h-4 w-4 mr-1" />
+                    PDF
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : transactions.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No transactions found for the selected period
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Method</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="w-[80px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {transactions.map((t) => (
+                        <TableRow key={t.id}>
+                          <TableCell>{format(new Date(t.transaction_date), "dd MMM yyyy")}</TableCell>
+                          <TableCell>
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              t.type === "income"
+                                ? "bg-green-100 text-green-700"
+                                : "bg-red-100 text-red-700"
+                            }`}>
+                              {t.type === "income" ? (
+                                <TrendingUp className="h-3 w-3 mr-1" />
+                              ) : (
+                                <TrendingDown className="h-3 w-3 mr-1" />
+                              )}
+                              {t.type}
+                            </span>
+                          </TableCell>
+                          <TableCell>{t.expense_categories?.name || "-"}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getPaymentMethodIcon(t.payment_method)}
+                              <span className="capitalize">{t.payment_method.replace("_", " ")}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="max-w-[200px] truncate">{t.description || "-"}</TableCell>
+                          <TableCell className={`text-right font-medium ${
+                            t.type === "income" ? "text-green-600" : "text-red-600"
+                          }`}>
+                            {t.type === "expense" ? "-" : ""}
+                            {formatCurrency(t.amount)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => openEditDialog(t)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive"
+                                onClick={() => handleDelete(t.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </div>
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="by-method">
+            <Card>
+              <CardHeader>
+                <CardTitle>Income by Payment Method</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {paymentMethodSummary.length === 0 ? (
+                    <p className="text-center py-8 text-muted-foreground">No data</p>
+                  ) : (
+                    paymentMethodSummary.map((item) => (
+                      <div key={item.method} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex items-center gap-3">
+                          {getPaymentMethodIcon(item.method)}
+                          <div>
+                            <p className="font-medium capitalize">{item.method.replace("_", " ")}</p>
+                            <p className="text-sm text-muted-foreground">{item.count} payments</p>
+                          </div>
+                        </div>
+                        <div className="text-xl font-bold text-green-600">
+                          {formatCurrency(item.total)}
+                        </div>
+                      </div>
+                    ))
                   )}
-                </CardContent>
-              </Card>
-            </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="by-category">
+            <Card>
+              <CardHeader>
+                <CardTitle>Expenses by Category</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {categorySummary.length === 0 ? (
+                    <p className="text-center py-8 text-muted-foreground">No expenses</p>
+                  ) : (
+                    categorySummary.map((item) => (
+                      <div key={item.category} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div>
+                          <p className="font-medium">{item.category}</p>
+                          <p className="text-sm text-muted-foreground">{item.count} transactions</p>
+                        </div>
+                        <div className="text-xl font-bold text-red-600">
+                          {formatCurrency(item.total)}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="call-logs">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Call Records</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={exportCallRecordsCSV}>
+                    <Download className="h-4 w-4 mr-1" />
+                    CSV
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={exportCallRecordsPDF}>
+                    <FileText className="h-4 w-4 mr-1" />
+                    PDF
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : callRecords.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No call records found for the selected period
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date & Time</TableHead>
+                        <TableHead>PPPoE Username</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Notes</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {callRecords.map((record) => (
+                        <TableRow key={record.id}>
+                          <TableCell>{format(new Date(record.call_date), "dd MMM yyyy HH:mm")}</TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {record.mikrotik_users?.[0]?.username || (
+                              <span className="text-muted-foreground">Not set</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <p className="font-medium">{record.customers?.full_name}</p>
+                          </TableCell>
+                          <TableCell className="max-w-[400px]">
+                            <p className="whitespace-pre-wrap">{record.notes}</p>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
-      )}
+      </div>
     </DashboardLayout>
   );
 }

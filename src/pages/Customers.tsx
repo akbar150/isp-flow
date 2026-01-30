@@ -32,7 +32,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -139,16 +139,17 @@ export default function Customers() {
   const fetchData = async () => {
     try {
       const [customersRes, packagesRes, areasRes, routersRes] = await Promise.all([
-        api.get('/customers'),
-        api.get('/packages?active=true'),
-        api.get('/areas'),
-        api.get('/routers?active=true'),
+        supabase.from('customers_safe').select('*, packages(*), areas(*), routers(*), mikrotik_users:mikrotik_users_safe(id, username, status)').order('created_at', { ascending: false }),
+        supabase.from('packages').select('*').eq('is_active', true),
+        supabase.from('areas').select('*'),
+        supabase.from('routers').select('*').eq('is_active', true),
       ]);
 
-      setCustomers(customersRes.data.customers || []);
-      setPackages(packagesRes.data.packages || []);
-      setAreas(areasRes.data.areas || []);
-      setRouters(routersRes.data.routers || []);
+      if (customersRes.error) throw customersRes.error;
+      setCustomers(customersRes.data as unknown as Customer[] || []);
+      setPackages(packagesRes.data || []);
+      setAreas(areasRes.data || []);
+      setRouters(routersRes.data || []);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -172,6 +173,12 @@ export default function Customers() {
       password += charset[randomValues[i] % charset.length];
     }
     setFormData({ ...formData, [forField]: password });
+  };
+
+  const generateUserId = async (): Promise<string> => {
+    const { data, error } = await supabase.rpc('generate_customer_user_id');
+    if (error) throw new Error('Failed to generate user ID');
+    return data;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -225,7 +232,22 @@ export default function Customers() {
       const selectedPackage = packages.find(p => p.id === formData.package_id);
       if (!selectedPackage) throw new Error('Please select a package');
 
-      const response = await api.post('/customers', {
+      const userId = await generateUserId();
+      const today = new Date();
+      const expiryDate = addDays(today, selectedPackage.validity_days);
+
+      const { data: hashedPassword, error: hashError } = await supabase
+        .rpc('hash_password', { raw_password: formData.password });
+      
+      if (hashError) throw new Error('Failed to secure password');
+
+      const { data: hashedPppoePassword, error: pppoeHashError } = await supabase
+        .rpc('hash_password', { raw_password: formData.pppoe_password });
+      
+      if (pppoeHashError) throw new Error('Failed to secure PPPoE password');
+
+      const { data: newCustomer, error } = await supabase.from('customers').insert({
+        user_id: userId,
         full_name: formData.full_name,
         phone: formData.phone,
         alt_phone: formData.alt_phone || null,
@@ -233,37 +255,50 @@ export default function Customers() {
         area_id: formData.area_id || null,
         router_id: formData.router_id || null,
         package_id: formData.package_id,
-        password: formData.password,
-        pppoe_username: formData.pppoe_username,
-        pppoe_password: formData.pppoe_password,
+        password_hash: hashedPassword,
+        billing_start_date: format(today, 'yyyy-MM-dd'),
+        expiry_date: format(expiryDate, 'yyyy-MM-dd'),
+        status: 'active',
+        total_due: selectedPackage.monthly_price,
+      }).select('id').single();
+
+      if (error) throw error;
+
+      const { error: mikrotikError } = await supabase.from('mikrotik_users').insert({
+        customer_id: newCustomer.id,
+        username: formData.pppoe_username,
+        password_encrypted: hashedPppoePassword,
+        router_id: formData.router_id || null,
+        profile: selectedPackage.name,
+        status: 'enabled',
       });
 
-      if (response.data.success) {
-        setCredentialsModal({
-          open: true,
-          userId: response.data.customer.user_id,
-          password: formData.password,
-          pppoeUsername: formData.pppoe_username,
-          pppoePassword: formData.pppoe_password,
-        });
-
-        setDialogOpen(false);
-        setFormData({
-          full_name: "",
-          phone: "",
-          alt_phone: "",
-          address: "",
-          area_id: "",
-          router_id: "",
-          package_id: "",
-          password: "",
-          pppoe_username: "",
-          pppoe_password: "",
-        });
-        fetchData();
-      } else {
-        throw new Error(response.data.error || 'Failed to create customer');
+      if (mikrotikError) {
+        console.error('Failed to create PPPoE user:', mikrotikError);
       }
+
+      setCredentialsModal({
+        open: true,
+        userId: userId,
+        password: formData.password,
+        pppoeUsername: formData.pppoe_username,
+        pppoePassword: formData.pppoe_password,
+      });
+
+      setDialogOpen(false);
+      setFormData({
+        full_name: "",
+        phone: "",
+        alt_phone: "",
+        address: "",
+        area_id: "",
+        router_id: "",
+        package_id: "",
+        password: "",
+        pppoe_username: "",
+        pppoe_password: "",
+      });
+      fetchData();
     } catch (error) {
       toast({
         title: "Error",
@@ -279,14 +314,15 @@ export default function Customers() {
     }
 
     try {
-      const response = await api.delete(`/customers/${customer.id}`);
+      const { error } = await supabase
+        .from('customers')
+        .delete()
+        .eq('id', customer.id);
 
-      if (response.data.success) {
-        toast({ title: "Customer deleted successfully" });
-        fetchData();
-      } else {
-        throw new Error(response.data.error);
-      }
+      if (error) throw error;
+
+      toast({ title: "Customer deleted successfully" });
+      fetchData();
     } catch (error) {
       console.error('Error deleting customer:', error);
       toast({

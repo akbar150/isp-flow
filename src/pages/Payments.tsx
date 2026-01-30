@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Plus, Search } from "lucide-react";
 import { format } from "date-fns";
@@ -70,12 +70,18 @@ export default function Payments() {
   const fetchData = async () => {
     try {
       const [paymentsRes, customersRes] = await Promise.all([
-        api.get('/payments?limit=100'),
-        api.get('/customers'),
+        supabase
+          .from('payments')
+          .select('*, customers(user_id, full_name)')
+          .order('payment_date', { ascending: false })
+          .limit(100),
+      // Use customers_safe view to prevent password_hash exposure
+      supabase.from('customers_safe').select('id, user_id, full_name, total_due, packages(monthly_price)'),
       ]);
 
-      setPayments(paymentsRes.data.payments || []);
-      setCustomers(customersRes.data.customers || []);
+      if (paymentsRes.error) throw paymentsRes.error;
+      setPayments(paymentsRes.data as Payment[] || []);
+      setCustomers(customersRes.data as Customer[] || []);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -119,28 +125,33 @@ export default function Payments() {
         if (!confirmed) return;
       }
 
-      const response = await api.post('/payments', {
+      const remainingDue = Math.max(0, selectedCustomer.total_due - amount);
+
+      // Create payment record - database trigger handles customer due update automatically
+      const { error: paymentError } = await supabase.from('payments').insert({
         customer_id: formData.customer_id,
         amount,
         method: formData.method,
         transaction_id: formData.transaction_id || null,
         notes: formData.notes || null,
+        remaining_due: remainingDue,
       });
 
-      if (response.data.success) {
-        toast({ title: "Payment recorded successfully" });
-        setDialogOpen(false);
-        setFormData({
-          customer_id: "",
-          amount: "",
-          method: "cash",
-          transaction_id: "",
-          notes: "",
-        });
-        fetchData();
-      } else {
-        throw new Error(response.data.error);
-      }
+      if (paymentError) throw paymentError;
+
+      // Note: Customer total_due is now updated automatically via database trigger
+      // This removes the need for staff to have UPDATE permission on customers table
+
+      toast({ title: "Payment recorded successfully" });
+      setDialogOpen(false);
+      setFormData({
+        customer_id: "",
+        amount: "",
+        method: "cash",
+        transaction_id: "",
+        notes: "",
+      });
+      fetchData();
     } catch (error) {
       toast({
         title: "Error",

@@ -1,135 +1,92 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
+import type { User, Session } from "@supabase/supabase-js";
 
 type AppRole = "super_admin" | "admin" | "staff";
 
-interface User {
-  id: string;
-  email: string;
-}
-
 interface AuthContextType {
   user: User | null;
-  token: string | null;
+  session: Session | null;
   role: AppRole | null;
   isSuperAdmin: boolean;
   isAdmin: boolean;
   isStaff: boolean;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing token on mount
-    const storedToken = localStorage.getItem("auth_token");
-    const storedUser = localStorage.getItem("auth_user");
-    const storedRole = localStorage.getItem("auth_role");
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
 
-    if (storedToken && storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        setToken(storedToken);
-        setUser(parsedUser);
-        setRole(storedRole as AppRole || null);
-        
-        // Verify token is still valid
-        verifyToken(storedToken);
-      } catch (error) {
-        console.error("Error parsing stored user:", error);
-        clearAuth();
+        // Defer role fetch with setTimeout to avoid deadlocks
+        if (session?.user) {
+          setTimeout(() => {
+            fetchUserRole(session.user.id);
+          }, 0);
+        } else {
+          setRole(null);
+          setLoading(false);
+        }
       }
-    } else {
-      setLoading(false);
-    }
+    );
+
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchUserRole(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const verifyToken = async (authToken: string) => {
+  const fetchUserRole = async (userId: string) => {
     try {
-      const response = await api.get("/auth/me", {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
-      
-      if (response.data.success) {
-        setUser(response.data.user);
-        setRole(response.data.role as AppRole);
-        localStorage.setItem("auth_user", JSON.stringify(response.data.user));
-        localStorage.setItem("auth_role", response.data.role);
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .single();
+
+      if (error) {
+        console.error("Error fetching user role:", error);
+        setRole(null);
       } else {
-        clearAuth();
+        setRole(data?.role as AppRole || null);
       }
     } catch (error) {
-      console.error("Token verification failed:", error);
-      clearAuth();
+      console.error("Error fetching user role:", error);
+      setRole(null);
     } finally {
       setLoading(false);
     }
-  };
-
-  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const response = await api.post("/auth/login", { email, password });
-      
-      if (response.data.success) {
-        const { token: authToken, user: userData, role: userRole } = response.data;
-        
-        setToken(authToken);
-        setUser(userData);
-        setRole(userRole as AppRole);
-        
-        localStorage.setItem("auth_token", authToken);
-        localStorage.setItem("auth_user", JSON.stringify(userData));
-        localStorage.setItem("auth_role", userRole);
-        
-        return { success: true };
-      } else {
-        return { success: false, error: response.data.error || "Login failed" };
-      }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Login failed";
-      // Check if it's an axios error with response
-      if (typeof error === 'object' && error !== null && 'response' in error) {
-        const axiosError = error as { response?: { data?: { error?: string } } };
-        return { success: false, error: axiosError.response?.data?.error || errorMessage };
-      }
-      return { success: false, error: errorMessage };
-    }
-  };
-
-  const logout = () => {
-    clearAuth();
-  };
-
-  const clearAuth = () => {
-    setToken(null);
-    setUser(null);
-    setRole(null);
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("auth_user");
-    localStorage.removeItem("auth_role");
-    setLoading(false);
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        token,
+        session,
         role,
         isSuperAdmin: role === "super_admin",
         isAdmin: role === "admin" || role === "super_admin",
         isStaff: role === "staff",
         loading,
-        login,
-        logout,
       }}
     >
       {children}

@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Banknote, Loader2 } from "lucide-react";
 
@@ -58,13 +58,19 @@ export function QuickPaymentRecord({
         throw new Error("Please enter a valid amount");
       }
 
-      await api.post('/payments', {
+      const { data: userData } = await supabase.auth.getUser();
+      
+      const { error } = await supabase.from("payments").insert({
         customer_id: customerId,
         amount: amount,
         method: formData.method,
         transaction_id: formData.transaction_id || null,
         notes: formData.notes || `Quick payment for ${customerName}`,
+        created_by: userData.user?.id,
+        remaining_due: Math.max(0, dueAmount - amount),
       });
+
+      if (error) throw error;
 
       toast({
         title: "Payment recorded",

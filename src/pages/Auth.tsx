@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +9,6 @@ import { toast } from "@/hooks/use-toast";
 import { Wifi, Loader2, KeyRound, ArrowLeft } from "lucide-react";
 import { z } from "zod";
 import { useIspSettings } from "@/hooks/useIspSettings";
-
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
@@ -32,21 +30,19 @@ export default function Auth() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isRecovery = searchParams.get("type") === "recovery";
-  const resetToken = searchParams.get("token");
   const { ispName, loading: settingsLoading } = useIspSettings();
-  const { login } = useAuth();
   
   const [loading, setLoading] = useState(false);
   const [showReset, setShowReset] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(isRecovery && !!resetToken);
+  const [showNewPassword, setShowNewPassword] = useState(isRecovery);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   
+  // Show loading placeholder while settings load to prevent "Smart ISP" flash
   const displayName = settingsLoading ? "Loading..." : ispName;
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
@@ -64,17 +60,9 @@ export default function Auth() {
     }
 
     try {
-      const loginResult = await login(email, password);
-      
-      if (loginResult.success) {
-        navigate("/dashboard");
-      } else {
-        toast({
-          title: "Login failed",
-          description: loginResult.error || "Invalid credentials",
-          variant: "destructive",
-        });
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      navigate("/dashboard");
     } catch (error) {
       toast({
         title: "Login failed",
@@ -99,17 +87,17 @@ export default function Auth() {
     }
 
     try {
-      const response = await api.post("/auth/reset-password", { email });
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth?type=recovery`,
+      });
 
-      if (response.data.success) {
-        toast({
-          title: "Reset email sent",
-          description: "Check your inbox for the password reset link",
-        });
-        setShowReset(false);
-      } else {
-        throw new Error(response.data.error || "Failed to send reset email");
-      }
+      if (error) throw error;
+
+      toast({
+        title: "Reset email sent",
+        description: "Check your inbox for the password reset link",
+      });
+      setShowReset(false);
     } catch (error) {
       toast({
         title: "Reset failed",
@@ -138,21 +126,15 @@ export default function Auth() {
     }
 
     try {
-      const response = await api.post("/auth/update-password", { 
-        token: resetToken,
-        password: newPassword 
-      });
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
 
-      if (response.data.success) {
-        toast({
-          title: "Password updated",
-          description: "Your password has been changed successfully",
-        });
-        setShowNewPassword(false);
-        navigate("/auth");
-      } else {
-        throw new Error(response.data.error || "Failed to update password");
-      }
+      toast({
+        title: "Password updated",
+        description: "Your password has been changed successfully",
+      });
+      setShowNewPassword(false);
+      navigate("/dashboard");
     } catch (error) {
       toast({
         title: "Update failed",

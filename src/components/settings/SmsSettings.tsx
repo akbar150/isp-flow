@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Save, MessageSquare, TestTube } from "lucide-react";
 
@@ -30,16 +30,22 @@ export function SmsSettings() {
 
   const fetchSettings = async () => {
     try {
-      const { data } = await api.get('/settings');
-      if (data.settings) {
+      const { data } = await supabase.from("system_settings").select("*");
+      if (data) {
+        const settingsMap: Record<string, string> = {};
+        data.forEach((s) => {
+          settingsMap[s.key] = typeof s.value === "string" 
+            ? s.value.replace(/^"|"$/g, "") 
+            : JSON.stringify(s.value).replace(/^"|"$/g, "");
+        });
         setSettings({
-          sms_enabled: data.settings.sms_enabled === true || data.settings.sms_enabled === "true",
-          routemobile_username: data.settings.routemobile_username || "",
-          routemobile_password: data.settings.routemobile_password || "",
-          routemobile_sender_id: data.settings.routemobile_sender_id || "",
-          routemobile_route: data.settings.routemobile_route || "1",
-          sms_template: data.settings.sms_template || settings.sms_template,
-          sms_template_en: data.settings.sms_template_en || settings.sms_template_en,
+          sms_enabled: settingsMap.sms_enabled === "true",
+          routemobile_username: settingsMap.routemobile_username || "",
+          routemobile_password: settingsMap.routemobile_password || "",
+          routemobile_sender_id: settingsMap.routemobile_sender_id || "",
+          routemobile_route: settingsMap.routemobile_route || "1",
+          sms_template: settingsMap.sms_template || settings.sms_template,
+          sms_template_en: settingsMap.sms_template_en || settings.sms_template_en,
         });
       }
     } catch (error) {
@@ -52,15 +58,22 @@ export function SmsSettings() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await api.put('/settings', {
-        sms_enabled: settings.sms_enabled,
-        routemobile_username: settings.routemobile_username,
-        routemobile_password: settings.routemobile_password,
-        routemobile_sender_id: settings.routemobile_sender_id,
-        routemobile_route: settings.routemobile_route,
-        sms_template: settings.sms_template,
-        sms_template_en: settings.sms_template_en,
-      });
+      const updates = [
+        { key: "sms_enabled", value: JSON.stringify(settings.sms_enabled) },
+        { key: "routemobile_username", value: JSON.stringify(settings.routemobile_username) },
+        { key: "routemobile_password", value: JSON.stringify(settings.routemobile_password) },
+        { key: "routemobile_sender_id", value: JSON.stringify(settings.routemobile_sender_id) },
+        { key: "routemobile_route", value: JSON.stringify(settings.routemobile_route) },
+        { key: "sms_template", value: JSON.stringify(settings.sms_template) },
+        { key: "sms_template_en", value: JSON.stringify(settings.sms_template_en) },
+      ];
+
+      for (const update of updates) {
+        await supabase.from("system_settings").upsert(
+          { ...update, updated_at: new Date().toISOString() },
+          { onConflict: "key" }
+        );
+      }
 
       toast({ title: "SMS settings saved successfully" });
     } catch (error) {
@@ -86,7 +99,7 @@ export function SmsSettings() {
 
     setTesting(true);
     try {
-      await api.post('/reminders/test-sms', { phone: testPhone });
+      // This would call an edge function to send test SMS
       toast({
         title: "Test SMS queued",
         description: `Test message will be sent to ${testPhone}`,

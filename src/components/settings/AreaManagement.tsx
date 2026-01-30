@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,8 +45,13 @@ export function AreaManagement() {
 
   const fetchAreas = async () => {
     try {
-      const { data } = await api.get('/areas');
-      setAreas(data.areas || []);
+      const { data, error } = await supabase
+        .from("areas")
+        .select("*")
+        .order("name");
+
+      if (error) throw error;
+      setAreas(data || []);
     } catch (error) {
       console.error("Error fetching areas:", error);
       toast({
@@ -73,16 +78,23 @@ export function AreaManagement() {
 
     try {
       if (editingArea) {
-        await api.put(`/areas/${editingArea.id}`, {
-          name: formData.name.trim(),
-          description: formData.description.trim() || null,
-        });
+        const { error } = await supabase
+          .from("areas")
+          .update({
+            name: formData.name.trim(),
+            description: formData.description.trim() || null,
+          })
+          .eq("id", editingArea.id);
+
+        if (error) throw error;
         toast({ title: "Success", description: "Area updated" });
       } else {
-        await api.post('/areas', {
+        const { error } = await supabase.from("areas").insert({
           name: formData.name.trim(),
           description: formData.description.trim() || null,
         });
+
+        if (error) throw error;
         toast({ title: "Success", description: "Area added" });
       }
 
@@ -106,7 +118,8 @@ export function AreaManagement() {
     }
 
     try {
-      await api.delete(`/areas/${id}`);
+      const { error } = await supabase.from("areas").delete().eq("id", id);
+      if (error) throw error;
       toast({ title: "Success", description: "Area deleted" });
       fetchAreas();
     } catch (error: unknown) {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Table,
   TableBody,
@@ -55,9 +55,25 @@ export function CustomerBillingHistory({ customerId, customerName }: CustomerBil
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get(`/billing/customer/${customerId}`);
-      setBillingRecords(data.billingRecords || []);
-      setPayments(data.payments || []);
+      // Fetch billing records
+      const { data: billsData, error: billsError } = await supabase
+        .from('billing_records')
+        .select('*')
+        .eq('customer_id', customerId)
+        .order('billing_date', { ascending: false });
+
+      if (billsError) throw billsError;
+      setBillingRecords(billsData || []);
+
+      // Fetch payments
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('customer_id', customerId)
+        .order('payment_date', { ascending: false });
+
+      if (paymentsError) throw paymentsError;
+      setPayments(paymentsData || []);
     } catch (error) {
       console.error('Error fetching billing history:', error);
     } finally {

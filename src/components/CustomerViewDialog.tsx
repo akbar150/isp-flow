@@ -19,7 +19,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format, differenceInDays, startOfDay } from "date-fns";
 import { CalendarIcon, Loader2, User, Phone, MapPin, Package, Calendar as CalendarIconAlt, CreditCard, Wifi, Key, Eye, EyeOff } from "lucide-react";
@@ -145,18 +145,23 @@ export function CustomerViewDialog({
 
     setSaving(true);
     try {
-      await api.put(`/customers/${customer.id}`, {
-        full_name: formData.full_name,
-        phone: formData.phone,
-        alt_phone: formData.alt_phone || null,
-        address: formData.address,
-        area_id: formData.area_id || null,
-        router_id: formData.router_id || null,
-        package_id: formData.package_id || null,
-        status: formData.status,
-        billing_start_date: format(formData.billing_start_date, "yyyy-MM-dd"),
-        expiry_date: format(formData.expiry_date, "yyyy-MM-dd"),
-      });
+      const { error } = await supabase
+        .from("customers")
+        .update({
+          full_name: formData.full_name,
+          phone: formData.phone,
+          alt_phone: formData.alt_phone || null,
+          address: formData.address,
+          area_id: formData.area_id || null,
+          router_id: formData.router_id || null,
+          package_id: formData.package_id || null,
+          status: formData.status,
+          billing_start_date: format(formData.billing_start_date, "yyyy-MM-dd"),
+          expiry_date: format(formData.expiry_date, "yyyy-MM-dd"),
+        })
+        .eq("id", customer.id);
+
+      if (error) throw error;
 
       toast({ title: "Customer updated successfully" });
       setIsEditing(false);
@@ -178,13 +183,55 @@ export function CustomerViewDialog({
     
     setSavingCredentials(true);
     try {
-      await api.put(`/customers/${customer.id}/credentials`, {
-        pppoe_username: credentialData.pppoe_username !== customer.mikrotik_users?.[0]?.username 
-          ? credentialData.pppoe_username 
-          : undefined,
-        pppoe_password: credentialData.pppoe_password || undefined,
-        user_password: credentialData.user_password || undefined,
-      });
+      // Update PPPoE username if changed
+      if (credentialData.pppoe_username && credentialData.pppoe_username !== customer.mikrotik_users?.[0]?.username) {
+        const mikrotikUser = customer.mikrotik_users?.[0];
+        if (mikrotikUser) {
+          const { error: pppoeError } = await supabase
+            .from("mikrotik_users")
+            .update({ username: credentialData.pppoe_username })
+            .eq("id", mikrotikUser.id);
+          
+          if (pppoeError) throw pppoeError;
+        }
+      }
+
+      // Update PPPoE password if provided
+      if (credentialData.pppoe_password) {
+        const mikrotikUser = customer.mikrotik_users?.[0];
+        if (mikrotikUser) {
+          // Hash the password using the database function
+          const { data: hashData, error: hashError } = await supabase.rpc('hash_password', {
+            raw_password: credentialData.pppoe_password
+          });
+          
+          if (hashError) throw hashError;
+          
+          const { error: pppoePassError } = await supabase
+            .from("mikrotik_users")
+            .update({ password_encrypted: hashData })
+            .eq("id", mikrotikUser.id);
+          
+          if (pppoePassError) throw pppoePassError;
+        }
+      }
+
+      // Update user/portal password if provided
+      if (credentialData.user_password) {
+        // Hash the password using the database function
+        const { data: hashData, error: hashError } = await supabase.rpc('hash_password', {
+          raw_password: credentialData.user_password
+        });
+        
+        if (hashError) throw hashError;
+        
+        const { error: userPassError } = await supabase
+          .from("customers")
+          .update({ password_hash: hashData })
+          .eq("id", customer.id);
+        
+        if (userPassError) throw userPassError;
+      }
 
       toast({ title: "Credentials updated successfully" });
       setCredentialData({ 
@@ -549,72 +596,109 @@ export function CustomerViewDialog({
             )}
           </TabsContent>
 
-          <TabsContent value="billing" className="mt-4">
-            <CustomerBillingHistory customerId={customer.id} customerName={customer.full_name} />
+          <TabsContent value="credentials" className="space-y-6 mt-4">
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800">
+                <strong>Security Note:</strong> Password fields are blank for security. 
+                Enter a new password only if you want to change it.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {/* PPPoE Username */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Wifi className="h-4 w-4" />
+                  PPPoE Username
+                </Label>
+                <Input
+                  value={credentialData.pppoe_username}
+                  onChange={(e) => setCredentialData({ ...credentialData, pppoe_username: e.target.value })}
+                  placeholder="PPPoE username"
+                  disabled={!canEdit}
+                />
+              </div>
+
+              {/* PPPoE Password */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Key className="h-4 w-4" />
+                  PPPoE Password
+                </Label>
+                <div className="relative">
+                  <Input
+                    type={showPasswords ? "text" : "password"}
+                    value={credentialData.pppoe_password}
+                    onChange={(e) => setCredentialData({ ...credentialData, pppoe_password: e.target.value })}
+                    placeholder="Enter new password to change"
+                    disabled={!canEdit}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full"
+                    onClick={() => setShowPasswords(!showPasswords)}
+                  >
+                    {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Minimum 4 characters</p>
+              </div>
+
+              {/* User/Portal Password */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Key className="h-4 w-4" />
+                  Portal Password (Customer Login)
+                </Label>
+                <div className="relative">
+                  <Input
+                    type={showPasswords ? "text" : "password"}
+                    value={credentialData.user_password}
+                    onChange={(e) => setCredentialData({ ...credentialData, user_password: e.target.value })}
+                    placeholder="Enter new password to change"
+                    disabled={!canEdit}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full"
+                    onClick={() => setShowPasswords(!showPasswords)}
+                  >
+                    {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
+              </div>
+
+              {canEdit && (
+                <div className="flex justify-end pt-4">
+                  <Button 
+                    onClick={handleSaveCredentials} 
+                    disabled={savingCredentials || (!credentialData.pppoe_username && !credentialData.pppoe_password && !credentialData.user_password)}
+                  >
+                    {savingCredentials && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Credentials
+                  </Button>
+                </div>
+              )}
+            </div>
           </TabsContent>
 
-          <TabsContent value="credentials" className="mt-4 space-y-4">
-            {canEdit ? (
-              <div className="space-y-4">
-                <div className="p-4 bg-muted/50 rounded-lg">
-                  <h4 className="font-medium flex items-center gap-2 mb-4">
-                    <Key className="h-4 w-4" />
-                    Update Credentials
-                  </h4>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>PPPoE Username</Label>
-                      <Input
-                        value={credentialData.pppoe_username}
-                        onChange={(e) => setCredentialData({ ...credentialData, pppoe_username: e.target.value })}
-                        placeholder="PPPoE username"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>New PPPoE Password</Label>
-                      <div className="relative">
-                        <Input
-                          type={showPasswords ? "text" : "password"}
-                          value={credentialData.pppoe_password}
-                          onChange={(e) => setCredentialData({ ...credentialData, pppoe_password: e.target.value })}
-                          placeholder="Leave blank to keep current"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-0 top-0 h-full"
-                          onClick={() => setShowPasswords(!showPasswords)}
-                        >
-                          {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>New Portal Password</Label>
-                      <Input
-                        type={showPasswords ? "text" : "password"}
-                        value={credentialData.user_password}
-                        onChange={(e) => setCredentialData({ ...credentialData, user_password: e.target.value })}
-                        placeholder="Leave blank to keep current"
-                      />
-                    </div>
-                    <Button onClick={handleSaveCredentials} disabled={savingCredentials}>
-                      {savingCredentials && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Save Credentials
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                You don't have permission to edit credentials
-              </div>
-            )}
+          <TabsContent value="billing" className="mt-4">
+            <CustomerBillingHistory 
+              customerId={customer.id} 
+              customerName={customer.full_name} 
+            />
           </TabsContent>
 
           <TabsContent value="calls" className="mt-4">
-            <CustomerCallRecords customerId={customer.id} customerName={customer.full_name} />
+            <CustomerCallRecords 
+              customerId={customer.id} 
+              customerName={customer.full_name} 
+            />
           </TabsContent>
         </Tabs>
       </DialogContent>

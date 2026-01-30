@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -92,9 +92,15 @@ export function RolePermissions() {
 
   const fetchPermissions = async () => {
     try {
-      const { data } = await api.get('/settings/permissions/all');
-      setPermissions(data.permissions || []);
-      setOriginalPermissions(JSON.parse(JSON.stringify(data.permissions || [])));
+      const { data, error } = await supabase
+        .from("permissions")
+        .select("*")
+        .order("resource")
+        .order("action");
+
+      if (error) throw error;
+      setPermissions(data || []);
+      setOriginalPermissions(JSON.parse(JSON.stringify(data || [])));
     } catch (error) {
       console.error("Error fetching permissions:", error);
       toast({
@@ -191,7 +197,12 @@ export function RolePermissions() {
       for (const perm of editablePermissions) {
         const original = originalPermissions.find((op) => op.id === perm.id);
         if (original && original.allowed !== perm.allowed) {
-          await api.put(`/settings/permissions/${perm.id}`, { allowed: perm.allowed });
+          const { error } = await supabase
+            .from("permissions")
+            .update({ allowed: perm.allowed })
+            .eq("id", perm.id);
+
+          if (error) throw error;
         }
       }
 

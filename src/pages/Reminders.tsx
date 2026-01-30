@@ -4,7 +4,7 @@ import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { EmailButton } from "@/components/EmailButton";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { QuickPaymentRecord } from "@/components/QuickPaymentRecord";
-import api from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { format, startOfDay, differenceInDays } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -54,12 +54,17 @@ export default function Reminders() {
   const fetchData = async () => {
     try {
       const [customersRes, logsRes] = await Promise.all([
-        api.get('/customers'),
-        api.get('/reminders/logs?limit=50'),
+        supabase.from('customers_safe').select('*, packages(name, monthly_price), mikrotik_users:mikrotik_users_safe(id, username, status)'),
+        supabase
+          .from('reminder_logs')
+          .select('*, customers(user_id, full_name)')
+          .order('sent_at', { ascending: false })
+          .limit(50),
       ]);
 
-      setCustomers(customersRes.data.customers || []);
-      setReminderLogs(logsRes.data.logs || []);
+      if (customersRes.error) throw customersRes.error;
+      setCustomers(customersRes.data as Customer[] || []);
+      setReminderLogs(logsRes.data as ReminderLog[] || []);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
