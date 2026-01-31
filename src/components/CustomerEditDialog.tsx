@@ -20,7 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { CalendarIcon, Loader2 } from "lucide-react";
+import { CalendarIcon, Loader2, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Package {
@@ -377,13 +377,27 @@ export function CustomerEditDialog({
             </div>
             <div className="space-y-2">
               <Label>Longitude</Label>
-              <Input
-                type="number"
-                step="any"
-                value={formData.longitude}
-                onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-                placeholder="e.g., 90.4125"
-              />
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  step="any"
+                  value={formData.longitude}
+                  onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+                  placeholder="e.g., 90.4125"
+                  className="flex-1"
+                />
+                {formData.latitude && formData.longitude && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => window.open(`https://www.google.com/maps?q=${formData.latitude},${formData.longitude}`, "_blank")}
+                    title="Go to Location"
+                  >
+                    <MapPin className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-4">

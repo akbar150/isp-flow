@@ -9,6 +9,7 @@ import { CustomerViewDialog } from "@/components/CustomerViewDialog";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { QuickPaymentRecord } from "@/components/QuickPaymentRecord";
 import { BulkCustomerUpload } from "@/components/BulkCustomerUpload";
+import { AddCustomerDialog } from "@/components/AddCustomerDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -400,183 +401,28 @@ export default function Customers() {
             routers={routers}
             onSuccess={fetchData}
           />
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Add Customer</span>
-                <span className="sm:hidden">Add</span>
-              </Button>
-            </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Add New Customer</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Full Name *</Label>
-                  <Input
-                    value={formData.full_name}
-                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Phone (WhatsApp) *</Label>
-                  <Input
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="+8801XXXXXXXXX"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Alternative Phone</Label>
-                  <Input
-                    value={formData.alt_phone}
-                    onChange={(e) => setFormData({ ...formData, alt_phone: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Package *</Label>
-                  <Select
-                    value={formData.package_id}
-                    onValueChange={(value) => setFormData({ ...formData, package_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select package" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {packages.map((pkg) => (
-                        <SelectItem key={pkg.id} value={pkg.id}>
-                          {pkg.name} - {pkg.speed_mbps} Mbps (৳{pkg.monthly_price})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label>Address *</Label>
-                  <Input
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Area/Zone</Label>
-                  <Select
-                    value={formData.area_id}
-                    onValueChange={(value) => setFormData({ ...formData, area_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select area" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {areas.map((area) => (
-                        <SelectItem key={area.id} value={area.id}>
-                          {area.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Router</Label>
-                  <Select
-                    value={formData.router_id}
-                    onValueChange={(value) => setFormData({ ...formData, router_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select router" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {routers.map((router) => (
-                        <SelectItem key={router.id} value={router.id}>
-                          {router.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label>Portal Password *</Label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Input
-                        type={showPassword ? "text" : "password"}
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        required
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                    <Button type="button" variant="outline" onClick={() => generatePassword('password')}>
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Generate
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Min 6 characters, letters and numbers only
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label>PPPoE Username *</Label>
-                  <Input
-                    value={formData.pppoe_username}
-                    onChange={(e) => setFormData({ ...formData, pppoe_username: e.target.value })}
-                    placeholder="e.g., customer_pppoe"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>PPPoE Password *</Label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Input
-                        type={showPppoePassword ? "text" : "password"}
-                        value={formData.pppoe_password}
-                        onChange={(e) => setFormData({ ...formData, pppoe_password: e.target.value })}
-                        required
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full"
-                        onClick={() => setShowPppoePassword(!showPppoePassword)}
-                      >
-                        {showPppoePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                    <Button type="button" variant="outline" onClick={() => generatePassword('pppoe_password')}>
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Generate
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Min 4 characters, letters and numbers only
-                  </p>
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Create Customer</Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline">Add Customer</span>
+            <span className="sm:hidden">Add</span>
+          </Button>
+          <AddCustomerDialog
+            open={dialogOpen}
+            onOpenChange={setDialogOpen}
+            packages={packages}
+            areas={areas}
+            routers={routers}
+            onSuccess={(credentials) => {
+              setCredentialsModal({
+                open: true,
+                userId: credentials.userId,
+                password: credentials.password,
+                pppoeUsername: credentials.pppoeUsername,
+                pppoePassword: credentials.pppoePassword,
+              });
+              fetchData();
+            }}
+          />
         </div>
       </div>
 
