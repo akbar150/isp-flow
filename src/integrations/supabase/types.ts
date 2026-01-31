@@ -44,6 +44,39 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_notifications: {
+        Row: {
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          is_read: boolean
+          message: string
+          title: string
+          type: Database["public"]["Enums"]["notification_type"]
+        }
+        Insert: {
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          is_read?: boolean
+          message: string
+          title: string
+          type: Database["public"]["Enums"]["notification_type"]
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          is_read?: boolean
+          message?: string
+          title?: string
+          type?: Database["public"]["Enums"]["notification_type"]
+        }
+        Relationships: []
+      }
       areas: {
         Row: {
           created_at: string
@@ -64,6 +97,114 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      asset_assignments: {
+        Row: {
+          assigned_by: string | null
+          assigned_date: string
+          condition_on_assign: string | null
+          condition_on_return: string | null
+          created_at: string
+          customer_id: string
+          id: string
+          inventory_item_id: string
+          notes: string | null
+          returned_date: string | null
+          technician_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          assigned_date?: string
+          condition_on_assign?: string | null
+          condition_on_return?: string | null
+          created_at?: string
+          customer_id: string
+          id?: string
+          inventory_item_id: string
+          notes?: string | null
+          returned_date?: string | null
+          technician_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_by?: string | null
+          assigned_date?: string
+          condition_on_assign?: string | null
+          condition_on_return?: string | null
+          created_at?: string
+          customer_id?: string
+          id?: string
+          inventory_item_id?: string
+          notes?: string | null
+          returned_date?: string | null
+          technician_name?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_assignments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_assignments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_assignments_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attendance: {
+        Row: {
+          check_in: string | null
+          check_out: string | null
+          created_at: string
+          date: string
+          employee_id: string
+          id: string
+          notes: string | null
+          status: Database["public"]["Enums"]["attendance_status"]
+        }
+        Insert: {
+          check_in?: string | null
+          check_out?: string | null
+          created_at?: string
+          date: string
+          employee_id: string
+          id?: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["attendance_status"]
+        }
+        Update: {
+          check_in?: string | null
+          check_out?: string | null
+          created_at?: string
+          date?: string
+          employee_id?: string
+          id?: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["attendance_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       billing_records: {
         Row: {
@@ -173,12 +314,18 @@ export type Database = {
           alt_phone: string | null
           area_id: string | null
           auto_renew: boolean
+          billing_cycle:
+            | Database["public"]["Enums"]["billing_cycle_type"]
+            | null
           billing_start_date: string
+          connection_type: Database["public"]["Enums"]["connection_type"] | null
           created_at: string
           email: string | null
           expiry_date: string
           full_name: string
           id: string
+          latitude: number | null
+          longitude: number | null
           package_id: string | null
           password_hash: string
           phone: string
@@ -193,12 +340,20 @@ export type Database = {
           alt_phone?: string | null
           area_id?: string | null
           auto_renew?: boolean
+          billing_cycle?:
+            | Database["public"]["Enums"]["billing_cycle_type"]
+            | null
           billing_start_date?: string
+          connection_type?:
+            | Database["public"]["Enums"]["connection_type"]
+            | null
           created_at?: string
           email?: string | null
           expiry_date: string
           full_name: string
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           package_id?: string | null
           password_hash: string
           phone: string
@@ -213,12 +368,20 @@ export type Database = {
           alt_phone?: string | null
           area_id?: string | null
           auto_renew?: boolean
+          billing_cycle?:
+            | Database["public"]["Enums"]["billing_cycle_type"]
+            | null
           billing_start_date?: string
+          connection_type?:
+            | Database["public"]["Enums"]["connection_type"]
+            | null
           created_at?: string
           email?: string | null
           expiry_date?: string
           full_name?: string
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           package_id?: string | null
           password_hash?: string
           phone?: string
@@ -259,6 +422,149 @@ export type Database = {
           },
         ]
       }
+      departments: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      designations: {
+        Row: {
+          created_at: string
+          department_id: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department_id?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department_id?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "designations_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employees: {
+        Row: {
+          address: string | null
+          bank_account: string | null
+          basic_salary: number
+          created_at: string
+          department_id: string | null
+          designation_id: string | null
+          email: string | null
+          emergency_contact: string | null
+          employee_code: string
+          full_name: string
+          id: string
+          joining_date: string
+          notes: string | null
+          phone: string | null
+          status: Database["public"]["Enums"]["employee_status"]
+          termination_date: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          address?: string | null
+          bank_account?: string | null
+          basic_salary?: number
+          created_at?: string
+          department_id?: string | null
+          designation_id?: string | null
+          email?: string | null
+          emergency_contact?: string | null
+          employee_code: string
+          full_name: string
+          id?: string
+          joining_date?: string
+          notes?: string | null
+          phone?: string | null
+          status?: Database["public"]["Enums"]["employee_status"]
+          termination_date?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          address?: string | null
+          bank_account?: string | null
+          basic_salary?: number
+          created_at?: string
+          department_id?: string | null
+          designation_id?: string | null
+          email?: string | null
+          emergency_contact?: string | null
+          employee_code?: string
+          full_name?: string
+          id?: string
+          joining_date?: string
+          notes?: string | null
+          phone?: string | null
+          status?: Database["public"]["Enums"]["employee_status"]
+          termination_date?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employees_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employees_designation_id_fkey"
+            columns: ["designation_id"]
+            isOneToOne: false
+            referencedRelation: "designations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expense_categories: {
         Row: {
           created_at: string
@@ -283,6 +589,254 @@ export type Database = {
           is_active?: boolean
           name?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      inventory_items: {
+        Row: {
+          created_at: string
+          id: string
+          mac_address: string | null
+          notes: string | null
+          product_id: string
+          purchase_date: string | null
+          purchase_price: number | null
+          serial_number: string | null
+          status: Database["public"]["Enums"]["asset_status"]
+          updated_at: string
+          warranty_end_date: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mac_address?: string | null
+          notes?: string | null
+          product_id: string
+          purchase_date?: string | null
+          purchase_price?: number | null
+          serial_number?: string | null
+          status?: Database["public"]["Enums"]["asset_status"]
+          updated_at?: string
+          warranty_end_date?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mac_address?: string | null
+          notes?: string | null
+          product_id?: string
+          purchase_date?: string | null
+          purchase_price?: number | null
+          serial_number?: string | null
+          status?: Database["public"]["Enums"]["asset_status"]
+          updated_at?: string
+          warranty_end_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_items: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          invoice_id: string
+          quantity: number
+          total: number
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          invoice_id: string
+          quantity?: number
+          total?: number
+          unit_price?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          invoice_id?: string
+          quantity?: number
+          total?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          amount_paid: number
+          billing_record_id: string | null
+          created_at: string
+          customer_id: string
+          discount: number
+          due_date: string
+          id: string
+          invoice_number: string
+          issue_date: string
+          notes: string | null
+          status: Database["public"]["Enums"]["invoice_status"]
+          subtotal: number
+          tax: number
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          amount_paid?: number
+          billing_record_id?: string | null
+          created_at?: string
+          customer_id: string
+          discount?: number
+          due_date: string
+          id?: string
+          invoice_number: string
+          issue_date?: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"]
+          subtotal?: number
+          tax?: number
+          total?: number
+          updated_at?: string
+        }
+        Update: {
+          amount_paid?: number
+          billing_record_id?: string | null
+          created_at?: string
+          customer_id?: string
+          discount?: number
+          due_date?: string
+          id?: string
+          invoice_number?: string
+          issue_date?: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"]
+          subtotal?: number
+          tax?: number
+          total?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_billing_record_id_fkey"
+            columns: ["billing_record_id"]
+            isOneToOne: false
+            referencedRelation: "billing_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_requests: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          employee_id: string
+          end_date: string
+          id: string
+          leave_type_id: string
+          reason: string | null
+          start_date: string
+          status: Database["public"]["Enums"]["leave_status"]
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          employee_id: string
+          end_date: string
+          id?: string
+          leave_type_id: string
+          reason?: string | null
+          start_date: string
+          status?: Database["public"]["Enums"]["leave_status"]
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          employee_id?: string
+          end_date?: string
+          id?: string
+          leave_type_id?: string
+          reason?: string | null
+          start_date?: string
+          status?: Database["public"]["Enums"]["leave_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_types: {
+        Row: {
+          created_at: string
+          days_per_year: number
+          id: string
+          is_active: boolean
+          is_paid: boolean
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          days_per_year?: number
+          id?: string
+          is_active?: boolean
+          is_paid?: boolean
+          name: string
+        }
+        Update: {
+          created_at?: string
+          days_per_year?: number
+          id?: string
+          is_active?: boolean
+          is_paid?: boolean
+          name?: string
         }
         Relationships: []
       }
@@ -444,6 +998,71 @@ export type Database = {
           },
         ]
       }
+      payroll: {
+        Row: {
+          allowances: number
+          basic_salary: number
+          bonus: number
+          commission: number
+          created_at: string
+          deductions: number
+          employee_id: string
+          id: string
+          month: number
+          net_salary: number
+          notes: string | null
+          paid_date: string | null
+          payment_method: string | null
+          status: Database["public"]["Enums"]["payroll_status"]
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          allowances?: number
+          basic_salary?: number
+          bonus?: number
+          commission?: number
+          created_at?: string
+          deductions?: number
+          employee_id: string
+          id?: string
+          month: number
+          net_salary?: number
+          notes?: string | null
+          paid_date?: string | null
+          payment_method?: string | null
+          status?: Database["public"]["Enums"]["payroll_status"]
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          allowances?: number
+          basic_salary?: number
+          bonus?: number
+          commission?: number
+          created_at?: string
+          deductions?: number
+          employee_id?: string
+          id?: string
+          month?: number
+          net_salary?: number
+          notes?: string | null
+          paid_date?: string | null
+          payment_method?: string | null
+          status?: Database["public"]["Enums"]["payroll_status"]
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       permissions: {
         Row: {
           action: string
@@ -470,6 +1089,89 @@ export type Database = {
           role?: Database["public"]["Enums"]["app_role"]
         }
         Relationships: []
+      }
+      product_categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          brand: string | null
+          category_id: string | null
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          min_stock_level: number
+          model: string | null
+          name: string
+          purchase_price: number
+          selling_price: number
+          stock_quantity: number
+          updated_at: string
+        }
+        Insert: {
+          brand?: string | null
+          category_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          min_stock_level?: number
+          model?: string | null
+          name: string
+          purchase_price?: number
+          selling_price?: number
+          stock_quantity?: number
+          updated_at?: string
+        }
+        Update: {
+          brand?: string | null
+          category_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          min_stock_level?: number
+          model?: string | null
+          name?: string
+          purchase_price?: number
+          selling_price?: number
+          stock_quantity?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "product_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -886,6 +1588,7 @@ export type Database = {
         Returns: string
       }
       generate_customer_user_id: { Args: never; Returns: string }
+      generate_invoice_number: { Args: never; Returns: string }
       get_public_system_settings: {
         Args: never
         Returns: {
@@ -913,9 +1616,29 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "staff" | "super_admin"
+      asset_status: "in_stock" | "assigned" | "returned" | "damaged" | "sold"
+      attendance_status: "present" | "absent" | "late" | "half_day" | "on_leave"
+      billing_cycle_type: "monthly" | "quarterly" | "yearly"
+      connection_type: "pppoe" | "static" | "dhcp"
       customer_status: "active" | "expiring" | "expired" | "suspended"
+      employee_status: "active" | "on_leave" | "terminated" | "resigned"
+      invoice_status:
+        | "draft"
+        | "sent"
+        | "paid"
+        | "partial"
+        | "overdue"
+        | "cancelled"
+      leave_status: "pending" | "approved" | "rejected" | "cancelled"
       mikrotik_user_status: "enabled" | "disabled"
+      notification_type:
+        | "overdue_customer"
+        | "expiring_customer"
+        | "low_stock"
+        | "payment_received"
+        | "system"
       payment_method: "bkash" | "cash" | "bank_transfer" | "due"
+      payroll_status: "draft" | "approved" | "paid"
       reminder_type:
         | "3_days_before"
         | "1_day_before"
@@ -1050,9 +1773,31 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "staff", "super_admin"],
+      asset_status: ["in_stock", "assigned", "returned", "damaged", "sold"],
+      attendance_status: ["present", "absent", "late", "half_day", "on_leave"],
+      billing_cycle_type: ["monthly", "quarterly", "yearly"],
+      connection_type: ["pppoe", "static", "dhcp"],
       customer_status: ["active", "expiring", "expired", "suspended"],
+      employee_status: ["active", "on_leave", "terminated", "resigned"],
+      invoice_status: [
+        "draft",
+        "sent",
+        "paid",
+        "partial",
+        "overdue",
+        "cancelled",
+      ],
+      leave_status: ["pending", "approved", "rejected", "cancelled"],
       mikrotik_user_status: ["enabled", "disabled"],
+      notification_type: [
+        "overdue_customer",
+        "expiring_customer",
+        "low_stock",
+        "payment_received",
+        "system",
+      ],
       payment_method: ["bkash", "cash", "bank_transfer", "due"],
+      payroll_status: ["draft", "approved", "paid"],
       reminder_type: [
         "3_days_before",
         "1_day_before",
