@@ -46,6 +46,7 @@ interface Customer {
   full_name: string;
   phone: string;
   alt_phone: string | null;
+  email: string | null;
   address: string;
   area_id: string | null;
   router_id: string | null;
@@ -54,6 +55,10 @@ interface Customer {
   expiry_date: string;
   status: 'active' | 'expiring' | 'expired' | 'suspended';
   total_due: number;
+  latitude: number | null;
+  longitude: number | null;
+  connection_type: 'pppoe' | 'static' | 'dhcp' | null;
+  billing_cycle: 'monthly' | 'quarterly' | 'yearly' | null;
 }
 
 interface CustomerEditDialogProps {
@@ -80,6 +85,7 @@ export function CustomerEditDialog({
     full_name: "",
     phone: "",
     alt_phone: "",
+    email: "",
     address: "",
     area_id: "",
     router_id: "",
@@ -87,6 +93,10 @@ export function CustomerEditDialog({
     status: "active" as Customer["status"],
     billing_start_date: new Date(),
     expiry_date: new Date(),
+    latitude: "",
+    longitude: "",
+    connection_type: "pppoe" as Customer["connection_type"],
+    billing_cycle: "monthly" as Customer["billing_cycle"],
   });
 
   useEffect(() => {
@@ -95,6 +105,7 @@ export function CustomerEditDialog({
         full_name: customer.full_name,
         phone: customer.phone,
         alt_phone: customer.alt_phone || "",
+        email: customer.email || "",
         address: customer.address,
         area_id: customer.area_id || "",
         router_id: customer.router_id || "",
@@ -102,6 +113,10 @@ export function CustomerEditDialog({
         status: customer.status,
         billing_start_date: new Date(customer.billing_start_date),
         expiry_date: new Date(customer.expiry_date),
+        latitude: customer.latitude?.toString() || "",
+        longitude: customer.longitude?.toString() || "",
+        connection_type: customer.connection_type || "pppoe",
+        billing_cycle: customer.billing_cycle || "monthly",
       });
     }
   }, [customer]);
@@ -118,6 +133,7 @@ export function CustomerEditDialog({
           full_name: formData.full_name,
           phone: formData.phone,
           alt_phone: formData.alt_phone || null,
+          email: formData.email || null,
           address: formData.address,
           area_id: formData.area_id || null,
           router_id: formData.router_id || null,
@@ -125,6 +141,10 @@ export function CustomerEditDialog({
           status: formData.status,
           billing_start_date: format(formData.billing_start_date, "yyyy-MM-dd"),
           expiry_date: format(formData.expiry_date, "yyyy-MM-dd"),
+          latitude: formData.latitude ? parseFloat(formData.latitude) : null,
+          longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+          connection_type: formData.connection_type,
+          billing_cycle: formData.billing_cycle,
         })
         .eq("id", customer.id);
 
@@ -241,6 +261,22 @@ export function CustomerEditDialog({
               </Select>
             </div>
             <div className="space-y-2">
+              <Label>Connection Type</Label>
+              <Select
+                value={formData.connection_type || "pppoe"}
+                onValueChange={(value) => setFormData({ ...formData, connection_type: value as Customer["connection_type"] })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pppoe">PPPoE</SelectItem>
+                  <SelectItem value="static">Static IP</SelectItem>
+                  <SelectItem value="dhcp">DHCP</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>Status</Label>
               <Select
                 value={formData.status}
@@ -254,6 +290,22 @@ export function CustomerEditDialog({
                   <SelectItem value="expiring">Expiring</SelectItem>
                   <SelectItem value="expired">Expired</SelectItem>
                   <SelectItem value="suspended">Suspended</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Billing Cycle</Label>
+              <Select
+                value={formData.billing_cycle || "monthly"}
+                onValueChange={(value) => setFormData({ ...formData, billing_cycle: value as Customer["billing_cycle"] })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="quarterly">Quarterly</SelectItem>
+                  <SelectItem value="yearly">Yearly</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -310,6 +362,28 @@ export function CustomerEditDialog({
                   />
                 </PopoverContent>
               </Popover>
+            </div>
+            
+            {/* GPS Location */}
+            <div className="space-y-2">
+              <Label>Latitude</Label>
+              <Input
+                type="number"
+                step="any"
+                value={formData.latitude}
+                onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+                placeholder="e.g., 23.8103"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Longitude</Label>
+              <Input
+                type="number"
+                step="any"
+                value={formData.longitude}
+                onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+                placeholder="e.g., 90.4125"
+              />
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-4">

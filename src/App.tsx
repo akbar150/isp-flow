@@ -18,6 +18,9 @@ import Routers from "./pages/Routers";
 import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
 import Accounting from "./pages/Accounting";
+import Inventory from "./pages/Inventory";
+import HRM from "./pages/HRM";
+import Invoices from "./pages/Invoices";
 import CustomerLogin from "./pages/CustomerLogin";
 import CustomerPortal from "./pages/CustomerPortal";
 import NotFound from "./pages/NotFound";
@@ -145,6 +148,30 @@ function AppRoutes() {
         element={
           <ProtectedRoute resource="transactions">
             <Accounting />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/inventory"
+        element={
+          <ProtectedRoute resource="inventory">
+            <Inventory />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/hrm"
+        element={
+          <ProtectedRoute resource="hrm">
+            <HRM />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/invoices"
+        element={
+          <ProtectedRoute resource="invoices">
+            <Invoices />
           </ProtectedRoute>
         }
       />

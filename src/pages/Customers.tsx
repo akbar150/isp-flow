@@ -71,6 +71,7 @@ interface Customer {
   full_name: string;
   phone: string;
   alt_phone: string | null;
+  email: string | null;
   address: string;
   area_id: string | null;
   router_id: string | null;
@@ -79,6 +80,10 @@ interface Customer {
   expiry_date: string;
   status: 'active' | 'expiring' | 'expired' | 'suspended';
   total_due: number;
+  latitude: number | null;
+  longitude: number | null;
+  connection_type: 'pppoe' | 'static' | 'dhcp' | null;
+  billing_cycle: 'monthly' | 'quarterly' | 'yearly' | null;
   packages: Package | null;
   areas: Area | null;
   routers: Router | null;
