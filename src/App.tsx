@@ -19,6 +19,7 @@ import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
 import Accounting from "./pages/Accounting";
 import Inventory from "./pages/Inventory";
+import Suppliers from "./pages/Suppliers";
 import HRM from "./pages/HRM";
 import Invoices from "./pages/Invoices";
 import CustomerLogin from "./pages/CustomerLogin";
@@ -156,6 +157,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute resource="inventory">
             <Inventory />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/suppliers"
+        element={
+          <ProtectedRoute resource="inventory">
+            <Suppliers />
           </ProtectedRoute>
         }
       />

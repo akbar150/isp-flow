@@ -18,6 +18,7 @@ import {
   Boxes,
   UserCog,
   FileText,
+  Building2,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ const navItems: NavItem[] = [
   { path: "/reminders", label: "Reminders", icon: Bell, resource: "reminders" },
   { path: "/call-records", label: "Call Records", icon: Phone, resource: "call_records" },
   { path: "/inventory", label: "Inventory", icon: Boxes, resource: "inventory" },
+  { path: "/suppliers", label: "Suppliers", icon: Building2, resource: "inventory" },
   { path: "/hrm", label: "HRM", icon: UserCog, resource: "hrm" },
   { path: "/accounting", label: "Accounting", icon: Calculator, resource: "transactions" },
   { path: "/reports", label: "Reports", icon: FileBarChart, resource: "reports" },

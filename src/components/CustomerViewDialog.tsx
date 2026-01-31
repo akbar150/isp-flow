@@ -22,10 +22,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format, differenceInDays, startOfDay } from "date-fns";
-import { CalendarIcon, Loader2, User, Phone, MapPin, Package, Calendar as CalendarIconAlt, CreditCard, Wifi, Key, Eye, EyeOff } from "lucide-react";
+import { CalendarIcon, Loader2, User, Phone, MapPin, Package, Calendar as CalendarIconAlt, CreditCard, Wifi, Key, Eye, EyeOff, Navigation, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CustomerCallRecords } from "./CustomerCallRecords";
 import { CustomerBillingHistory } from "./CustomerBillingHistory";
+import { CustomerAssets } from "./CustomerAssets";
 import { StatusBadge } from "./StatusBadge";
 
 interface Package {
@@ -65,6 +66,10 @@ interface Customer {
   expiry_date: string;
   status: 'active' | 'expiring' | 'expired' | 'suspended';
   total_due: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  connection_type?: 'pppoe' | 'static' | 'dhcp' | null;
+  billing_cycle?: 'monthly' | 'quarterly' | 'yearly' | null;
   packages?: Package | null;
   areas?: Area | null;
   routers?: Router | null;
@@ -277,8 +282,9 @@ export function CustomerViewDialog({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="mt-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="assets">Assets</TabsTrigger>
             <TabsTrigger value="billing">Billing</TabsTrigger>
             <TabsTrigger value="credentials">Credentials</TabsTrigger>
             <TabsTrigger value="calls">Calls</TabsTrigger>
@@ -357,9 +363,26 @@ export function CustomerViewDialog({
                       Address
                     </div>
                     <p className="font-medium">{customer.address}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Area: {selectedArea?.name || "N/A"} | Router: {selectedRouter?.name || "N/A"}
-                    </p>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-sm text-muted-foreground">
+                        Area: {selectedArea?.name || "N/A"} | Router: {selectedRouter?.name || "N/A"}
+                      </p>
+                      {customer.latitude && customer.longitude && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(`https://www.google.com/maps?q=${customer.latitude},${customer.longitude}`, "_blank")}
+                        >
+                          <Navigation className="h-4 w-4 mr-1" />
+                          Go Location
+                        </Button>
+                      )}
+                    </div>
+                    {customer.latitude && customer.longitude && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        GPS: {customer.latitude}, {customer.longitude}
+                      </p>
+                    )}
                   </div>
 
                   {/* Billing Start Date */}
@@ -685,6 +708,14 @@ export function CustomerViewDialog({
                 </div>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="assets" className="mt-4">
+            <CustomerAssets 
+              customerId={customer.id} 
+              customerName={customer.full_name}
+              canEdit={canEdit}
+            />
           </TabsContent>
 
           <TabsContent value="billing" className="mt-4">

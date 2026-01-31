@@ -108,6 +108,7 @@ export type Database = {
           customer_id: string
           id: string
           inventory_item_id: string
+          item_condition: string | null
           notes: string | null
           returned_date: string | null
           technician_name: string | null
@@ -122,6 +123,7 @@ export type Database = {
           customer_id: string
           id?: string
           inventory_item_id: string
+          item_condition?: string | null
           notes?: string | null
           returned_date?: string | null
           technician_name?: string | null
@@ -136,6 +138,7 @@ export type Database = {
           customer_id?: string
           id?: string
           inventory_item_id?: string
+          item_condition?: string | null
           notes?: string | null
           returned_date?: string | null
           technician_name?: string | null
@@ -594,6 +597,9 @@ export type Database = {
       }
       inventory_items: {
         Row: {
+          cable_color: string | null
+          cable_length_m: number | null
+          core_count: number | null
           created_at: string
           id: string
           mac_address: string | null
@@ -603,10 +609,14 @@ export type Database = {
           purchase_price: number | null
           serial_number: string | null
           status: Database["public"]["Enums"]["asset_status"]
+          supplier_id: string | null
           updated_at: string
           warranty_end_date: string | null
         }
         Insert: {
+          cable_color?: string | null
+          cable_length_m?: number | null
+          core_count?: number | null
           created_at?: string
           id?: string
           mac_address?: string | null
@@ -616,10 +626,14 @@ export type Database = {
           purchase_price?: number | null
           serial_number?: string | null
           status?: Database["public"]["Enums"]["asset_status"]
+          supplier_id?: string | null
           updated_at?: string
           warranty_end_date?: string | null
         }
         Update: {
+          cable_color?: string | null
+          cable_length_m?: number | null
+          core_count?: number | null
           created_at?: string
           id?: string
           mac_address?: string | null
@@ -629,6 +643,7 @@ export type Database = {
           purchase_price?: number | null
           serial_number?: string | null
           status?: Database["public"]["Enums"]["asset_status"]
+          supplier_id?: string | null
           updated_at?: string
           warranty_end_date?: string | null
         }
@@ -638,6 +653,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
@@ -1097,6 +1119,8 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          requires_mac: boolean | null
+          requires_serial: boolean | null
           updated_at: string
         }
         Insert: {
@@ -1105,6 +1129,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          requires_mac?: boolean | null
+          requires_serial?: boolean | null
           updated_at?: string
         }
         Update: {
@@ -1113,6 +1139,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          requires_mac?: boolean | null
+          requires_serial?: boolean | null
           updated_at?: string
         }
         Relationships: []
@@ -1278,6 +1306,42 @@ export type Database = {
           port?: number | null
           updated_at?: string
           username?: string | null
+        }
+        Relationships: []
+      }
+      suppliers: {
+        Row: {
+          address: string | null
+          contact_person: string | null
+          created_at: string | null
+          email: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          phone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          contact_person?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          phone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          contact_person?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          phone?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
