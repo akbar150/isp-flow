@@ -170,64 +170,71 @@ Please pay to avoid disconnection.
               <Shield className="h-4 w-4" />
               <span className="hidden sm:inline">Permissions</span>
             </TabsTrigger>
-            {isSuperAdmin && (
-              <TabsTrigger value="reset" className="flex items-center gap-1.5 px-3 py-2 text-destructive">
-                <Trash2 className="h-4 w-4" />
-                <span className="hidden sm:inline">Reset</span>
-              </TabsTrigger>
-            )}
+            {/* Reset is shown inside General tab for Super Admins */}
           </TabsList>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
 
         <TabsContent value="general">
-          <div className="form-section max-w-xl">
-            <h3 className="form-section-title flex items-center gap-2">
-              <Settings2 className="h-5 w-5" />
-              General Settings
-            </h3>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>ISP Name</Label>
-                <Input
-                  value={settings.isp_name}
-                  onChange={(e) => setSettings({ ...settings, isp_name: e.target.value })}
-                  placeholder="Your ISP Name"
-                />
-                <p className="text-xs text-muted-foreground">
-                  This name appears in WhatsApp messages, emails, login pages, and system branding
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Map className="h-4 w-4" />
-                  Google Maps API Key
-                </Label>
-                <Input
-                  type="password"
-                  value={settings.google_maps_api_key}
-                  onChange={(e) => setSettings({ ...settings, google_maps_api_key: e.target.value })}
-                  placeholder="AIzaSy..."
-                />
-                <p className="text-xs text-muted-foreground">
-                  Required for customer map view. Get your API key from{" "}
-                  <a 
-                    href="https://console.cloud.google.com/apis/credentials" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-primary underline"
-                  >
-                    Google Cloud Console
-                  </a>
-                </p>
-              </div>
+          <div className="space-y-6">
+            <div className="form-section max-w-xl">
+              <h3 className="form-section-title flex items-center gap-2">
+                <Settings2 className="h-5 w-5" />
+                General Settings
+              </h3>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>ISP Name</Label>
+                  <Input
+                    value={settings.isp_name}
+                    onChange={(e) => setSettings({ ...settings, isp_name: e.target.value })}
+                    placeholder="Your ISP Name"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    This name appears in WhatsApp messages, emails, login pages, and system branding
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Map className="h-4 w-4" />
+                    Google Maps API Key
+                  </Label>
+                  <Input
+                    type="password"
+                    value={settings.google_maps_api_key}
+                    onChange={(e) => setSettings({ ...settings, google_maps_api_key: e.target.value })}
+                    placeholder="AIzaSy..."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Required for customer map view. Get your API key from{" "}
+                    <a 
+                      href="https://console.cloud.google.com/apis/credentials" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary underline"
+                    >
+                      Google Cloud Console
+                    </a>
+                  </p>
+                </div>
 
-              <Button onClick={saveSettings} disabled={saving}>
-                <Save className="h-4 w-4 mr-2" />
-                {saving ? "Saving..." : "Save Settings"}
-              </Button>
+                <Button onClick={saveSettings} disabled={saving}>
+                  <Save className="h-4 w-4 mr-2" />
+                  {saving ? "Saving..." : "Save Settings"}
+                </Button>
+              </div>
             </div>
+
+            {isSuperAdmin && (
+              <div className="form-section max-w-2xl">
+                <h3 className="form-section-title flex items-center gap-2 text-destructive">
+                  <Trash2 className="h-5 w-5" />
+                  Data Reset (Super Admin Only)
+                </h3>
+                <DataResetPanel />
+              </div>
+            )}
           </div>
         </TabsContent>
 
@@ -314,17 +321,6 @@ Please pay to avoid disconnection.
           <RolePermissions />
         </TabsContent>
 
-        {isSuperAdmin && (
-          <TabsContent value="reset">
-            <div className="form-section max-w-2xl">
-              <h3 className="form-section-title flex items-center gap-2 text-destructive">
-                <Trash2 className="h-5 w-5" />
-                Data Reset (Super Admin Only)
-              </h3>
-              <DataResetPanel />
-            </div>
-          </TabsContent>
-        )}
       </Tabs>
     </DashboardLayout>
   );

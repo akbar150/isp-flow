@@ -1,24 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-// Allowed origins for CORS - production domains
-const allowedOrigins = [
-  "https://easylinkbd.lovable.app",
-  "https://id-preview--f3ea74ef-bbb2-4d36-9390-fa74e8d6e7df.lovable.app",
-  "https://isp.easylinkbd.com",
-];
-
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get("origin") || "";
-  const isAllowed = allowedOrigins.some(allowed => 
-    origin === allowed || origin.endsWith(".lovable.app")
-  );
-  return {
-    "Access-Control-Allow-Origin": isAllowed ? origin : allowedOrigins[0],
-    "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-  };
-}
+// CORS (must work from preview + published + custom domains)
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
 
 type AppRole = "super_admin" | "admin" | "staff";
 
@@ -56,37 +44,56 @@ async function getIspName(supabaseUrl: string, serviceKey: string): Promise<stri
 }
 
 serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
-  
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      throw new Error("Missing authorization header");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Missing authorization header" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+      );
     }
 
-    const supabaseClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
 
-    // Verify requesting user
-    const { data: { user: requestingUser }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !requestingUser) {
-      throw new Error("Unauthorized: Could not verify user");
+    if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
+      console.error("Server misconfigured: missing env vars", {
+        hasUrl: !!supabaseUrl,
+        hasServiceKey: !!supabaseServiceKey,
+        hasAnonKey: !!supabaseAnonKey,
+      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Server configuration error" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+      );
     }
+
+    // Verify JWT manually (verify_jwt=false in config)
+    const token = authHeader.replace("Bearer ", "");
+    const authClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
+
+    const requestingUserId = claimsData?.claims?.sub;
+    if (claimsError || !requestingUserId) {
+      console.error("Unauthorized: invalid JWT", claimsError);
+      return new Response(
+        JSON.stringify({ success: false, error: "Unauthorized" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+      );
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     // Check requesting user's role
     const { data: roleData, error: roleError } = await supabaseAdmin
       .from("user_roles")
       .select("role")
-      .eq("user_id", requestingUser.id)
+      .eq("user_id", requestingUserId)
       .single();
 
     if (roleError || !roleData) {
@@ -201,7 +208,7 @@ serve(async (req) => {
 
         // Log activity
         await supabaseAdmin.from("activity_logs").insert({
-          user_id: requestingUser.id,
+          user_id: requestingUserId,
           action: "create_user",
           entity_type: "user",
           entity_id: newUser.user.id,
@@ -236,7 +243,7 @@ serve(async (req) => {
         // Users can update themselves
         const canUpdate = isSuperAdmin || 
           (isAdmin && targetRole === "staff") ||
-          requestingUser.id === user_id;
+          requestingUserId === user_id;
 
         if (!canUpdate) {
           throw new Error("Unauthorized: Cannot update this user");
@@ -284,7 +291,7 @@ serve(async (req) => {
         }
 
         // Update role (only super_admin can change roles)
-        if (role && isSuperAdmin && user_id !== requestingUser.id) {
+        if (role && isSuperAdmin && user_id !== requestingUserId) {
           await supabaseAdmin
             .from("user_roles")
             .update({ role })
@@ -293,7 +300,7 @@ serve(async (req) => {
 
         // Log activity
         await supabaseAdmin.from("activity_logs").insert({
-          user_id: requestingUser.id,
+          user_id: requestingUserId,
           action: "update_user",
           entity_type: "user",
           entity_id: user_id,
@@ -311,7 +318,7 @@ serve(async (req) => {
           throw new Error("Missing user_id for deletion");
         }
 
-        if (user_id === requestingUser.id) {
+        if (user_id === requestingUserId) {
           throw new Error("Cannot delete your own account");
         }
 
@@ -343,7 +350,7 @@ serve(async (req) => {
 
         // Log activity
         await supabaseAdmin.from("activity_logs").insert({
-          user_id: requestingUser.id,
+          user_id: requestingUserId,
           action: "delete_user",
           entity_type: "user",
           entity_id: user_id,
@@ -375,7 +382,7 @@ serve(async (req) => {
         }
 
         // Check if requester can reset this user's password
-        const canReset = isSuperAdmin || targetUser.id === requestingUser.id;
+        const canReset = isSuperAdmin || targetUser.id === requestingUserId;
         if (!canReset) {
           throw new Error("Unauthorized: Cannot reset this user's password");
         }
@@ -491,7 +498,7 @@ serve(async (req) => {
     console.error("Error in manage-user:", error);
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
-      { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: 400 }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
     );
   }
 });
