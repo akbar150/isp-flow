@@ -66,6 +66,8 @@ interface MeteredUsageLog {
   core_count: number | null;
   color: string | null;
   created_at: string;
+  account_type: string | null;
+  selling_price: number | null;
   products: {
     id: string;
     name: string;
@@ -166,6 +168,12 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
 
     setProcessing(true);
     try {
+      // Determine if item should be restocked based on condition
+      // Only Good and Fair conditions are restocked, Damaged and Poor are not
+      const restockableConditions = ["Good", "Fair", "New"];
+      const shouldRestock = restockableConditions.includes(returnCondition);
+      const newStatus = shouldRestock ? "in_stock" : "damaged";
+
       // Update assignment with return info
       const { error: assignmentError } = await supabase
         .from("asset_assignments")
@@ -178,16 +186,16 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
 
       if (assignmentError) throw assignmentError;
 
-      // Update inventory item status back to returned
+      // Update inventory item status based on condition
       const { error: itemError } = await supabase
         .from("inventory_items")
-        .update({ status: "returned" })
+        .update({ status: newStatus })
         .eq("id", selectedAssignment.inventory_item_id);
 
       if (itemError) throw itemError;
 
-      // Update product stock quantity (increase by 1)
-      if (selectedAssignment.inventory_items?.product_id) {
+      // Only update product stock quantity if item is restocked
+      if (shouldRestock && selectedAssignment.inventory_items?.product_id) {
         const { data: product } = await supabase
           .from("products")
           .select("stock_quantity")
@@ -202,7 +210,11 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
         }
       }
 
-      toast({ title: "Device returned successfully" });
+      const message = shouldRestock 
+        ? "Device returned and restocked successfully" 
+        : `Device returned as ${returnCondition} (not restocked)`;
+      
+      toast({ title: message });
       setReturnDialogOpen(false);
       setSelectedAssignment(null);
       setReturnCondition("Good");
@@ -375,9 +387,13 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
           <div className="space-y-3">
             {meteredUsages.map((usage) => {
               const unit = usage.products?.product_categories?.unit_of_measure || "meter";
+              const isPaid = usage.account_type === 'paid';
               const totalCost = usage.quantity_used * (usage.products?.purchase_price || 0);
-              const totalPrice = usage.quantity_used * (usage.products?.selling_price || 0);
-              const profit = totalPrice - totalCost;
+              // Use stored selling_price for paid, otherwise calculate from product price
+              const totalPrice = isPaid 
+                ? (usage.selling_price || usage.quantity_used * (usage.products?.selling_price || 0))
+                : 0;
+              const profit = isPaid ? (totalPrice - totalCost) : 0;
 
               return (
                 <div key={usage.id} className="p-4 border rounded-lg bg-card">
@@ -390,9 +406,14 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
                         {usage.products?.brand} {usage.products?.model}
                       </div>
                     </div>
-                    <Badge variant="outline" className="text-blue-600">
-                      {usage.quantity_used} {unit}(s)
-                    </Badge>
+                    <div className="flex gap-2">
+                      <Badge variant={isPaid ? 'default' : 'secondary'}>
+                        {isPaid ? 'Paid' : 'Free'}
+                      </Badge>
+                      <Badge variant="outline" className="text-blue-600">
+                        {usage.quantity_used} {unit}(s)
+                      </Badge>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
@@ -418,22 +439,25 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
                     )}
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4 mt-3 text-sm p-2 bg-muted/50 rounded">
-                    <div>
-                      <p className="text-muted-foreground text-xs">Cost (৳{usage.products?.purchase_price || 0}/{unit})</p>
-                      <p>৳{totalCost.toLocaleString()}</p>
+                  {/* Only show financial details for paid assignments */}
+                  {isPaid && (
+                    <div className="grid grid-cols-3 gap-4 mt-3 text-sm p-2 bg-muted/50 rounded">
+                      <div>
+                        <p className="text-muted-foreground text-xs">Cost</p>
+                        <p>৳{totalCost.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Selling Price</p>
+                        <p>৳{totalPrice.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Profit</p>
+                        <p className={profit >= 0 ? "text-green-600 font-medium" : "text-destructive font-medium"}>
+                          ৳{profit.toLocaleString()}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-muted-foreground text-xs">Value (৳{usage.products?.selling_price || 0}/{unit})</p>
-                      <p>৳{totalPrice.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground text-xs">Profit</p>
-                      <p className={profit >= 0 ? "text-green-600 font-medium" : "text-destructive font-medium"}>
-                        ৳{profit.toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
+                  )}
 
                   {usage.technician_name && (
                     <p className="text-sm text-muted-foreground mt-2">
