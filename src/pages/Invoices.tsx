@@ -37,8 +37,10 @@ import {
   Trash2,
   Printer,
   Send,
-  Eye
+  Eye,
+  DollarSign
 } from "lucide-react";
+import { InvoicePaymentDialog } from "@/components/InvoicePaymentDialog";
 import { format, addDays } from "date-fns";
 
 interface Customer {
@@ -104,8 +106,10 @@ export default function Invoices() {
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
+  const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
   
   // Form states
   const [form, setForm] = useState({
@@ -687,8 +691,11 @@ export default function Invoices() {
                           </DropdownMenuItem>
                         )}
                         {canEdit && invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
-                          <DropdownMenuItem onClick={() => handleUpdateStatus(invoice.id, 'paid')}>
-                            <FileText className="h-4 w-4 mr-2" /> Mark as Paid
+                          <DropdownMenuItem onClick={() => {
+                            setPayingInvoice(invoice);
+                            setPaymentDialogOpen(true);
+                          }}>
+                            <DollarSign className="h-4 w-4 mr-2 text-green-600" /> Collect Payment
                           </DropdownMenuItem>
                         )}
                         {canEdit && (
@@ -804,6 +811,23 @@ export default function Invoices() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Payment Collection Dialog */}
+      {payingInvoice && (
+        <InvoicePaymentDialog
+          open={paymentDialogOpen}
+          onOpenChange={setPaymentDialogOpen}
+          invoice={{
+            id: payingInvoice.id,
+            invoice_number: payingInvoice.invoice_number,
+            customer_id: payingInvoice.customer_id,
+            total: payingInvoice.total,
+            amount_paid: payingInvoice.amount_paid,
+          }}
+          customerName={payingInvoice.customers?.full_name || "Customer"}
+          onSuccess={fetchData}
+        />
+      )}
     </DashboardLayout>
   );
 }
