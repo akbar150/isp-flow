@@ -86,6 +86,7 @@ interface Product {
   purchase_price: number;
   selling_price: number;
   stock_quantity: number;
+  metered_quantity: number | null;
   min_stock_level: number;
   is_active: boolean;
   product_categories?: ProductCategory | null;
@@ -197,6 +198,7 @@ export default function Inventory() {
     core_count: 0,
     cable_color: "",
     cable_length_m: 0,
+    metered_quantity: 0, // for metered products (meters to add)
   });
   const [supplierForm, setSupplierForm] = useState({
     name: "",
@@ -278,9 +280,13 @@ export default function Inventory() {
   const selectedCategory = itemForm.product_id ? getProductCategory(itemForm.product_id) : null;
   const requiresSerial = selectedCategory?.requires_serial || false;
   const requiresMac = selectedCategory?.requires_mac || false;
-  const isCableProduct = selectedCategory?.name?.toLowerCase().includes("cable") || 
-                         selectedCategory?.name?.toLowerCase().includes("fibre") ||
-                         selectedCategory?.name?.toLowerCase().includes("fiber");
+  const isMeteredProduct = selectedCategory?.is_metered || false;
+  const meteredUnit = selectedCategory?.unit_of_measure || "meter";
+  const isCableProduct = !isMeteredProduct && (
+    selectedCategory?.name?.toLowerCase().includes("cable") || 
+    selectedCategory?.name?.toLowerCase().includes("fibre") ||
+    selectedCategory?.name?.toLowerCase().includes("fiber")
+  );
 
   // Update quantity and arrays
   const handleQuantityChange = (qty: number) => {
@@ -381,48 +387,47 @@ export default function Inventory() {
     }
   };
 
-  // Inventory item handlers - BULK ADD
+  // Inventory item handlers - BULK ADD (handles both metered and discrete products)
   const handleSaveItem = async () => {
     setSaving(true);
     try {
       if (!itemForm.product_id) throw new Error("Please select a product");
       if (!itemForm.supplier_id) throw new Error("Please select a supplier");
 
-      if (requiresSerial) {
-        const emptySerials = itemForm.serial_numbers.filter(s => !s.trim());
-        if (emptySerials.length > 0) throw new Error(`Please enter all ${itemForm.quantity} serial numbers`);
-      }
-      if (requiresMac) {
-        const emptyMacs = itemForm.mac_addresses.filter(m => !m.trim());
-        if (emptyMacs.length > 0) throw new Error(`Please enter all ${itemForm.quantity} MAC addresses`);
-      }
+      const product = products.find(p => p.id === itemForm.product_id);
+      const category = product?.product_categories;
+      const isMetered = category?.is_metered || false;
+      const unit = category?.unit_of_measure || "meter";
 
-      if (editingItem) {
-        const data = {
-          product_id: itemForm.product_id,
-          supplier_id: itemForm.supplier_id || null,
-          serial_number: itemForm.serial_numbers[0] || null,
-          mac_address: itemForm.mac_addresses[0] || null,
-          purchase_date: itemForm.purchase_date || null,
-          purchase_price: itemForm.purchase_price || null,
-          warranty_end_date: itemForm.warranty_end_date || null,
-          notes: itemForm.notes || null,
-          core_count: isCableProduct ? itemForm.core_count || null : null,
-          cable_color: isCableProduct ? itemForm.cable_color || null : null,
-          cable_length_m: isCableProduct ? itemForm.cable_length_m || null : null,
-        };
+      if (isMetered) {
+        // METERED PRODUCT: Update metered_quantity directly on products table
+        if (itemForm.metered_quantity <= 0) throw new Error(`Please enter quantity in ${unit}s`);
 
-        const { error } = await supabase.from("inventory_items").update(data).eq("id", editingItem.id);
+        const currentQty = product?.metered_quantity || 0;
+        const { error } = await supabase
+          .from("products")
+          .update({ metered_quantity: currentQty + itemForm.metered_quantity })
+          .eq("id", itemForm.product_id);
+
         if (error) throw error;
-        toast({ title: "Success", description: "Item updated" });
+        toast({ title: "Success", description: `Added ${itemForm.metered_quantity} ${unit}(s) to stock` });
       } else {
-        const items = [];
-        for (let i = 0; i < itemForm.quantity; i++) {
-          items.push({
+        // DISCRETE PRODUCT: Create individual inventory_items
+        if (requiresSerial) {
+          const emptySerials = itemForm.serial_numbers.filter(s => !s.trim());
+          if (emptySerials.length > 0) throw new Error(`Please enter all ${itemForm.quantity} serial numbers`);
+        }
+        if (requiresMac) {
+          const emptyMacs = itemForm.mac_addresses.filter(m => !m.trim());
+          if (emptyMacs.length > 0) throw new Error(`Please enter all ${itemForm.quantity} MAC addresses`);
+        }
+
+        if (editingItem) {
+          const data = {
             product_id: itemForm.product_id,
             supplier_id: itemForm.supplier_id || null,
-            serial_number: requiresSerial ? itemForm.serial_numbers[i] : null,
-            mac_address: requiresMac ? itemForm.mac_addresses[i] : null,
+            serial_number: itemForm.serial_numbers[0] || null,
+            mac_address: itemForm.mac_addresses[0] || null,
             purchase_date: itemForm.purchase_date || null,
             purchase_price: itemForm.purchase_price || null,
             warranty_end_date: itemForm.warranty_end_date || null,
@@ -430,25 +435,45 @@ export default function Inventory() {
             core_count: isCableProduct ? itemForm.core_count || null : null,
             cable_color: isCableProduct ? itemForm.cable_color || null : null,
             cable_length_m: isCableProduct ? itemForm.cable_length_m || null : null,
-            status: 'in_stock',
-          });
+          };
+
+          const { error } = await supabase.from("inventory_items").update(data).eq("id", editingItem.id);
+          if (error) throw error;
+          toast({ title: "Success", description: "Item updated" });
+        } else {
+          const items = [];
+          for (let i = 0; i < itemForm.quantity; i++) {
+            items.push({
+              product_id: itemForm.product_id,
+              supplier_id: itemForm.supplier_id || null,
+              serial_number: requiresSerial ? itemForm.serial_numbers[i] : null,
+              mac_address: requiresMac ? itemForm.mac_addresses[i] : null,
+              purchase_date: itemForm.purchase_date || null,
+              purchase_price: itemForm.purchase_price || null,
+              warranty_end_date: itemForm.warranty_end_date || null,
+              notes: itemForm.notes || null,
+              core_count: isCableProduct ? itemForm.core_count || null : null,
+              cable_color: isCableProduct ? itemForm.cable_color || null : null,
+              cable_length_m: isCableProduct ? itemForm.cable_length_m || null : null,
+              status: 'in_stock',
+            });
+          }
+
+          const { error } = await supabase.from("inventory_items").insert(items);
+          if (error) throw error;
+
+          // Update product stock quantity
+          if (product) {
+            await supabase.from("products").update({ stock_quantity: product.stock_quantity + itemForm.quantity }).eq("id", product.id);
+          }
+
+          toast({ title: "Success", description: `${itemForm.quantity} item(s) added to stock` });
         }
-
-        const { error } = await supabase.from("inventory_items").insert(items);
-        if (error) throw error;
-
-        // Update product stock quantity
-        const product = products.find(p => p.id === itemForm.product_id);
-        if (product) {
-          await supabase.from("products").update({ stock_quantity: product.stock_quantity + itemForm.quantity }).eq("id", product.id);
-        }
-
-        toast({ title: "Success", description: `${itemForm.quantity} item(s) added to stock` });
       }
       
       setItemDialogOpen(false);
       setEditingItem(null);
-      setItemForm({ product_id: "", supplier_id: "", quantity: 1, serial_numbers: [""], mac_addresses: [""], purchase_date: "", purchase_price: 0, warranty_end_date: "", notes: "", core_count: 0, cable_color: "", cable_length_m: 0 });
+      setItemForm({ product_id: "", supplier_id: "", quantity: 1, serial_numbers: [""], mac_addresses: [""], purchase_date: "", purchase_price: 0, warranty_end_date: "", notes: "", core_count: 0, cable_color: "", cable_length_m: 0, metered_quantity: 0 });
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -737,8 +762,15 @@ export default function Inventory() {
             ) : (
               filteredProducts.map((product) => {
                 const stock = getProductStock(product.id);
-                const isLowStock = stock.inStock <= product.min_stock_level;
-                const potentialProfit = stock.inStock * (product.selling_price - product.purchase_price);
+                const isMetered = product.product_categories?.is_metered || false;
+                const meteredUnit = product.product_categories?.unit_of_measure || "meter";
+                const meteredQty = product.metered_quantity || 0;
+                const isLowStock = isMetered 
+                  ? meteredQty <= product.min_stock_level 
+                  : stock.inStock <= product.min_stock_level;
+                const potentialProfit = isMetered 
+                  ? meteredQty * (product.selling_price - product.purchase_price)
+                  : stock.inStock * (product.selling_price - product.purchase_price);
                 
                 return (
                   <Card key={product.id} className={cn("relative overflow-hidden", isLowStock && "border-yellow-500")}>
@@ -763,13 +795,15 @@ export default function Inventory() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => {
-                              setViewingProduct(product);
-                              setViewItemsDialogOpen(true);
-                            }}>
-                              <Eye className="h-4 w-4 mr-2" /> View Items
-                            </DropdownMenuItem>
-                            {stock.inStock > 0 && (
+                            {!isMetered && (
+                              <DropdownMenuItem onClick={() => {
+                                setViewingProduct(product);
+                                setViewItemsDialogOpen(true);
+                              }}>
+                                <Eye className="h-4 w-4 mr-2" /> View Items
+                              </DropdownMenuItem>
+                            )}
+                            {!isMetered && stock.inStock > 0 && (
                               <DropdownMenuItem onClick={() => {
                                 setSellingProduct(product);
                                 setSellForm({
@@ -810,39 +844,75 @@ export default function Inventory() {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                      <Badge variant="outline" className="w-fit mt-1">
-                        {product.product_categories?.name || "Uncategorized"}
-                      </Badge>
+                      <div className="flex gap-2 mt-1">
+                        <Badge variant="outline">
+                          {product.product_categories?.name || "Uncategorized"}
+                        </Badge>
+                        {isMetered && (
+                          <Badge variant="secondary" className="bg-primary/10 text-primary">
+                            {meteredUnit}
+                          </Badge>
+                        )}
+                      </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                        <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded">
-                          <p className="text-xs text-muted-foreground">In Stock</p>
-                          <p className="text-lg font-bold text-green-600">{stock.inStock}</p>
+                      {isMetered ? (
+                        // Metered product display
+                        <div className="space-y-3">
+                          <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded text-center">
+                            <p className="text-xs text-muted-foreground">Available Stock</p>
+                            <p className="text-2xl font-bold text-green-600">
+                              {meteredQty.toLocaleString()} {meteredUnit}
+                            </p>
+                          </div>
+                          <div className="flex justify-between text-sm border-t pt-2">
+                            <div>
+                              <p className="text-muted-foreground">Price/{meteredUnit}</p>
+                              <p className="font-medium">৳{product.selling_price}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Cost/{meteredUnit}</p>
+                              <p className="font-medium">৳{product.purchase_price}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Stock Value</p>
+                              <p className="font-medium text-green-600">৳{(meteredQty * product.purchase_price).toLocaleString()}</p>
+                            </div>
+                          </div>
                         </div>
-                        <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
-                          <p className="text-xs text-muted-foreground">Assigned</p>
-                          <p className="text-lg font-bold text-blue-600">{stock.assigned}</p>
-                        </div>
-                        <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
-                          <p className="text-xs text-muted-foreground">Sold</p>
-                          <p className="text-lg font-bold text-purple-600">{stock.sold}</p>
-                        </div>
-                      </div>
-                      <div className="flex justify-between text-sm border-t pt-2">
-                        <div>
-                          <p className="text-muted-foreground">Purchase</p>
-                          <p className="font-medium">৳{product.purchase_price}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Selling</p>
-                          <p className="font-medium">৳{product.selling_price}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Potential</p>
-                          <p className="font-medium text-green-600">৳{potentialProfit}</p>
-                        </div>
-                      </div>
+                      ) : (
+                        // Discrete product display
+                        <>
+                          <div className="grid grid-cols-3 gap-2 text-center mb-3">
+                            <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                              <p className="text-xs text-muted-foreground">In Stock</p>
+                              <p className="text-lg font-bold text-green-600">{stock.inStock}</p>
+                            </div>
+                            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                              <p className="text-xs text-muted-foreground">Assigned</p>
+                              <p className="text-lg font-bold text-blue-600">{stock.assigned}</p>
+                            </div>
+                            <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                              <p className="text-xs text-muted-foreground">Sold</p>
+                              <p className="text-lg font-bold text-purple-600">{stock.sold}</p>
+                            </div>
+                          </div>
+                          <div className="flex justify-between text-sm border-t pt-2">
+                            <div>
+                              <p className="text-muted-foreground">Purchase</p>
+                              <p className="font-medium">৳{product.purchase_price}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Selling</p>
+                              <p className="font-medium">৳{product.selling_price}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Potential</p>
+                              <p className="font-medium text-green-600">৳{potentialProfit}</p>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -879,7 +949,7 @@ export default function Inventory() {
             {canManage && (
               <Button onClick={() => {
                 setEditingItem(null);
-                setItemForm({ product_id: "", supplier_id: "", quantity: 1, serial_numbers: [""], mac_addresses: [""], purchase_date: "", purchase_price: 0, warranty_end_date: "", notes: "", core_count: 0, cable_color: "", cable_length_m: 0 });
+                setItemForm({ product_id: "", supplier_id: "", quantity: 1, serial_numbers: [""], mac_addresses: [""], purchase_date: "", purchase_price: 0, warranty_end_date: "", notes: "", core_count: 0, cable_color: "", cable_length_m: 0, metered_quantity: 0 });
                 setItemDialogOpen(true);
               }}>
                 <Plus className="h-4 w-4 mr-2" /> Add Stock
@@ -993,6 +1063,7 @@ export default function Inventory() {
                                   core_count: item.core_count || 0,
                                   cable_color: item.cable_color || "",
                                   cable_length_m: item.cable_length_m || 0,
+                                  metered_quantity: 0,
                                 });
                                 setItemDialogOpen(true);
                               }}>
@@ -1346,21 +1417,50 @@ export default function Inventory() {
             {selectedCategory && (
               <div className="p-3 bg-muted rounded-lg text-sm">
                 <span className="font-medium">Category: {selectedCategory.name}</span>
-                <div className="flex gap-4 mt-1 text-muted-foreground">
-                  <span>Serial: {selectedCategory.requires_serial ? "Required" : "Optional"}</span>
-                  <span>MAC: {selectedCategory.requires_mac ? "Required" : "Optional"}</span>
-                </div>
+                {isMeteredProduct ? (
+                  <div className="mt-1 text-muted-foreground">
+                    <Badge variant="secondary" className="bg-primary/10 text-primary">
+                      Metered Product ({meteredUnit})
+                    </Badge>
+                  </div>
+                ) : (
+                  <div className="flex gap-4 mt-1 text-muted-foreground">
+                    <span>Serial: {selectedCategory.requires_serial ? "Required" : "Optional"}</span>
+                    <span>MAC: {selectedCategory.requires_mac ? "Required" : "Optional"}</span>
+                  </div>
+                )}
               </div>
             )}
 
-            {!editingItem && (
+            {/* METERED PRODUCT: Show meters input */}
+            {isMeteredProduct && !editingItem && (
+              <div className="p-4 border-2 border-primary/30 rounded-lg bg-primary/5 space-y-3">
+                <Label className="text-base font-medium">Quantity to Add ({meteredUnit}s)</Label>
+                <Input 
+                  type="number" 
+                  min={1} 
+                  value={itemForm.metered_quantity} 
+                  onChange={(e) => setItemForm({ ...itemForm, metered_quantity: Number(e.target.value) })} 
+                  placeholder={`Enter ${meteredUnit}s to add`}
+                  className="text-lg"
+                />
+                {itemForm.metered_quantity > 0 && itemForm.purchase_price > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Total cost: ৳{(itemForm.metered_quantity * itemForm.purchase_price).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* DISCRETE PRODUCT: Show quantity and serial/mac inputs */}
+            {!isMeteredProduct && !editingItem && (
               <div>
                 <Label>Quantity</Label>
                 <Input type="number" min={1} value={itemForm.quantity} onChange={(e) => handleQuantityChange(Number(e.target.value))} />
               </div>
             )}
 
-            {(requiresSerial || requiresMac) && itemForm.quantity > 0 && (
+            {!isMeteredProduct && (requiresSerial || requiresMac) && itemForm.quantity > 0 && (
               <div className="space-y-3 max-h-[200px] overflow-y-auto border rounded-lg p-3">
                 <Label>Enter {requiresSerial ? "Serial Numbers" : ""} {requiresSerial && requiresMac ? "&" : ""} {requiresMac ? "MAC Addresses" : ""}</Label>
                 {Array.from({ length: editingItem ? 1 : itemForm.quantity }).map((_, idx) => (
@@ -1421,7 +1521,7 @@ export default function Inventory() {
                 <Input type="date" value={itemForm.purchase_date} onChange={(e) => setItemForm({ ...itemForm, purchase_date: e.target.value })} />
               </div>
               <div>
-                <Label>Unit Price (৳)</Label>
+                <Label>{isMeteredProduct ? `Price per ${meteredUnit} (৳)` : "Unit Price (৳)"}</Label>
                 <Input type="number" value={itemForm.purchase_price} onChange={(e) => setItemForm({ ...itemForm, purchase_price: Number(e.target.value) })} />
               </div>
               <div>
@@ -1437,7 +1537,12 @@ export default function Inventory() {
 
             <Button onClick={handleSaveItem} className="w-full" disabled={saving}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editingItem ? "Update Item" : `Add ${itemForm.quantity} Item(s) to Stock`}
+              {editingItem 
+                ? "Update Item" 
+                : isMeteredProduct 
+                  ? `Add ${itemForm.metered_quantity} ${meteredUnit}(s) to Stock`
+                  : `Add ${itemForm.quantity} Item(s) to Stock`
+              }
             </Button>
           </div>
         </DialogContent>
