@@ -2,8 +2,9 @@ import { ReactNode, useState } from "react";
 import { AppSidebar } from "./AppSidebar";
 import { AdminNotifications } from "./AdminNotifications";
 import { Button } from "@/components/ui/button";
-import { Menu, X } from "lucide-react";
+import { Menu, X, RefreshCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -11,6 +12,32 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { toast } = useToast();
+
+  const handleClearCache = async () => {
+    try {
+      // Clear localStorage
+      localStorage.clear();
+      
+      // Clear sessionStorage  
+      sessionStorage.clear();
+      
+      // Clear service worker caches if available
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(
+          cacheNames.map(cacheName => caches.delete(cacheName))
+        );
+      }
+      
+      toast({ title: "Cache cleared", description: "Application cache has been cleared" });
+      
+      // Reload the page to ensure fresh state
+      window.location.reload();
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to clear cache", variant: "destructive" });
+    }
+  };
 
   return (
     <div className="flex min-h-screen w-full bg-background">
@@ -50,6 +77,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <h1 className="font-semibold text-lg md:hidden">ISP Billing</h1>
           </div>
           <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={handleClearCache}
+              title="Clear Cache"
+            >
+              <RefreshCcw className="h-4 w-4" />
+            </Button>
             <AdminNotifications />
           </div>
         </div>

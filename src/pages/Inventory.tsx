@@ -26,6 +26,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -42,6 +50,7 @@ import {
   Tag,
   AlertTriangle,
   Loader2,
+  Building2,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -57,6 +66,11 @@ interface ProductCategory {
 interface Supplier {
   id: string;
   name: string;
+  contact_person: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  is_active: boolean | null;
 }
 
 interface Product {
@@ -119,9 +133,11 @@ export default function Inventory() {
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
+  const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ProductCategory | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   
   // Form states
   const [categoryForm, setCategoryForm] = useState({ 
@@ -155,6 +171,13 @@ export default function Inventory() {
     cable_color: "",
     cable_length_m: 0,
   });
+  const [supplierForm, setSupplierForm] = useState({
+    name: "",
+    contact_person: "",
+    phone: "",
+    email: "",
+    address: "",
+  });
 
   const canManage = isSuperAdmin || canCreate("inventory");
   const canEdit = isSuperAdmin || canUpdate("inventory");
@@ -169,8 +192,8 @@ export default function Inventory() {
       const [categoriesRes, productsRes, itemsRes, suppliersRes] = await Promise.all([
         supabase.from("product_categories").select("*").order("name"),
         supabase.from("products").select("*, product_categories(*)").order("name"),
-        supabase.from("inventory_items").select("*, products(*, product_categories(*)), suppliers(id, name)").order("created_at", { ascending: false }),
-        supabase.from("suppliers").select("id, name").eq("is_active", true).order("name"),
+        supabase.from("inventory_items").select("*, products(*, product_categories(*)), suppliers(id, name, contact_person, phone, email, address, is_active)").order("created_at", { ascending: false }),
+        supabase.from("suppliers").select("*").eq("is_active", true).order("name"),
       ]);
 
       if (categoriesRes.error) throw categoriesRes.error;
@@ -179,7 +202,7 @@ export default function Inventory() {
 
       setCategories(categoriesRes.data || []);
       setProducts(productsRes.data || []);
-      setInventoryItems(itemsRes.data || []);
+      setInventoryItems(itemsRes.data as unknown as InventoryItem[] || []);
       setSuppliers(suppliersRes.data || []);
     } catch (error) {
       console.error("Error fetching inventory data:", error);
@@ -437,6 +460,53 @@ export default function Inventory() {
     }
   };
 
+  // Supplier handlers
+  const handleSaveSupplier = async () => {
+    setSaving(true);
+    try {
+      const data = {
+        name: supplierForm.name,
+        contact_person: supplierForm.contact_person || null,
+        phone: supplierForm.phone || null,
+        email: supplierForm.email || null,
+        address: supplierForm.address || null,
+      };
+
+      if (editingSupplier) {
+        const { error } = await supabase
+          .from("suppliers")
+          .update(data)
+          .eq("id", editingSupplier.id);
+        if (error) throw error;
+        toast({ title: "Success", description: "Supplier updated" });
+      } else {
+        const { error } = await supabase.from("suppliers").insert([data]);
+        if (error) throw error;
+        toast({ title: "Success", description: "Supplier created" });
+      }
+      setSupplierDialogOpen(false);
+      setEditingSupplier(null);
+      setSupplierForm({ name: "", contact_person: "", phone: "", email: "", address: "" });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteSupplier = async (id: string) => {
+    if (!confirm("Delete this supplier?")) return;
+    try {
+      const { error } = await supabase.from("suppliers").delete().eq("id", id);
+      if (error) throw error;
+      toast({ title: "Success", description: "Supplier deleted" });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
   // Low stock products
   const lowStockProducts = products.filter(p => p.stock_quantity <= p.min_stock_level);
 
@@ -487,6 +557,9 @@ export default function Inventory() {
           </TabsTrigger>
           <TabsTrigger value="categories" className="gap-2">
             <Tag className="h-4 w-4" /> Categories
+          </TabsTrigger>
+          <TabsTrigger value="suppliers" className="gap-2">
+            <Building2 className="h-4 w-4" /> Suppliers
           </TabsTrigger>
         </TabsList>
 
@@ -1134,6 +1207,106 @@ export default function Inventory() {
               </div>
             ))}
           </div>
+        </TabsContent>
+
+        {/* Suppliers Tab */}
+        <TabsContent value="suppliers" className="space-y-4">
+          <div className="flex justify-end">
+            {canManage && (
+              <Dialog open={supplierDialogOpen} onOpenChange={setSupplierDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={() => {
+                    setEditingSupplier(null);
+                    setSupplierForm({ name: "", contact_person: "", phone: "", email: "", address: "" });
+                  }}>
+                    <Plus className="h-4 w-4 mr-2" /> Add Supplier
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{editingSupplier ? "Edit Supplier" : "Add Supplier"}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Supplier Name *</Label>
+                      <Input value={supplierForm.name} onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Contact Person</Label>
+                      <Input value={supplierForm.contact_person} onChange={(e) => setSupplierForm({ ...supplierForm, contact_person: e.target.value })} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Phone</Label>
+                        <Input value={supplierForm.phone} onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })} />
+                      </div>
+                      <div>
+                        <Label>Email</Label>
+                        <Input type="email" value={supplierForm.email} onChange={(e) => setSupplierForm({ ...supplierForm, email: e.target.value })} />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Address</Label>
+                      <Textarea value={supplierForm.address} onChange={(e) => setSupplierForm({ ...supplierForm, address: e.target.value })} rows={2} />
+                    </div>
+                    <Button onClick={handleSaveSupplier} className="w-full" disabled={saving}>
+                      {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      {editingSupplier ? "Update" : "Add"} Supplier
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
+
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Contact Person</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {suppliers.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No suppliers found</TableCell></TableRow>
+              ) : (
+                suppliers.map((supplier) => (
+                  <TableRow key={supplier.id}>
+                    <TableCell className="font-medium">{supplier.name}</TableCell>
+                    <TableCell>{supplier.contact_person || "-"}</TableCell>
+                    <TableCell>{supplier.phone || "-"}</TableCell>
+                    <TableCell>{supplier.email || "-"}</TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {canEdit && (
+                            <DropdownMenuItem onClick={() => {
+                              setEditingSupplier(supplier);
+                              setSupplierForm({ name: supplier.name, contact_person: supplier.contact_person || "", phone: supplier.phone || "", email: supplier.email || "", address: supplier.address || "" });
+                              setSupplierDialogOpen(true);
+                            }}>
+                              <Pencil className="h-4 w-4 mr-2" /> Edit
+                            </DropdownMenuItem>
+                          )}
+                          {canRemove && (
+                            <DropdownMenuItem onClick={() => handleDeleteSupplier(supplier.id)} className="text-destructive">
+                              <Trash2 className="h-4 w-4 mr-2" /> Delete
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </TabsContent>
       </Tabs>
     </DashboardLayout>
