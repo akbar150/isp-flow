@@ -25,17 +25,47 @@ interface DataType {
   table: string;
   dateColumn: string;
   description: string;
+  /** Lower number deletes first (children first) to avoid FK constraint failures */
+  deleteOrder: number;
 }
 
 const DATA_TYPES: DataType[] = [
-  { key: "payments", label: "Payments", table: "payments", dateColumn: "payment_date", description: "Payment records for the selected date" },
-  { key: "billing_records", label: "Billing Records", table: "billing_records", dateColumn: "billing_date", description: "Billing cycle records" },
-  { key: "call_records", label: "Call Records", table: "call_records", dateColumn: "call_date", description: "Customer call logs" },
-  { key: "reminder_logs", label: "Reminder Logs", table: "reminder_logs", dateColumn: "sent_at", description: "Sent reminder notifications" },
-  { key: "transactions", label: "Transactions", table: "transactions", dateColumn: "transaction_date", description: "Accounting transactions" },
-  { key: "activity_logs", label: "Activity Logs", table: "activity_logs", dateColumn: "created_at", description: "System activity logs" },
-  { key: "attendance", label: "Attendance", table: "attendance", dateColumn: "date", description: "Employee attendance records" },
+  // Invoices
+  { key: "invoice_items", label: "Invoice Items", table: "invoice_items", dateColumn: "created_at", description: "Line items attached to invoices", deleteOrder: 0 },
+  { key: "invoices", label: "Invoices", table: "invoices", dateColumn: "issue_date", description: "Invoices generated for customers", deleteOrder: 1 },
+
+  // Customers & billing
+  { key: "payments", label: "Payments", table: "payments", dateColumn: "payment_date", description: "Payment collection records", deleteOrder: 2 },
+  { key: "billing_records", label: "Billing Records", table: "billing_records", dateColumn: "billing_date", description: "Customer billing cycle records", deleteOrder: 3 },
+  { key: "customers", label: "Customers", table: "customers", dateColumn: "created_at", description: "Customer accounts created on selected date", deleteOrder: 9 },
+
+  // Assets / inventory / stock
+  { key: "asset_assignments", label: "Assign Asset Records", table: "asset_assignments", dateColumn: "assigned_date", description: "Assigned/returned assets for customers", deleteOrder: 4 },
+  { key: "metered_usage_logs", label: "Product Usage / Quantity Logs", table: "metered_usage_logs", dateColumn: "usage_date", description: "Quantity used/consumed logs", deleteOrder: 5 },
+  { key: "inventory_items", label: "Inventory Items (Stock)", table: "inventory_items", dateColumn: "created_at", description: "Individual stock items (serial/MAC/etc)", deleteOrder: 6 },
+  { key: "products", label: "Products", table: "products", dateColumn: "created_at", description: "Product master list with quantities", deleteOrder: 7 },
+  { key: "product_categories", label: "Product Categories", table: "product_categories", dateColumn: "created_at", description: "Product category definitions", deleteOrder: 8 },
+
+  // Operations
+  { key: "call_records", label: "Call Records", table: "call_records", dateColumn: "call_date", description: "Customer call logs", deleteOrder: 10 },
+  { key: "reminder_logs", label: "Reminder Logs", table: "reminder_logs", dateColumn: "sent_at", description: "Sent reminder notifications", deleteOrder: 11 },
+  { key: "transactions", label: "Financial Transaction Records", table: "transactions", dateColumn: "transaction_date", description: "Accounting transactions", deleteOrder: 12 },
+  { key: "activity_logs", label: "Activity Logs", table: "activity_logs", dateColumn: "created_at", description: "System activity logs", deleteOrder: 13 },
+  { key: "attendance", label: "Attendance", table: "attendance", dateColumn: "date", description: "Employee attendance records", deleteOrder: 14 },
 ];
+
+const TIMESTAMP_COLUMNS = new Set(["created_at", "sent_at", "call_date"]);
+
+function isTimestampColumn(column: string) {
+  return TIMESTAMP_COLUMNS.has(column);
+}
+
+function getOrderedSelectedTypes(selectedTypes: string[]) {
+  return selectedTypes
+    .map((key) => DATA_TYPES.find((t) => t.key === key))
+    .filter((t): t is DataType => !!t)
+    .sort((a, b) => a.deleteOrder - b.deleteOrder);
+}
 
 export function DataResetPanel() {
   const { isSuperAdmin } = useAuth();
@@ -76,18 +106,18 @@ export function DataResetPanel() {
       return;
     }
 
+    const orderedTypes = getOrderedSelectedTypes(selectedTypes);
+
     // Get counts for each selected type
     const counts: Record<string, number> = {};
     
-    for (const typeKey of selectedTypes) {
-      const dataType = DATA_TYPES.find(t => t.key === typeKey);
-      if (!dataType) continue;
+    for (const dataType of orderedTypes) {
 
       try {
         // Build appropriate query based on column type
         let query = supabase.from(dataType.table as any).select('id', { count: 'exact', head: true });
         
-        if (dataType.dateColumn === "created_at" || dataType.dateColumn === "sent_at" || dataType.dateColumn === "call_date") {
+          if (isTimestampColumn(dataType.dateColumn)) {
           // Timestamp columns - use range
           const startOfDay = `${selectedDate}T00:00:00`;
           const endOfDay = `${selectedDate}T23:59:59`;
@@ -99,14 +129,14 @@ export function DataResetPanel() {
 
         const { count, error } = await query;
         
-        if (!error) {
-          counts[typeKey] = count || 0;
+          if (!error) {
+            counts[dataType.key] = count || 0;
         }
       } catch (err) {
-        console.error(`Error counting ${typeKey}:`, err);
-        counts[typeKey] = 0;
+          console.error(`Error counting ${dataType.key}:`, err);
+          counts[dataType.key] = 0;
       }
-    }
+      }
 
     setAffectedCounts(counts);
     setShowConfirmDialog(true);
@@ -126,14 +156,14 @@ export function DataResetPanel() {
     let deletedTotal = 0;
     const errors: string[] = [];
 
-    for (const typeKey of selectedTypes) {
-      const dataType = DATA_TYPES.find(t => t.key === typeKey);
-      if (!dataType) continue;
+    const orderedTypes = getOrderedSelectedTypes(selectedTypes);
+
+    for (const dataType of orderedTypes) {
 
       try {
         let query = supabase.from(dataType.table as any).delete();
         
-        if (dataType.dateColumn === "created_at" || dataType.dateColumn === "sent_at" || dataType.dateColumn === "call_date") {
+        if (isTimestampColumn(dataType.dateColumn)) {
           const startOfDay = `${selectedDate}T00:00:00`;
           const endOfDay = `${selectedDate}T23:59:59`;
           query = query.gte(dataType.dateColumn, startOfDay).lte(dataType.dateColumn, endOfDay);
@@ -146,7 +176,7 @@ export function DataResetPanel() {
         if (error) {
           errors.push(`${dataType.label}: ${error.message}`);
         } else {
-          deletedTotal += affectedCounts[typeKey] || 0;
+          deletedTotal += affectedCounts[dataType.key] || 0;
         }
       } catch (err) {
         errors.push(`${dataType.label}: Unknown error`);
@@ -255,12 +285,11 @@ export function DataResetPanel() {
               </p>
               
               <div className="bg-muted p-3 rounded-lg space-y-1">
-                {selectedTypes.map(typeKey => {
-                  const dataType = DATA_TYPES.find(t => t.key === typeKey);
+                {getOrderedSelectedTypes(selectedTypes).map((dataType) => {
                   return (
-                    <div key={typeKey} className="flex justify-between text-sm">
-                      <span>{dataType?.label}</span>
-                      <span className="font-mono">{affectedCounts[typeKey] || 0} records</span>
+                    <div key={dataType.key} className="flex justify-between text-sm">
+                      <span>{dataType.label}</span>
+                      <span className="font-mono">{affectedCounts[dataType.key] || 0} records</span>
                     </div>
                   );
                 })}
