@@ -284,7 +284,7 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
                         type="password"
                         value={tempApiKey}
                         onChange={(e) => setTempApiKey(e.target.value)}
-                        placeholder="Enter your Google Maps API key"
+                        placeholder="Enter your Google Maps API key (starts with AIza...)"
                       />
                     </div>
                     <div className="text-left text-xs text-muted-foreground mb-2 space-y-1">
@@ -294,8 +294,12 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
                         <li>Create or select a project</li>
                         <li>Enable "Maps JavaScript API"</li>
                         <li>Create an API key under Credentials</li>
-                        <li>Add your domain to HTTP referrer restrictions</li>
+                        <li>Add these domains to HTTP referrer restrictions:</li>
                       </ol>
+                      <div className="mt-2 p-2 bg-muted rounded text-xs font-mono">
+                        <p className="select-all">id-preview--f3ea74ef-bbb2-4d36-9390-fa74e8d6e7df.lovable.app/*</p>
+                        <p className="select-all mt-1">easylinkbd.lovable.app/*</p>
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <Button onClick={saveApiKey} className="flex-1">Save</Button>
@@ -326,6 +330,11 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
                     <li><strong>Maps JavaScript API</strong> not enabled in Google Cloud Console</li>
                     <li><strong>Billing</strong> not enabled on Google Cloud project</li>
                   </ul>
+                  <p className="mt-2 font-medium">Required domains for HTTP Referrer:</p>
+                  <div className="mt-1 p-2 bg-background rounded text-xs font-mono">
+                    <p className="select-all">id-preview--f3ea74ef-bbb2-4d36-9390-fa74e8d6e7df.lovable.app/*</p>
+                    <p className="select-all mt-1">easylinkbd.lovable.app/*</p>
+                  </div>
                   <p className="mt-2">
                     <a href="https://console.cloud.google.com/apis/library/maps-backend.googleapis.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">
                       Enable Maps API →
