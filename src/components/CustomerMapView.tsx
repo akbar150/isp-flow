@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { AlertTriangle, Loader2, MapPin, Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { decodeSettingValue } from "@/lib/settingsValue";
 
 interface Customer {
   id: string;
@@ -84,9 +85,10 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
           .single();
         
         if (!error && data?.value) {
-          const value = typeof data.value === 'string' ? data.value : String(data.value);
-          if (value && value !== 'null') {
-            setApiKey(value);
+          // Use decodeSettingValue to properly decode the stored value
+          const decodedValue = decodeSettingValue(data.value);
+          if (decodedValue && decodedValue !== 'null' && decodedValue.trim() !== '') {
+            setApiKey(decodedValue);
             setLoading(false);
             return;
           }
