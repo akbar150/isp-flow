@@ -10,6 +10,7 @@ import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { QuickPaymentRecord } from "@/components/QuickPaymentRecord";
 import { BulkCustomerUpload } from "@/components/BulkCustomerUpload";
 import { AddCustomerDialog } from "@/components/AddCustomerDialog";
+import { CustomerMapView } from "@/components/CustomerMapView";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +39,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Plus, Search, Eye, EyeOff, RefreshCw, MoreHorizontal, Edit, Trash2, UserCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Search, Eye, EyeOff, RefreshCw, MoreHorizontal, Edit, Trash2, UserCircle, ArrowUpDown, ArrowUp, ArrowDown, MapPin, Map } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { calculateBillingInfo } from "@/lib/billingUtils";
 
@@ -114,6 +115,9 @@ export default function Customers() {
   // View dialog state
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
+  
+  // Map view state
+  const [mapViewOpen, setMapViewOpen] = useState(false);
   
   // Credentials modal state (secure password display)
   const [credentialsModal, setCredentialsModal] = useState({
@@ -395,6 +399,10 @@ export default function Customers() {
           <p className="page-description">Manage your ISP customers</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setMapViewOpen(true)}>
+            <Map className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline">Map View</span>
+          </Button>
           <BulkCustomerUpload
             packages={packages}
             areas={areas}
@@ -568,7 +576,20 @@ export default function Customers() {
                           
                           <DropdownMenuSeparator />
                           
-                          {/* Communication */}
+                          {/* Go Location - only if GPS exists */}
+                          {customer.latitude && customer.longitude && (
+                            <DropdownMenuItem
+                              onClick={() => window.open(
+                                `https://www.google.com/maps?q=${customer.latitude},${customer.longitude}`, 
+                                "_blank"
+                              )}
+                            >
+                              <MapPin className="h-4 w-4 mr-2" />
+                              Go Location
+                            </DropdownMenuItem>
+                          )}
+                          
+                          <DropdownMenuSeparator />
                           <WhatsAppButton
                             phone={customer.phone}
                             customerName={customer.full_name}
@@ -662,6 +683,13 @@ export default function Customers() {
             description: `PPPoE Username: ${credentialsModal.pppoeUsername}`,
           });
         }}
+      />
+
+      {/* Customer Map View */}
+      <CustomerMapView
+        open={mapViewOpen}
+        onOpenChange={setMapViewOpen}
+        customers={customers}
       />
     </DashboardLayout>
   );

@@ -100,9 +100,8 @@ export function UserManagement() {
       if (usersError) {
         console.error("Edge function network error:", usersError);
         toast({
-          variant: "destructive",
-          title: "Connection Error",
-          description: "Failed to connect to the server. Using local data.",
+          title: "Using cached data",
+          description: "Connecting to server... Using local data for now.",
         });
         await fetchUsersLocally();
         return;
