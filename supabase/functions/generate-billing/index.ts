@@ -58,6 +58,7 @@ const handler = async (req: Request): Promise<Response> => {
       processed: 0,
       billsGenerated: 0,
       billingRecordsCreated: 0,
+      duesUpdated: 0,
       errors: [] as string[],
     };
 
@@ -80,7 +81,7 @@ const handler = async (req: Request): Promise<Response> => {
         // Calculate how many days overdue
         const daysOverdue = Math.floor((today.getTime() - expiryDate.getTime()) / (1000 * 60 * 60 * 24));
         
-        // Check if a billing record already exists for this period
+        // Check if a billing record already exists for this billing period (expiry_date)
         const { data: existingBill } = await supabase
           .from('billing_records')
           .select('id')
@@ -88,7 +89,7 @@ const handler = async (req: Request): Promise<Response> => {
           .eq('billing_date', customer.expiry_date)
           .single();
 
-        // Only generate bill if it doesn't exist yet
+        // Only generate bill and update due if billing record doesn't exist yet
         if (!existingBill && daysOverdue >= 0) {
           // Create billing record
           const { error: billingError } = await supabase
@@ -107,35 +108,36 @@ const handler = async (req: Request): Promise<Response> => {
             console.error(`Failed to create billing record for ${customer.user_id}:`, billingError.message);
           } else {
             results.billingRecordsCreated++;
+            console.log(`Created billing record for ${customer.user_id}: ৳${pkg.monthly_price}`);
           }
 
-          // Add monthly price to total due (only if it's within reasonable overdue period)
-          if (daysOverdue === 0) {
-            const newTotalDue = customer.total_due + pkg.monthly_price;
-            
-            const { error: updateError } = await supabase
-              .from('customers')
-              .update({
-                total_due: newTotalDue,
-                status: 'expired',
-              })
-              .eq('id', customer.id);
-
-            if (updateError) {
-              throw new Error(`Failed to update customer ${customer.user_id}: ${updateError.message}`);
-            }
-
-            console.log(`Generated bill for ${customer.user_id}: ৳${pkg.monthly_price} added, total due: ৳${newTotalDue}`);
-            results.billsGenerated++;
-          }
-        }
-        
-        // Update status for overdue customers
-        if (daysOverdue > 0 && customer.status !== 'expired') {
-          await supabase
+          // FIXED: Always add monthly price to total_due when creating new billing record
+          const newTotalDue = customer.total_due + pkg.monthly_price;
+          
+          const { error: updateError } = await supabase
             .from('customers')
-            .update({ status: 'expired' })
+            .update({
+              total_due: newTotalDue,
+              status: 'expired',
+            })
             .eq('id', customer.id);
+
+          if (updateError) {
+            throw new Error(`Failed to update customer ${customer.user_id}: ${updateError.message}`);
+          }
+
+          console.log(`Updated ${customer.user_id}: added ৳${pkg.monthly_price} to due, new total: ৳${newTotalDue}`);
+          results.billsGenerated++;
+          results.duesUpdated++;
+        } else if (existingBill) {
+          // Billing record exists - just ensure status is expired if overdue
+          if (daysOverdue > 0 && customer.status !== 'expired') {
+            await supabase
+              .from('customers')
+              .update({ status: 'expired' })
+              .eq('id', customer.id);
+            console.log(`Updated status to expired for ${customer.user_id}`);
+          }
         }
 
         results.processed++;
@@ -151,7 +153,7 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Processed ${results.processed} customers, generated ${results.billsGenerated} bills, created ${results.billingRecordsCreated} billing records`,
+        message: `Processed ${results.processed} customers, generated ${results.billsGenerated} bills, created ${results.billingRecordsCreated} billing records, updated ${results.duesUpdated} customer dues`,
         details: results,
       }),
       {
