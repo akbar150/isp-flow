@@ -1,165 +1,232 @@
 
-# Implementation Plan: Enhanced Inventory & Customer Asset Management
+# Implementation Plan: Multi-Feature Enhancement
 
 ## Overview
-This plan addresses multiple enhancements to create a comprehensive asset tracking and inventory management system for the ISP application. The changes span database schema updates, new UI components, and enhanced customer management features.
+This plan addresses several key enhancements including UI action buttons, Google Maps integration, inventory restructuring, permission updates, and utility features.
 
 ---
 
 ## Summary of Changes
 
-### 1. Customer View Dialog - Show Assigned Products
-Add a new "Assets" tab showing all products assigned to the customer with:
-- Product name, ID, MAC address, serial number
-- Assignment date, technician name, condition
-- "Return" button to mark device as returned
+### 1. Customer Page Action Buttons
+Add "Quick Call" and "Go Location" buttons to the Customers page actions menu
 
-### 2. Enhanced Category Management
-When creating a product category, specify whether items require:
-- Serial number tracking
-- MAC address tracking  
-- No tracking (e.g., cables, consumables)
+### 2. Google Maps View for Customer Locations
+Display all customers on a map with markers showing PPPoE username and name
 
-### 3. Stock Purchase with Full Details
-When adding stock items, enforce entry of:
-- All MAC addresses/serials (for trackable items)
-- Supplier information
-- For cables: core count, quantity, color, details
+### 3. Inventory Menu Restructuring
+Move "Suppliers" into a sub-menu within Inventory or as a tab
 
-### 4. Supplier Management
-New sidebar menu for managing suppliers with:
-- Supplier name, contact, address
-- Link purchases to suppliers
+### 4. Inventory UI/UX Redesign
+Consolidate inventory display to show products by name with total quantity, with drill-down for details
 
-### 5. Customer GPS - "Go Location" Button
-Add action button to open customer GPS coordinates in Google Maps
+### 5. User Roles & Permissions Update
+Add missing resources to the permissions system (inventory, hrm, invoices, suppliers)
 
-### 6. New Customer Form - Tabbed Interface
-Reorganize with tabs:
-- Basic Info (name, phone, address, etc.)
-- GPS & Location (coordinates, area, router)  
-- Products (assign multiple products during creation)
+### 6. Clear Cache Button
+Add cache clearing functionality to the top bar
+
+### 7. Settings > Users Error Fix
+Improve edge function error handling and fallback behavior
 
 ---
 
 ## Technical Implementation
 
-### Phase 1: Database Schema Updates
-
-**New Tables:**
-```text
-+-------------------+     +------------------+
-|    suppliers      |     | product_categories |
-+-------------------+     +------------------+
-| id                |     | id               |
-| name              |     | name             |
-| contact_person    |     | description      |
-| phone             |     | requires_serial  | <-- NEW
-| email             |     | requires_mac     | <-- NEW
-| address           |     | is_active        |
-| is_active         |     +------------------+
-+-------------------+
-
-+-------------------+
-| inventory_items   |
-+-------------------+
-| ...existing...    |
-| supplier_id       | <-- NEW (foreign key)
-| core_count        | <-- NEW (for cables)
-| cable_color       | <-- NEW (for cables)
-| cable_length_m    | <-- NEW (for cables)
-+-------------------+
-```
-
-**Migration SQL:**
-- Add `requires_serial` (boolean, default false) to `product_categories`
-- Add `requires_mac` (boolean, default false) to `product_categories`
-- Create `suppliers` table with name, contact, phone, email, address, is_active
-- Add `supplier_id` foreign key to `inventory_items`
-- Add cable-specific fields: `core_count`, `cable_color`, `cable_length_m` to `inventory_items`
-
-### Phase 2: Supplier Management
-
-**New File: `src/pages/Suppliers.tsx`**
-- Full CRUD for suppliers
-- Table view with search
-- Used in stock item forms as a dropdown
-
-**Update: `src/components/AppSidebar.tsx`**
-- Add "Suppliers" menu item under Inventory section
-
-**Update: `src/App.tsx`**
-- Add `/suppliers` route
-
-### Phase 3: Enhanced Category Form
-
-**Update: `src/pages/Inventory.tsx`**
-- Category form additions:
-  - Checkbox: "Requires Serial Number" 
-  - Checkbox: "Requires MAC Address"
-- When adding stock items, check the category settings:
-  - If `requires_serial` = true, serial number field is mandatory
-  - If `requires_mac` = true, MAC address field is mandatory
-
-### Phase 4: Enhanced Stock Item Form
-
-**Update: `src/pages/Inventory.tsx`**
-- Add supplier dropdown (from suppliers table)
-- Add conditional fields for cables:
-  - Core count (number)
-  - Cable color (text/select)
-  - Cable length in meters (number)
-- Bulk add feature: When quantity > 1 for serialized products, show multiple MAC/Serial input fields
-
-### Phase 5: Customer View Dialog - Assets Tab
-
-**Update: `src/components/CustomerViewDialog.tsx`**
-- Add new "Assets" tab in the TabsList
-- Fetch asset_assignments for the customer with inventory_items and products
-- Display table with columns:
-  - Product Name | Serial/MAC | Condition | Assigned Date | Technician | Status | Actions
-- "Return" button opens dialog to:
-  - Set return date
-  - Record condition on return
-  - Update inventory_item status back to "returned"
-  - Mark asset_assignment with returned_date
-
-### Phase 6: GPS "Go Location" Button
-
-**Update: `src/components/CustomerViewDialog.tsx`**
-- In the Details tab, add "Go Location" button next to GPS coordinates
-- Opens: `https://www.google.com/maps?q={latitude},{longitude}` in new tab
-- Only visible when latitude/longitude are set
-
-**Update: `src/components/CustomerEditDialog.tsx`**
-- Add "Go Location" button in GPS section
-
-### Phase 7: Tabbed New Customer Form
+### Phase 1: Customer Page - Action Buttons
 
 **Update: `src/pages/Customers.tsx`**
-- Replace single-column form with tabbed interface:
+- Add "Quick Call" button to DropdownMenu (already present, verified)
+- Add "Go Location" button that opens Google Maps with customer GPS coordinates
+- Button only visible when latitude/longitude exist
 
-```text
-Tabs: [Basic Info] [Location & GPS] [Products]
-
-Tab 1 - Basic Info:
-- Full Name, Phone, Alt Phone
-- Package, Password fields
-- PPPoE Username/Password
-
-Tab 2 - Location & GPS:
-- Address
-- Area/Zone, Router
-- Connection Type, Billing Cycle
-- Latitude, Longitude
-
-Tab 3 - Products:
-- List of products to assign (dynamic add/remove)
-- Each row: Product dropdown, Condition dropdown, Notes
-- Technician name field
+Code change in the DropdownMenuContent:
+```typescript
+{customer.latitude && customer.longitude && (
+  <DropdownMenuItem
+    onClick={() => window.open(
+      `https://www.google.com/maps?q=${customer.latitude},${customer.longitude}`, 
+      "_blank"
+    )}
+  >
+    <MapPin className="h-4 w-4 mr-2" />
+    Go Location
+  </DropdownMenuItem>
+)}
 ```
 
-- On submit, create customer first, then create asset_assignments for each selected product
+### Phase 2: Google Maps Customer Map View
+
+**New Component: `src/components/CustomerMapView.tsx`**
+- Modal dialog with embedded Google Maps
+- Display markers for all customers with GPS data
+- Each marker shows PPPoE username and customer name on click
+- Use provided API key: `AIzaSyC2gRj_VAVMekVbHKP8MJjMCK9vXk0gD-k`
+
+**Update: `src/pages/Customers.tsx`**
+- Add "Map View" button next to "Bulk Import"
+- Opens the CustomerMapView modal
+
+**Implementation approach:**
+```typescript
+// Load Google Maps JavaScript API dynamically
+// Create markers for each customer with GPS coordinates
+// InfoWindow displays customer name and PPPoE username
+```
+
+**Future Settings Configuration:**
+- Store Google Maps API key in `system_settings` table
+- Add configuration field in Settings page (General tab)
+
+### Phase 3: Inventory Menu & UI Restructuring
+
+**Option A: Nest Suppliers in Inventory (Recommended)**
+
+**Update: `src/components/AppSidebar.tsx`**
+- Remove standalone "Suppliers" menu item
+- Keep single "Inventory" menu that leads to combined page
+
+**Update: `src/pages/Inventory.tsx`**
+- Add "Suppliers" tab alongside existing tabs (Stock Items, Products, Categories)
+- Move Suppliers management UI into this new tab
+
+**Complete UI/UX Redesign:**
+
+Current issue: Each MAC/Serial number creates a separate row
+Solution: Group inventory items by product name
+
+New display structure:
+```text
++---------------------+----------+---------+----------+
+| Product Name        | In Stock | Assigned| Actions  |
++---------------------+----------+---------+----------+
+| ONU ZTE F601        | 15       | 23      | [...]    |
+| Router TP-Link      | 8        | 12      | [...]    |
+| Fibre Cable 4-Core  | 500m     | 200m    | [...]    |
++---------------------+----------+---------+----------+
+```
+
+Actions dropdown reveals:
+- View available items (shows MAC/Serial list)
+- View assigned items
+- Add more stock
+- Edit product details
+
+**Update: `src/App.tsx`**
+- Remove `/suppliers` route if consolidating
+- Or keep route but update navigation flow
+
+### Phase 4: Role Permissions Update
+
+**Update: `src/components/settings/RolePermissions.tsx`**
+
+Current RESOURCES array is missing:
+- inventory
+- hrm  
+- invoices
+- suppliers (if kept separate)
+
+Updated RESOURCES array:
+```typescript
+const RESOURCES = [
+  { key: "customers", label: "Customers", icon: Users },
+  { key: "payments", label: "Payments", icon: CreditCard },
+  { key: "packages", label: "Packages", icon: Package },
+  { key: "routers", label: "Routers", icon: Router },
+  { key: "areas", label: "Areas/Zones", icon: MapPin },
+  { key: "call_records", label: "Call Records", icon: Phone },
+  { key: "reminders", label: "Reminders", icon: Bell },
+  { key: "reports", label: "Reports", icon: FileText },
+  { key: "transactions", label: "Transactions", icon: Receipt },
+  { key: "invoices", label: "Invoices", icon: FileText },     // NEW
+  { key: "inventory", label: "Inventory", icon: Boxes },       // NEW
+  { key: "hrm", label: "HRM", icon: UserCog },                 // NEW
+  { key: "expense_categories", label: "Expense Categories", icon: FolderOpen },
+  { key: "settings", label: "Settings", icon: Settings },
+  { key: "users", label: "User Management", icon: User },
+];
+```
+
+**Database Migration:**
+Insert new permission rows for the missing resources:
+```sql
+INSERT INTO permissions (role, resource, action, allowed)
+SELECT r.role, res.resource, act.action, 
+  CASE WHEN r.role IN ('super_admin', 'admin') THEN true ELSE false END
+FROM (VALUES ('super_admin'), ('admin'), ('staff')) AS r(role)
+CROSS JOIN (VALUES ('inventory'), ('hrm'), ('invoices'), ('suppliers')) AS res(resource)
+CROSS JOIN (VALUES ('create'), ('read'), ('update'), ('delete')) AS act(action)
+ON CONFLICT DO NOTHING;
+```
+
+### Phase 5: Clear Cache Button
+
+**Update: `src/components/DashboardLayout.tsx`**
+
+Add "Clear Cache" button next to AdminNotifications:
+```typescript
+const handleClearCache = async () => {
+  try {
+    // Clear localStorage
+    localStorage.clear();
+    
+    // Clear sessionStorage  
+    sessionStorage.clear();
+    
+    // Clear service worker caches if available
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames.map(cacheName => caches.delete(cacheName))
+      );
+    }
+    
+    toast({ title: "Cache cleared", description: "Application cache has been cleared" });
+    
+    // Reload the page to ensure fresh state
+    window.location.reload();
+  } catch (error) {
+    toast({ title: "Error", description: "Failed to clear cache", variant: "destructive" });
+  }
+};
+```
+
+UI placement:
+```typescript
+<div className="flex items-center gap-2">
+  <Button 
+    variant="ghost" 
+    size="icon"
+    onClick={handleClearCache}
+    title="Clear Cache"
+  >
+    <RefreshCcw className="h-4 w-4" />
+  </Button>
+  <AdminNotifications />
+</div>
+```
+
+### Phase 6: Settings > Users Error Handling
+
+The error "Failed to connect to the server. Using local data." is expected fallback behavior when the edge function has issues.
+
+**Review & Improve: `src/components/settings/UserManagement.tsx`**
+- The fallback to `fetchUsersLocally` is already implemented
+- The toast notification is informative but could be less alarming
+
+**Improvements:**
+1. Make the toast less alarming when local data works fine
+2. Add retry mechanism
+3. Better error state UI
+
+```typescript
+// Change toast from "destructive" to "default" when fallback works
+toast({
+  title: "Using cached data",
+  description: "Fetching latest user list...",
+  // Remove variant: "destructive"
+});
+```
 
 ---
 
@@ -167,85 +234,83 @@ Tab 3 - Products:
 
 | File | Purpose |
 |------|---------|
-| `src/pages/Suppliers.tsx` | Supplier management page |
+| `src/components/CustomerMapView.tsx` | Google Maps modal showing all customer locations |
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/components/AppSidebar.tsx` | Add Suppliers menu link |
-| `src/App.tsx` | Add Suppliers route |
-| `src/pages/Inventory.tsx` | Enhanced category form, stock item form with supplier, cable fields, bulk MAC entry |
-| `src/components/CustomerViewDialog.tsx` | Add Assets tab, GPS "Go Location" button |
-| `src/components/CustomerEditDialog.tsx` | Add GPS "Go Location" button |
-| `src/pages/Customers.tsx` | Tabbed new customer form with product assignment |
+| `src/pages/Customers.tsx` | Add Go Location action, Map View button |
+| `src/pages/Inventory.tsx` | Add Suppliers tab, redesign stock display |
+| `src/components/AppSidebar.tsx` | Remove standalone Suppliers link |
+| `src/components/settings/RolePermissions.tsx` | Add missing resources |
+| `src/components/settings/UserManagement.tsx` | Improve error handling |
+| `src/components/DashboardLayout.tsx` | Add Clear Cache button |
+| `src/App.tsx` | Route adjustments if needed |
 
 ## Database Migration
 
 ```sql
--- 1. Add tracking flags to product_categories
-ALTER TABLE product_categories 
-  ADD COLUMN requires_serial BOOLEAN DEFAULT false,
-  ADD COLUMN requires_mac BOOLEAN DEFAULT false;
-
--- 2. Create suppliers table
-CREATE TABLE suppliers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  contact_person TEXT,
-  phone TEXT,
-  email TEXT,
-  address TEXT,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+-- Add missing permission records for new resources
+INSERT INTO permissions (role, resource, action, allowed)
+SELECT 
+  r.role::app_role, 
+  res.resource, 
+  act.action, 
+  CASE 
+    WHEN r.role = 'super_admin' THEN true
+    WHEN r.role = 'admin' THEN true
+    ELSE false 
+  END
+FROM (VALUES ('super_admin'), ('admin'), ('staff')) AS r(role)
+CROSS JOIN (
+  VALUES 
+    ('inventory'), 
+    ('hrm'), 
+    ('invoices'),
+    ('suppliers')
+) AS res(resource)
+CROSS JOIN (VALUES ('create'), ('read'), ('update'), ('delete')) AS act(action)
+WHERE NOT EXISTS (
+  SELECT 1 FROM permissions p 
+  WHERE p.role = r.role::app_role 
+    AND p.resource = res.resource 
+    AND p.action = act.action
 );
-
--- Enable RLS
-ALTER TABLE suppliers ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admins can manage suppliers" ON suppliers FOR ALL 
-  USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'super_admin'));
-CREATE POLICY "Authenticated users can view suppliers" ON suppliers FOR SELECT 
-  USING (auth.uid() IS NOT NULL);
-
--- 3. Add supplier and cable fields to inventory_items
-ALTER TABLE inventory_items
-  ADD COLUMN supplier_id UUID REFERENCES suppliers(id),
-  ADD COLUMN core_count INTEGER,
-  ADD COLUMN cable_color TEXT,
-  ADD COLUMN cable_length_m NUMERIC;
 ```
 
 ---
 
-## User Experience Flow
+## User Experience Flows
 
-**Adding a Cable Product:**
-1. Create category "Fibre Cable" with requires_serial=false, requires_mac=false
-2. Create product under that category
-3. When adding stock: enter quantity, supplier, core count, color, length
-4. No serial/MAC required
+**Viewing Customer Locations on Map:**
+1. Go to Customers page
+2. Click "Map View" button (beside Bulk Import)
+3. See all customers with GPS data as markers
+4. Click marker to see PPPoE username and name
+5. Click marker info to navigate or view customer
 
-**Adding ONU/Router:**
-1. Create category "ONU" with requires_serial=true, requires_mac=true
-2. Create product under that category  
-3. When adding stock of 10 units: enter 10 MAC addresses + serials
-4. Each becomes a separate inventory_item
+**Going to Customer Location:**
+1. In Customers table, click Actions on any customer
+2. If GPS data exists, "Go Location" appears
+3. Click to open Google Maps with directions
 
-**Assigning to Customer:**
-1. Open new customer dialog
-2. Fill Basic Info tab
-3. Fill Location tab with GPS
-4. Go to Products tab
-5. Select "ONU" from dropdown
-6. Select specific unit (shows MAC address)
-7. Set condition as "New"
-8. Enter technician name
-9. Submit - creates customer + asset assignment
+**Managing Inventory (Redesigned):**
+1. Go to Inventory page
+2. See consolidated product list with quantities
+3. Click Actions on any product
+4. Choose "View Available Stock" to see MAC/Serial list
+5. Suppliers tab for vendor management
 
-**Returning Device:**
-1. View customer details
-2. Go to Assets tab
-3. Click "Return" on the ONU row
-4. Set condition on return
-5. Device status changes to "returned", back in stock
+**Clearing Application Cache:**
+1. Click cache icon in top bar
+2. Confirmation clears all browser storage
+3. Page reloads with fresh state
+
+---
+
+## Notes
+
+- Google Maps API key is stored in code for now; future enhancement will make it configurable from Settings
+- The edge function for user management is working; the error message appears when there's a network hiccup but fallback data is used successfully
+- Permission updates require database migration to add new resource rows
