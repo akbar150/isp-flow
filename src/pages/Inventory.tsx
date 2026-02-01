@@ -107,6 +107,20 @@ interface InventoryItem {
   suppliers?: Supplier | null;
 }
 
+interface AssetAssignment {
+  id: string;
+  inventory_item_id: string;
+  customer_id: string;
+  account_type: string | null;
+  assigned_date: string;
+  returned_date: string | null;
+  customers?: {
+    id: string;
+    full_name: string;
+    phone: string;
+  } | null;
+}
+
 const statusColors: Record<string, string> = {
   in_stock: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
   assigned: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
@@ -126,9 +140,14 @@ export default function Inventory() {
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [assetAssignments, setAssetAssignments] = useState<AssetAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [stockSearchTerm, setStockSearchTerm] = useState("");
+  const [stockSearchFilter, setStockSearchFilter] = useState<"all" | "serial" | "supplier" | "product">("all");
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  const [viewingCustomer, setViewingCustomer] = useState<{ id: string; full_name: string; phone: string } | null>(null);
   
   // Dialog states
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
@@ -199,11 +218,12 @@ export default function Inventory() {
 
   const fetchData = async () => {
     try {
-      const [categoriesRes, productsRes, itemsRes, suppliersRes] = await Promise.all([
+      const [categoriesRes, productsRes, itemsRes, suppliersRes, assignmentsRes] = await Promise.all([
         supabase.from("product_categories").select("*").order("name"),
         supabase.from("products").select("*, product_categories(*)").order("name"),
         supabase.from("inventory_items").select("*, products(*, product_categories(*)), suppliers(id, name, contact_person, phone, email, address, is_active)").order("created_at", { ascending: false }),
         supabase.from("suppliers").select("*").eq("is_active", true).order("name"),
+        supabase.from("asset_assignments").select("id, inventory_item_id, customer_id, account_type, assigned_date, returned_date, customers(id, full_name, phone)"),
       ]);
 
       if (categoriesRes.error) throw categoriesRes.error;
@@ -214,12 +234,19 @@ export default function Inventory() {
       setProducts(productsRes.data || []);
       setInventoryItems(itemsRes.data as unknown as InventoryItem[] || []);
       setSuppliers(suppliersRes.data || []);
+      setAssetAssignments((assignmentsRes.data as unknown as AssetAssignment[]) || []);
     } catch (error) {
       console.error("Error fetching inventory data:", error);
       toast({ title: "Error", description: "Failed to load inventory data", variant: "destructive" });
     } finally {
       setLoading(false);
     }
+  };
+
+  // Get customer assigned to an inventory item
+  const getItemCustomer = (itemId: string) => {
+    const assignment = assetAssignments.find(a => a.inventory_item_id === itemId && !a.returned_date);
+    return assignment?.customers || null;
   };
 
   // Calculate actual available stock per product
@@ -820,7 +847,29 @@ export default function Inventory() {
 
         {/* Stock Items Tab */}
         <TabsContent value="items" className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex flex-col sm:flex-row justify-between gap-4">
+            <div className="flex flex-col sm:flex-row gap-2 flex-1">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Search stock items..." 
+                  value={stockSearchTerm}
+                  onChange={(e) => setStockSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Select value={stockSearchFilter} onValueChange={(value: "all" | "serial" | "supplier" | "product") => setStockSearchFilter(value)}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="Filter by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Fields</SelectItem>
+                  <SelectItem value="serial">Serial / MAC</SelectItem>
+                  <SelectItem value="supplier">Supplier</SelectItem>
+                  <SelectItem value="product">Product Name</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             {canManage && (
               <Button onClick={() => {
                 setEditingItem(null);
@@ -845,30 +894,75 @@ export default function Inventory() {
                 </tr>
               </thead>
               <tbody>
-                {inventoryItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No stock items found
-                    </td>
-                  </tr>
-                ) : (
-                  inventoryItems.slice(0, 50).map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        <div className="font-medium">{item.products?.name || "N/A"}</div>
-                        <div className="text-xs text-muted-foreground">{item.products?.brand}</div>
-                      </td>
-                      <td className="font-mono text-sm">
-                        <div>{item.serial_number || "-"}</div>
-                        <div className="text-muted-foreground">{item.mac_address || "-"}</div>
-                      </td>
-                      <td>{item.suppliers?.name || "-"}</td>
-                      <td>
-                        <Badge className={statusColors[item.status]}>
-                          {item.status.replace("_", " ")}
-                        </Badge>
-                      </td>
-                      <td>৳{item.purchase_price || item.products?.purchase_price || 0}</td>
+                {(() => {
+                  const filteredItems = inventoryItems.filter((item) => {
+                    if (!stockSearchTerm) return true;
+                    const search = stockSearchTerm.toLowerCase();
+                    
+                    if (stockSearchFilter === "serial") {
+                      return (item.serial_number?.toLowerCase().includes(search) || 
+                              item.mac_address?.toLowerCase().includes(search));
+                    }
+                    if (stockSearchFilter === "supplier") {
+                      return item.suppliers?.name?.toLowerCase().includes(search);
+                    }
+                    if (stockSearchFilter === "product") {
+                      return item.products?.name?.toLowerCase().includes(search);
+                    }
+                    // all fields
+                    return (
+                      item.serial_number?.toLowerCase().includes(search) ||
+                      item.mac_address?.toLowerCase().includes(search) ||
+                      item.suppliers?.name?.toLowerCase().includes(search) ||
+                      item.products?.name?.toLowerCase().includes(search) ||
+                      item.products?.brand?.toLowerCase().includes(search)
+                    );
+                  });
+
+                  if (filteredItems.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                          {stockSearchTerm ? "No items match your search" : "No stock items found"}
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return filteredItems.slice(0, 100).map((item) => {
+                    const customer = getItemCustomer(item.id);
+                    
+                    return (
+                      <tr key={item.id}>
+                        <td>
+                          <div className="font-medium">{item.products?.name || "N/A"}</div>
+                          <div className="text-xs text-muted-foreground">{item.products?.brand}</div>
+                        </td>
+                        <td className="font-mono text-sm">
+                          <div>{item.serial_number || "-"}</div>
+                          <div className="text-muted-foreground">{item.mac_address || "-"}</div>
+                        </td>
+                        <td>{item.suppliers?.name || "-"}</td>
+                        <td>
+                          {(item.status === 'assigned' || item.status === 'sold') && customer ? (
+                            <button
+                              onClick={() => {
+                                setViewingCustomer(customer);
+                                setCustomerDialogOpen(true);
+                              }}
+                              className="cursor-pointer hover:opacity-80 transition-opacity"
+                            >
+                              <Badge className={cn(statusColors[item.status], "cursor-pointer")}>
+                                {item.status === 'assigned' ? '→ ' : '✓ '}{customer.full_name}
+                              </Badge>
+                            </button>
+                          ) : (
+                            <Badge className={statusColors[item.status]}>
+                              {item.status.replace("_", " ")}
+                            </Badge>
+                          )}
+                        </td>
+                        <td>৳{item.purchase_price || item.products?.purchase_price || 0}</td>
                       <td>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -908,8 +1002,9 @@ export default function Inventory() {
                         </DropdownMenu>
                       </td>
                     </tr>
-                  ))
-                )}
+                  );
+                });
+              })()}
               </tbody>
             </table>
           </div>
@@ -1447,6 +1542,46 @@ export default function Inventory() {
                 {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Complete Sale
               </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Customer Details Dialog */}
+      <Dialog open={customerDialogOpen} onOpenChange={setCustomerDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Customer Details</DialogTitle>
+          </DialogHeader>
+          {viewingCustomer && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-muted-foreground text-sm">Customer Name</Label>
+                <p className="font-medium text-lg">{viewingCustomer.full_name}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground text-sm">Phone</Label>
+                <p className="font-medium">{viewingCustomer.phone}</p>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => window.open(`tel:${viewingCustomer.phone}`, '_self')}
+                >
+                  📞 Call
+                </Button>
+                <Button 
+                  variant="default" 
+                  className="flex-1"
+                  onClick={() => {
+                    setCustomerDialogOpen(false);
+                    window.location.href = `/customers?search=${encodeURIComponent(viewingCustomer.full_name)}`;
+                  }}
+                >
+                  View Profile
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>

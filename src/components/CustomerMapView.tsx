@@ -75,18 +75,35 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
   // Load API key from settings
   useEffect(() => {
     const loadApiKey = async () => {
-      const { data } = await supabase
-        .from("system_settings")
-        .select("value")
-        .eq("key", "google_maps_api_key")
-        .single();
-      
-      if (data?.value) {
-        setApiKey(data.value as string);
+      try {
+        // First try to get from system_settings (requires auth)
+        const { data, error } = await supabase
+          .from("system_settings")
+          .select("value")
+          .eq("key", "google_maps_api_key")
+          .single();
+        
+        if (!error && data?.value) {
+          const value = typeof data.value === 'string' ? data.value : String(data.value);
+          if (value && value !== 'null') {
+            setApiKey(value);
+            setLoading(false);
+            return;
+          }
+        }
+        
+        // No API key found
+        setLoading(false);
+      } catch (err) {
+        console.error("Error loading API key:", err);
+        setLoading(false);
       }
     };
-    loadApiKey();
-  }, []);
+    
+    if (open) {
+      loadApiKey();
+    }
+  }, [open]);
 
   const saveApiKey = async () => {
     if (!tempApiKey.trim()) return;
