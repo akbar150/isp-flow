@@ -62,6 +62,8 @@ interface ProductCategory {
   is_active: boolean;
   requires_serial: boolean;
   requires_mac: boolean;
+  is_metered: boolean;
+  unit_of_measure: string | null;
 }
 
 interface Supplier {
@@ -169,6 +171,8 @@ export default function Inventory() {
     description: "",
     requires_serial: false,
     requires_mac: false,
+    is_metered: false,
+    unit_of_measure: "piece",
   });
   const [productForm, setProductForm] = useState({
     category_id: "",
@@ -299,8 +303,10 @@ export default function Inventory() {
       const data = {
         name: categoryForm.name,
         description: categoryForm.description || null,
-        requires_serial: categoryForm.requires_serial,
-        requires_mac: categoryForm.requires_mac,
+        requires_serial: categoryForm.is_metered ? false : categoryForm.requires_serial,
+        requires_mac: categoryForm.is_metered ? false : categoryForm.requires_mac,
+        is_metered: categoryForm.is_metered,
+        unit_of_measure: categoryForm.is_metered ? categoryForm.unit_of_measure : "piece",
       };
 
       if (editingCategory) {
@@ -314,7 +320,7 @@ export default function Inventory() {
       }
       setCategoryDialogOpen(false);
       setEditingCategory(null);
-      setCategoryForm({ name: "", description: "", requires_serial: false, requires_mac: false });
+      setCategoryForm({ name: "", description: "", requires_serial: false, requires_mac: false, is_metered: false, unit_of_measure: "piece" });
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1016,7 +1022,7 @@ export default function Inventory() {
             {canManage && (
               <Button onClick={() => {
                 setEditingCategory(null);
-                setCategoryForm({ name: "", description: "", requires_serial: false, requires_mac: false });
+                setCategoryForm({ name: "", description: "", requires_serial: false, requires_mac: false, is_metered: false, unit_of_measure: "piece" });
                 setCategoryDialogOpen(true);
               }}>
                 <Plus className="h-4 w-4 mr-2" /> Add Category
@@ -1050,6 +1056,8 @@ export default function Inventory() {
                               description: category.description || "",
                               requires_serial: category.requires_serial,
                               requires_mac: category.requires_mac,
+                              is_metered: category.is_metered || false,
+                              unit_of_measure: category.unit_of_measure || "piece",
                             });
                             setCategoryDialogOpen(true);
                           }}>
@@ -1066,12 +1074,20 @@ export default function Inventory() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {category.is_metered && (
+                      <Badge variant="default" className="bg-primary">
+                        Metered ({category.unit_of_measure || "meter"})
+                      </Badge>
+                    )}
                     {category.requires_serial && (
                       <Badge variant="secondary">Serial Required</Badge>
                     )}
                     {category.requires_mac && (
                       <Badge variant="secondary">MAC Required</Badge>
+                    )}
+                    {!category.is_metered && !category.requires_serial && !category.requires_mac && (
+                      <Badge variant="outline">Standard</Badge>
                     )}
                   </div>
                 </CardContent>
@@ -1222,24 +1238,71 @@ export default function Inventory() {
               <Label>Description</Label>
               <Textarea value={categoryForm.description} onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })} rows={2} />
             </div>
-            <div className="flex gap-6">
+            
+            {/* Metered Product Toggle */}
+            <div className="p-4 border rounded-lg space-y-3">
               <div className="flex items-center gap-2">
                 <Checkbox
-                  id="requires_serial"
-                  checked={categoryForm.requires_serial}
-                  onCheckedChange={(v) => setCategoryForm({ ...categoryForm, requires_serial: v as boolean })}
+                  id="is_metered"
+                  checked={categoryForm.is_metered}
+                  onCheckedChange={(v) => setCategoryForm({ 
+                    ...categoryForm, 
+                    is_metered: v as boolean,
+                    // Disable serial/mac for metered products
+                    requires_serial: v ? false : categoryForm.requires_serial,
+                    requires_mac: v ? false : categoryForm.requires_mac,
+                  })}
                 />
-                <Label htmlFor="requires_serial">Requires Serial Number</Label>
+                <Label htmlFor="is_metered" className="font-medium">Metered Product (e.g., Cable, Wire)</Label>
               </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="requires_mac"
-                  checked={categoryForm.requires_mac}
-                  onCheckedChange={(v) => setCategoryForm({ ...categoryForm, requires_mac: v as boolean })}
-                />
-                <Label htmlFor="requires_mac">Requires MAC Address</Label>
-              </div>
+              <p className="text-xs text-muted-foreground">
+                Metered products are tracked by quantity (meters, kg, etc.) instead of individual serial numbers.
+              </p>
+              
+              {categoryForm.is_metered && (
+                <div>
+                  <Label>Unit of Measure</Label>
+                  <Select 
+                    value={categoryForm.unit_of_measure} 
+                    onValueChange={(v) => setCategoryForm({ ...categoryForm, unit_of_measure: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="meter">Meter (m)</SelectItem>
+                      <SelectItem value="feet">Feet (ft)</SelectItem>
+                      <SelectItem value="kg">Kilogram (kg)</SelectItem>
+                      <SelectItem value="liter">Liter (L)</SelectItem>
+                      <SelectItem value="roll">Roll</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
+
+            {/* Serial/MAC Requirements (only for non-metered) */}
+            {!categoryForm.is_metered && (
+              <div className="flex gap-6">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="requires_serial"
+                    checked={categoryForm.requires_serial}
+                    onCheckedChange={(v) => setCategoryForm({ ...categoryForm, requires_serial: v as boolean })}
+                  />
+                  <Label htmlFor="requires_serial">Requires Serial Number</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="requires_mac"
+                    checked={categoryForm.requires_mac}
+                    onCheckedChange={(v) => setCategoryForm({ ...categoryForm, requires_mac: v as boolean })}
+                  />
+                  <Label htmlFor="requires_mac">Requires MAC Address</Label>
+                </div>
+              </div>
+            )}
+
             <Button onClick={handleSaveCategory} className="w-full" disabled={saving}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {editingCategory ? "Update Category" : "Add Category"}
