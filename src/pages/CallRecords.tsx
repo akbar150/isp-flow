@@ -11,11 +11,19 @@ import {
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Phone, Search, Download, Calendar as CalendarIcon, User, FileText } from "lucide-react";
+import { Phone, Search, Download, Calendar as CalendarIcon, User, FileText, MoreHorizontal, Navigation } from "lucide-react";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { CallRecordDialog } from "@/components/CallRecordDialog";
+import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { cn } from "@/lib/utils";
 import { exportToCSV, exportToPDF, formatDateForExport } from "@/lib/exportUtils";
 
@@ -36,6 +44,8 @@ interface CallRecordWithCustomer {
     user_id: string;
     full_name: string;
     phone: string;
+    latitude?: number | null;
+    longitude?: number | null;
   } | null;
   mikrotik_users?: MikrotikUser[] | null;
 }
@@ -45,6 +55,8 @@ interface CustomerOption {
   user_id: string;
   full_name: string;
   phone: string;
+  latitude?: number | null;
+  longitude?: number | null;
   mikrotik_users?: MikrotikUser[] | null;
 }
 
@@ -68,11 +80,11 @@ export default function CallRecords() {
       const [recordsRes, customersRes] = await Promise.all([
         supabase
           .from("call_records")
-          .select("*, customers:customer_id(id, user_id, full_name, phone)")
+          .select("*, customers:customer_id(id, user_id, full_name, phone, latitude, longitude)")
           .order("call_date", { ascending: false }),
         supabase
           .from("customers_safe")
-          .select("id, user_id, full_name, phone, mikrotik_users:mikrotik_users_safe(id, username)")
+          .select("id, user_id, full_name, phone, latitude, longitude, mikrotik_users:mikrotik_users_safe(id, username)")
           .order("full_name"),
       ]);
 
@@ -86,6 +98,11 @@ export default function CallRecords() {
         return {
           ...record,
           mikrotik_users: customer?.mikrotik_users,
+          customers: {
+            ...record.customers,
+            latitude: customer?.latitude,
+            longitude: customer?.longitude,
+          },
         };
       });
 
@@ -332,12 +349,13 @@ export default function CallRecords() {
                 <th>Customer Name</th>
                 <th>Phone</th>
                 <th>Call Notes</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <td colSpan={6} className="text-center py-8 text-muted-foreground">
                     No call records found
                   </td>
                 </tr>
@@ -366,6 +384,40 @@ export default function CallRecords() {
                       <p className="truncate" title={record.notes}>
                         {record.notes}
                       </p>
+                    </td>
+                    <td>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          {/* Quick Call */}
+                          <QuickCallRecord
+                            customerId={record.customer_id}
+                            customerName={record.customers?.full_name || "Unknown"}
+                            onSuccess={fetchData}
+                            variant="dropdown"
+                          />
+                          
+                          {/* Go Location - only if GPS exists */}
+                          {record.customers?.latitude && record.customers?.longitude && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => window.open(
+                                  `https://www.google.com/maps?q=${record.customers?.latitude},${record.customers?.longitude}`, 
+                                  "_blank"
+                                )}
+                              >
+                                <Navigation className="h-4 w-4 mr-2" />
+                                Go Location
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 ))
@@ -500,44 +552,30 @@ function AddCallRecordWithCustomerDialog({
                       </div>
                     </button>
                   ))}
-                  {filteredCustomers.length === 0 && (
-                    <p className="text-sm text-muted-foreground p-3">
-                      No customers found
-                    </p>
-                  )}
                 </div>
               )}
             </div>
 
             {selectedCustomer && (
               <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm font-medium flex items-center gap-1">
-                  <User className="h-4 w-4" />
-                  {selectedCustomer.full_name}
-                </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="font-medium">{selectedCustomer.full_name}</p>
+                <p className="text-sm text-muted-foreground">
                   PPPoE: {selectedCustomer.mikrotik_users?.[0]?.username || "Not set"} • {selectedCustomer.phone}
                 </p>
               </div>
             )}
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Call Notes (Unicode supported) *
-              </label>
+              <label className="text-sm font-medium">Call Notes *</label>
               <textarea
+                className="w-full min-h-[100px] px-3 py-2 border rounded-md bg-background resize-y"
+                placeholder="Enter details about the call..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="কল নোট লিখুন... / Enter call notes..."
-                className="w-full min-h-[150px] px-3 py-2 border rounded-md bg-background resize-none"
-                required
               />
-              <p className="text-xs text-muted-foreground">
-                {notes.length}/2000 characters
-              </p>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2">
               <Button
                 type="button"
                 variant="outline"

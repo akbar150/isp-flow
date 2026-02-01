@@ -1464,11 +1464,17 @@ export type Database = {
           alt_phone: string | null
           area_id: string | null
           auto_renew: boolean | null
+          billing_cycle:
+            | Database["public"]["Enums"]["billing_cycle_type"]
+            | null
           billing_start_date: string | null
+          connection_type: Database["public"]["Enums"]["connection_type"] | null
           created_at: string | null
           expiry_date: string | null
           full_name: string | null
           id: string | null
+          latitude: number | null
+          longitude: number | null
           package_id: string | null
           phone: string | null
           router_id: string | null
@@ -1482,11 +1488,19 @@ export type Database = {
           alt_phone?: string | null
           area_id?: string | null
           auto_renew?: boolean | null
+          billing_cycle?:
+            | Database["public"]["Enums"]["billing_cycle_type"]
+            | null
           billing_start_date?: string | null
+          connection_type?:
+            | Database["public"]["Enums"]["connection_type"]
+            | null
           created_at?: string | null
           expiry_date?: string | null
           full_name?: string | null
           id?: string | null
+          latitude?: number | null
+          longitude?: number | null
           package_id?: string | null
           phone?: string | null
           router_id?: string | null
@@ -1500,11 +1514,19 @@ export type Database = {
           alt_phone?: string | null
           area_id?: string | null
           auto_renew?: boolean | null
+          billing_cycle?:
+            | Database["public"]["Enums"]["billing_cycle_type"]
+            | null
           billing_start_date?: string | null
+          connection_type?:
+            | Database["public"]["Enums"]["connection_type"]
+            | null
           created_at?: string | null
           expiry_date?: string | null
           full_name?: string | null
           id?: string | null
+          latitude?: number | null
+          longitude?: number | null
           package_id?: string | null
           phone?: string | null
           router_id?: string | null

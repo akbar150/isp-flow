@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -25,15 +26,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -51,6 +45,13 @@ import {
   AlertTriangle,
   Loader2,
   Building2,
+  ShoppingCart,
+  Eye,
+  BarChart3,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  CheckCircle,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -134,10 +135,14 @@ export default function Inventory() {
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
   const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
+  const [sellDialogOpen, setSellDialogOpen] = useState(false);
+  const [viewItemsDialogOpen, setViewItemsDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ProductCategory | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
+  const [sellingProduct, setSellingProduct] = useState<Product | null>(null);
   
   // Form states
   const [categoryForm, setCategoryForm] = useState({ 
@@ -166,7 +171,6 @@ export default function Inventory() {
     purchase_price: 0,
     warranty_end_date: "",
     notes: "",
-    // Cable specific
     core_count: 0,
     cable_color: "",
     cable_length_m: 0,
@@ -177,6 +181,12 @@ export default function Inventory() {
     phone: "",
     email: "",
     address: "",
+  });
+  const [sellForm, setSellForm] = useState({
+    item_id: "",
+    selling_price: 0,
+    buyer_name: "",
+    notes: "",
   });
 
   const canManage = isSuperAdmin || canCreate("inventory");
@@ -212,6 +222,22 @@ export default function Inventory() {
     }
   };
 
+  // Calculate actual available stock per product
+  const getProductStock = (productId: string) => {
+    const items = inventoryItems.filter(item => item.product_id === productId);
+    const inStock = items.filter(item => item.status === 'in_stock').length;
+    const assigned = items.filter(item => item.status === 'assigned').length;
+    const sold = items.filter(item => item.status === 'sold').length;
+    const damaged = items.filter(item => item.status === 'damaged').length;
+    const returned = items.filter(item => item.status === 'returned').length;
+    return { inStock, assigned, sold, damaged, returned, total: items.length };
+  };
+
+  // Get available items for a product
+  const getAvailableItemsForProduct = (productId: string) => {
+    return inventoryItems.filter(item => item.product_id === productId && item.status === 'in_stock');
+  };
+
   // Get selected product's category requirements
   const getProductCategory = (productId: string) => {
     const product = products.find(p => p.id === productId);
@@ -231,7 +257,6 @@ export default function Inventory() {
     const serials = [...itemForm.serial_numbers];
     const macs = [...itemForm.mac_addresses];
     
-    // Adjust arrays to match quantity
     while (serials.length < newQty) serials.push("");
     while (macs.length < newQty) macs.push("");
     serials.length = newQty;
@@ -252,16 +277,11 @@ export default function Inventory() {
       };
 
       if (editingCategory) {
-        const { error } = await supabase
-          .from("product_categories")
-          .update(data)
-          .eq("id", editingCategory.id);
+        const { error } = await supabase.from("product_categories").update(data).eq("id", editingCategory.id);
         if (error) throw error;
         toast({ title: "Success", description: "Category updated" });
       } else {
-        const { error } = await supabase
-          .from("product_categories")
-          .insert([data]);
+        const { error } = await supabase.from("product_categories").insert([data]);
         if (error) throw error;
         toast({ title: "Success", description: "Category created" });
       }
@@ -292,20 +312,12 @@ export default function Inventory() {
   const handleSaveProduct = async () => {
     setSaving(true);
     try {
-      if (!productForm.category_id) {
-        throw new Error("Please select a category");
-      }
+      if (!productForm.category_id) throw new Error("Please select a category");
 
-      const data = {
-        ...productForm,
-        category_id: productForm.category_id || null,
-      };
+      const data = { ...productForm, category_id: productForm.category_id || null };
       
       if (editingProduct) {
-        const { error } = await supabase
-          .from("products")
-          .update(data)
-          .eq("id", editingProduct.id);
+        const { error } = await supabase.from("products").update(data).eq("id", editingProduct.id);
         if (error) throw error;
         toast({ title: "Success", description: "Product updated" });
       } else {
@@ -315,16 +327,7 @@ export default function Inventory() {
       }
       setProductDialogOpen(false);
       setEditingProduct(null);
-      setProductForm({
-        category_id: "",
-        name: "",
-        brand: "",
-        model: "",
-        description: "",
-        purchase_price: 0,
-        selling_price: 0,
-        min_stock_level: 0,
-      });
+      setProductForm({ category_id: "", name: "", brand: "", model: "", description: "", purchase_price: 0, selling_price: 0, min_stock_level: 0 });
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -349,26 +352,19 @@ export default function Inventory() {
   const handleSaveItem = async () => {
     setSaving(true);
     try {
-      // Validate
       if (!itemForm.product_id) throw new Error("Please select a product");
       if (!itemForm.supplier_id) throw new Error("Please select a supplier");
 
-      // Validate serial/MAC based on category requirements
       if (requiresSerial) {
         const emptySerials = itemForm.serial_numbers.filter(s => !s.trim());
-        if (emptySerials.length > 0) {
-          throw new Error(`Please enter all ${itemForm.quantity} serial numbers`);
-        }
+        if (emptySerials.length > 0) throw new Error(`Please enter all ${itemForm.quantity} serial numbers`);
       }
       if (requiresMac) {
         const emptyMacs = itemForm.mac_addresses.filter(m => !m.trim());
-        if (emptyMacs.length > 0) {
-          throw new Error(`Please enter all ${itemForm.quantity} MAC addresses`);
-        }
+        if (emptyMacs.length > 0) throw new Error(`Please enter all ${itemForm.quantity} MAC addresses`);
       }
 
       if (editingItem) {
-        // Single item update
         const data = {
           product_id: itemForm.product_id,
           supplier_id: itemForm.supplier_id || null,
@@ -383,14 +379,10 @@ export default function Inventory() {
           cable_length_m: isCableProduct ? itemForm.cable_length_m || null : null,
         };
 
-        const { error } = await supabase
-          .from("inventory_items")
-          .update(data)
-          .eq("id", editingItem.id);
+        const { error } = await supabase.from("inventory_items").update(data).eq("id", editingItem.id);
         if (error) throw error;
         toast({ title: "Success", description: "Item updated" });
       } else {
-        // Bulk insert
         const items = [];
         for (let i = 0; i < itemForm.quantity; i++) {
           items.push({
@@ -415,10 +407,7 @@ export default function Inventory() {
         // Update product stock quantity
         const product = products.find(p => p.id === itemForm.product_id);
         if (product) {
-          await supabase
-            .from("products")
-            .update({ stock_quantity: product.stock_quantity + itemForm.quantity })
-            .eq("id", product.id);
+          await supabase.from("products").update({ stock_quantity: product.stock_quantity + itemForm.quantity }).eq("id", product.id);
         }
 
         toast({ title: "Success", description: `${itemForm.quantity} item(s) added to stock` });
@@ -426,20 +415,7 @@ export default function Inventory() {
       
       setItemDialogOpen(false);
       setEditingItem(null);
-      setItemForm({
-        product_id: "",
-        supplier_id: "",
-        quantity: 1,
-        serial_numbers: [""],
-        mac_addresses: [""],
-        purchase_date: "",
-        purchase_price: 0,
-        warranty_end_date: "",
-        notes: "",
-        core_count: 0,
-        cable_color: "",
-        cable_length_m: 0,
-      });
+      setItemForm({ product_id: "", supplier_id: "", quantity: 1, serial_numbers: [""], mac_addresses: [""], purchase_date: "", purchase_price: 0, warranty_end_date: "", notes: "", core_count: 0, cable_color: "", cable_length_m: 0 });
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -451,12 +427,77 @@ export default function Inventory() {
   const handleDeleteItem = async (id: string) => {
     if (!confirm("Delete this inventory item?")) return;
     try {
+      // Get item to find product
+      const item = inventoryItems.find(i => i.id === id);
+      
       const { error } = await supabase.from("inventory_items").delete().eq("id", id);
       if (error) throw error;
+      
+      // Update product stock if item was in_stock
+      if (item && item.status === 'in_stock') {
+        const product = products.find(p => p.id === item.product_id);
+        if (product) {
+          await supabase.from("products").update({ stock_quantity: Math.max(0, product.stock_quantity - 1) }).eq("id", product.id);
+        }
+      }
+      
       toast({ title: "Success", description: "Item deleted" });
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  // Sell item handler
+  const handleSellItem = async () => {
+    setSaving(true);
+    try {
+      if (!sellForm.item_id) throw new Error("Please select an item to sell");
+      if (!sellForm.selling_price) throw new Error("Please enter selling price");
+
+      const item = inventoryItems.find(i => i.id === sellForm.item_id);
+      if (!item) throw new Error("Item not found");
+
+      // Update item status to sold
+      const { error: itemError } = await supabase
+        .from("inventory_items")
+        .update({ status: 'sold' })
+        .eq("id", sellForm.item_id);
+      
+      if (itemError) throw itemError;
+
+      // Update product stock quantity
+      const product = products.find(p => p.id === item.product_id);
+      if (product) {
+        await supabase
+          .from("products")
+          .update({ stock_quantity: Math.max(0, product.stock_quantity - 1) })
+          .eq("id", product.id);
+      }
+
+      // Record sale transaction
+      const profit = sellForm.selling_price - (item.purchase_price || product?.purchase_price || 0);
+      await supabase.from("transactions").insert({
+        type: 'income',
+        amount: sellForm.selling_price,
+        payment_method: 'cash',
+        description: `Product sale: ${product?.name || "Unknown"} - ${sellForm.buyer_name || "Direct Sale"}`,
+        transaction_date: format(new Date(), 'yyyy-MM-dd'),
+      });
+
+      toast({ 
+        title: "Success", 
+        description: `Item sold for ৳${sellForm.selling_price}. Profit: ৳${profit}` 
+      });
+      
+      setSellDialogOpen(false);
+      setSellingProduct(null);
+      setSellForm({ item_id: "", selling_price: 0, buyer_name: "", notes: "" });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -473,10 +514,7 @@ export default function Inventory() {
       };
 
       if (editingSupplier) {
-        const { error } = await supabase
-          .from("suppliers")
-          .update(data)
-          .eq("id", editingSupplier.id);
+        const { error } = await supabase.from("suppliers").update(data).eq("id", editingSupplier.id);
         if (error) throw error;
         toast({ title: "Success", description: "Supplier updated" });
       } else {
@@ -507,21 +545,32 @@ export default function Inventory() {
     }
   };
 
-  // Low stock products
-  const lowStockProducts = products.filter(p => p.stock_quantity <= p.min_stock_level);
+  // Calculate summary stats
+  const totalProducts = products.length;
+  const totalItems = inventoryItems.length;
+  const totalInStock = inventoryItems.filter(i => i.status === 'in_stock').length;
+  const totalAssigned = inventoryItems.filter(i => i.status === 'assigned').length;
+  const totalSold = inventoryItems.filter(i => i.status === 'sold').length;
+  const lowStockProducts = products.filter(p => {
+    const stock = getProductStock(p.id);
+    return stock.inStock <= p.min_stock_level;
+  });
+  const totalStockValue = inventoryItems
+    .filter(i => i.status === 'in_stock')
+    .reduce((sum, i) => sum + (i.purchase_price || i.products?.purchase_price || 0), 0);
 
-  // Filtered items
-  const filteredItems = inventoryItems.filter(item =>
-    item.serial_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.mac_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.products?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+  // Filtered products for display
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.product_categories?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (loading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="animate-pulse text-muted-foreground">Loading inventory...</div>
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       </DashboardLayout>
     );
@@ -531,9 +580,70 @@ export default function Inventory() {
     <DashboardLayout>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Inventory Management</h1>
-          <p className="page-description">Manage products, stock and assets</p>
+          <h1 className="page-title flex items-center gap-2">
+            <Boxes className="h-6 w-6" />
+            Inventory Management
+          </h1>
+          <p className="page-description">Manage products, stock, suppliers and assets</p>
         </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <Package className="h-4 w-4" />
+              Products
+            </div>
+            <p className="text-2xl font-bold mt-1">{totalProducts}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-green-600 text-sm">
+              <CheckCircle className="h-4 w-4" />
+              In Stock
+            </div>
+            <p className="text-2xl font-bold mt-1">{totalInStock}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-blue-600 text-sm">
+              <TrendingUp className="h-4 w-4" />
+              Assigned
+            </div>
+            <p className="text-2xl font-bold mt-1">{totalAssigned}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-purple-600 text-sm">
+              <ShoppingCart className="h-4 w-4" />
+              Sold
+            </div>
+            <p className="text-2xl font-bold mt-1">{totalSold}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <DollarSign className="h-4 w-4" />
+              Stock Value
+            </div>
+            <p className="text-2xl font-bold mt-1">৳{totalStockValue.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+        <Card className={lowStockProducts.length > 0 ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20" : ""}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-yellow-600 text-sm">
+              <AlertTriangle className="h-4 w-4" />
+              Low Stock
+            </div>
+            <p className="text-2xl font-bold mt-1">{lowStockProducts.length}</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Low Stock Alert */}
@@ -542,18 +652,18 @@ export default function Inventory() {
           <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
             <AlertTriangle className="h-5 w-5" />
             <span className="font-medium">Low Stock Alert:</span>
-            <span>{lowStockProducts.map(p => p.name).join(", ")}</span>
+            <span>{lowStockProducts.map(p => `${p.name} (${getProductStock(p.id).inStock} left)`).join(", ")}</span>
           </div>
         </div>
       )}
 
-      <Tabs defaultValue="items" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="items" className="gap-2">
-            <Boxes className="h-4 w-4" /> Stock Items
-          </TabsTrigger>
+      <Tabs defaultValue="products" className="space-y-4">
+        <TabsList className="flex flex-wrap">
           <TabsTrigger value="products" className="gap-2">
             <Package className="h-4 w-4" /> Products
+          </TabsTrigger>
+          <TabsTrigger value="items" className="gap-2">
+            <Boxes className="h-4 w-4" /> Stock Items
           </TabsTrigger>
           <TabsTrigger value="categories" className="gap-2">
             <Tag className="h-4 w-4" /> Categories
@@ -563,279 +673,202 @@ export default function Inventory() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Stock Items Tab */}
-        <TabsContent value="items" className="space-y-4">
+        {/* Products Tab - REDESIGNED */}
+        <TabsContent value="products" className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-4 justify-between">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by serial, MAC..."
+                placeholder="Search products..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
               />
             </div>
             {canManage && (
-              <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={() => {
-                    setEditingItem(null);
-                    setItemForm({
-                      product_id: "",
-                      supplier_id: "",
-                      quantity: 1,
-                      serial_numbers: [""],
-                      mac_addresses: [""],
-                      purchase_date: "",
-                      purchase_price: 0,
-                      warranty_end_date: "",
-                      notes: "",
-                      core_count: 0,
-                      cable_color: "",
-                      cable_length_m: 0,
-                    });
-                  }}>
-                    <Plus className="h-4 w-4 mr-2" /> Add Stock
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>{editingItem ? "Edit Stock Item" : "Add Stock Items"}</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Product *</Label>
-                        <Select
-                          value={itemForm.product_id}
-                          onValueChange={(v) => {
-                            setItemForm({ ...itemForm, product_id: v });
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select product" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {products.map((p) => (
-                              <SelectItem key={p.id} value={p.id}>
-                                {p.name} ({p.brand || "N/A"})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label>Supplier *</Label>
-                        <Select
-                          value={itemForm.supplier_id}
-                          onValueChange={(v) => setItemForm({ ...itemForm, supplier_id: v })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select supplier" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {suppliers.map((s) => (
-                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    {/* Show category requirements info */}
-                    {selectedCategory && (
-                      <div className="p-3 bg-muted rounded-lg text-sm">
-                        <span className="font-medium">Category: {selectedCategory.name}</span>
-                        <div className="flex gap-4 mt-1 text-muted-foreground">
-                          <span>Serial Number: {selectedCategory.requires_serial ? "Required" : "Optional"}</span>
-                          <span>MAC Address: {selectedCategory.requires_mac ? "Required" : "Optional"}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {!editingItem && (
-                      <div>
-                        <Label>Quantity</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={itemForm.quantity}
-                          onChange={(e) => handleQuantityChange(Number(e.target.value))}
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Number of units to add to stock
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Serial/MAC entries for each unit */}
-                    {(requiresSerial || requiresMac) && itemForm.quantity > 0 && (
-                      <div className="space-y-3 max-h-[200px] overflow-y-auto border rounded-lg p-3">
-                        <Label>Enter {requiresSerial ? "Serial Numbers" : ""} {requiresSerial && requiresMac ? "&" : ""} {requiresMac ? "MAC Addresses" : ""} for each unit</Label>
-                        {Array.from({ length: editingItem ? 1 : itemForm.quantity }).map((_, idx) => (
-                          <div key={idx} className="grid grid-cols-2 gap-2 items-center">
-                            <span className="text-sm text-muted-foreground">Unit {idx + 1}:</span>
-                            <div className="col-span-1 grid grid-cols-2 gap-2">
-                              {requiresSerial && (
-                                <Input
-                                  placeholder="Serial Number"
-                                  value={itemForm.serial_numbers[idx] || ""}
-                                  onChange={(e) => {
-                                    const arr = [...itemForm.serial_numbers];
-                                    arr[idx] = e.target.value;
-                                    setItemForm({ ...itemForm, serial_numbers: arr });
-                                  }}
-                                />
-                              )}
-                              {requiresMac && (
-                                <Input
-                                  placeholder="MAC Address"
-                                  value={itemForm.mac_addresses[idx] || ""}
-                                  onChange={(e) => {
-                                    const arr = [...itemForm.mac_addresses];
-                                    arr[idx] = e.target.value;
-                                    setItemForm({ ...itemForm, mac_addresses: arr });
-                                  }}
-                                />
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Cable-specific fields */}
-                    {isCableProduct && (
-                      <div className="grid grid-cols-3 gap-4 p-3 bg-muted/50 rounded-lg">
-                        <div>
-                          <Label>Core Count</Label>
-                          <Input
-                            type="number"
-                            value={itemForm.core_count}
-                            onChange={(e) => setItemForm({ ...itemForm, core_count: Number(e.target.value) })}
-                            placeholder="e.g., 2, 4, 8"
-                          />
-                        </div>
-                        <div>
-                          <Label>Cable Color</Label>
-                          <Select
-                            value={itemForm.cable_color}
-                            onValueChange={(v) => setItemForm({ ...itemForm, cable_color: v })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select color" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {cableColors.map((c) => (
-                                <SelectItem key={c} value={c}>{c}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>Length (meters)</Label>
-                          <Input
-                            type="number"
-                            value={itemForm.cable_length_m}
-                            onChange={(e) => setItemForm({ ...itemForm, cable_length_m: Number(e.target.value) })}
-                            placeholder="e.g., 500"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <Label>Purchase Date</Label>
-                        <Input
-                          type="date"
-                          value={itemForm.purchase_date}
-                          onChange={(e) => setItemForm({ ...itemForm, purchase_date: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label>Unit Price (৳)</Label>
-                        <Input
-                          type="number"
-                          value={itemForm.purchase_price}
-                          onChange={(e) => setItemForm({ ...itemForm, purchase_price: Number(e.target.value) })}
-                        />
-                      </div>
-                      <div>
-                        <Label>Warranty End</Label>
-                        <Input
-                          type="date"
-                          value={itemForm.warranty_end_date}
-                          onChange={(e) => setItemForm({ ...itemForm, warranty_end_date: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label>Notes</Label>
-                      <Textarea
-                        value={itemForm.notes}
-                        onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })}
-                        placeholder="Additional notes..."
-                        rows={2}
-                      />
-                    </div>
-
-                    <Button onClick={handleSaveItem} className="w-full" disabled={saving}>
-                      {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      {editingItem ? "Update Item" : `Add ${itemForm.quantity} Item(s) to Stock`}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              <Button onClick={() => {
+                setEditingProduct(null);
+                setProductForm({ category_id: "", name: "", brand: "", model: "", description: "", purchase_price: 0, selling_price: 0, min_stock_level: 0 });
+                setProductDialogOpen(true);
+              }}>
+                <Plus className="h-4 w-4 mr-2" /> Add Product
+              </Button>
             )}
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredProducts.length === 0 ? (
+              <div className="col-span-full text-center py-12 text-muted-foreground">
+                No products found
+              </div>
+            ) : (
+              filteredProducts.map((product) => {
+                const stock = getProductStock(product.id);
+                const isLowStock = stock.inStock <= product.min_stock_level;
+                const potentialProfit = stock.inStock * (product.selling_price - product.purchase_price);
+                
+                return (
+                  <Card key={product.id} className={cn("relative overflow-hidden", isLowStock && "border-yellow-500")}>
+                    {isLowStock && (
+                      <div className="absolute top-0 right-0 bg-yellow-500 text-white text-xs px-2 py-1 rounded-bl">
+                        Low Stock
+                      </div>
+                    )}
+                    <CardHeader className="pb-2">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <CardTitle className="text-lg">{product.name}</CardTitle>
+                          <CardDescription>
+                            {product.brand && `${product.brand} `}
+                            {product.model && `• ${product.model}`}
+                          </CardDescription>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => {
+                              setViewingProduct(product);
+                              setViewItemsDialogOpen(true);
+                            }}>
+                              <Eye className="h-4 w-4 mr-2" /> View Items
+                            </DropdownMenuItem>
+                            {stock.inStock > 0 && (
+                              <DropdownMenuItem onClick={() => {
+                                setSellingProduct(product);
+                                setSellForm({
+                                  item_id: "",
+                                  selling_price: product.selling_price,
+                                  buyer_name: "",
+                                  notes: "",
+                                });
+                                setSellDialogOpen(true);
+                              }}>
+                                <ShoppingCart className="h-4 w-4 mr-2" /> Sell Item
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            {canEdit && (
+                              <DropdownMenuItem onClick={() => {
+                                setEditingProduct(product);
+                                setProductForm({
+                                  category_id: product.category_id || "",
+                                  name: product.name,
+                                  brand: product.brand || "",
+                                  model: product.model || "",
+                                  description: product.description || "",
+                                  purchase_price: product.purchase_price,
+                                  selling_price: product.selling_price,
+                                  min_stock_level: product.min_stock_level,
+                                });
+                                setProductDialogOpen(true);
+                              }}>
+                                <Pencil className="h-4 w-4 mr-2" /> Edit
+                              </DropdownMenuItem>
+                            )}
+                            {canRemove && (
+                              <DropdownMenuItem onClick={() => handleDeleteProduct(product.id)} className="text-destructive">
+                                <Trash2 className="h-4 w-4 mr-2" /> Delete
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      <Badge variant="outline" className="w-fit mt-1">
+                        {product.product_categories?.name || "Uncategorized"}
+                      </Badge>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-3 gap-2 text-center mb-3">
+                        <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                          <p className="text-xs text-muted-foreground">In Stock</p>
+                          <p className="text-lg font-bold text-green-600">{stock.inStock}</p>
+                        </div>
+                        <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                          <p className="text-xs text-muted-foreground">Assigned</p>
+                          <p className="text-lg font-bold text-blue-600">{stock.assigned}</p>
+                        </div>
+                        <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                          <p className="text-xs text-muted-foreground">Sold</p>
+                          <p className="text-lg font-bold text-purple-600">{stock.sold}</p>
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-sm border-t pt-2">
+                        <div>
+                          <p className="text-muted-foreground">Purchase</p>
+                          <p className="font-medium">৳{product.purchase_price}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Selling</p>
+                          <p className="font-medium">৳{product.selling_price}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Potential</p>
+                          <p className="font-medium text-green-600">৳{potentialProfit}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Stock Items Tab */}
+        <TabsContent value="items" className="space-y-4">
+          <div className="flex justify-end">
+            {canManage && (
+              <Button onClick={() => {
+                setEditingItem(null);
+                setItemForm({ product_id: "", supplier_id: "", quantity: 1, serial_numbers: [""], mac_addresses: [""], purchase_date: "", purchase_price: 0, warranty_end_date: "", notes: "", core_count: 0, cable_color: "", cable_length_m: 0 });
+                setItemDialogOpen(true);
+              }}>
+                <Plus className="h-4 w-4 mr-2" /> Add Stock
+              </Button>
+            )}
+          </div>
+
+          <div className="form-section overflow-x-auto">
             <table className="data-table">
               <thead>
                 <tr>
                   <th>Product</th>
-                  <th>Serial Number</th>
-                  <th>MAC Address</th>
+                  <th>Serial / MAC</th>
                   <th>Supplier</th>
                   <th>Status</th>
-                  <th>Warranty</th>
+                  <th>Purchase Price</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredItems.length === 0 ? (
+                {inventoryItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <td colSpan={6} className="text-center py-8 text-muted-foreground">
                       No stock items found
                     </td>
                   </tr>
                 ) : (
-                  filteredItems.map((item) => (
+                  inventoryItems.slice(0, 50).map((item) => (
                     <tr key={item.id}>
                       <td>
                         <div className="font-medium">{item.products?.name || "N/A"}</div>
-                        {item.cable_length_m && (
-                          <div className="text-xs text-muted-foreground">
-                            {item.core_count} core, {item.cable_color}, {item.cable_length_m}m
-                          </div>
-                        )}
+                        <div className="text-xs text-muted-foreground">{item.products?.brand}</div>
                       </td>
-                      <td className="font-mono text-sm">{item.serial_number || "-"}</td>
-                      <td className="font-mono text-sm">{item.mac_address || "-"}</td>
+                      <td className="font-mono text-sm">
+                        <div>{item.serial_number || "-"}</div>
+                        <div className="text-muted-foreground">{item.mac_address || "-"}</div>
+                      </td>
                       <td>{item.suppliers?.name || "-"}</td>
                       <td>
                         <Badge className={statusColors[item.status]}>
                           {item.status.replace("_", " ")}
                         </Badge>
                       </td>
-                      <td>
-                        {item.warranty_end_date 
-                          ? format(new Date(item.warranty_end_date), "dd MMM yyyy")
-                          : "-"
-                        }
-                      </td>
+                      <td>৳{item.purchase_price || item.products?.purchase_price || 0}</td>
                       <td>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -844,7 +877,7 @@ export default function Inventory() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {canEdit && (
+                            {canEdit && item.status === 'in_stock' && (
                               <DropdownMenuItem onClick={() => {
                                 setEditingItem(item);
                                 setItemForm({
@@ -867,10 +900,7 @@ export default function Inventory() {
                               </DropdownMenuItem>
                             )}
                             {canRemove && (
-                              <DropdownMenuItem 
-                                onClick={() => handleDeleteItem(item.id)}
-                                className="text-destructive"
-                              >
+                              <DropdownMenuItem onClick={() => handleDeleteItem(item.id)} className="text-destructive">
                                 <Trash2 className="h-4 w-4 mr-2" /> Delete
                               </DropdownMenuItem>
                             )}
@@ -885,278 +915,31 @@ export default function Inventory() {
           </div>
         </TabsContent>
 
-        {/* Products Tab */}
-        <TabsContent value="products" className="space-y-4">
-          <div className="flex justify-end">
-            {canManage && (
-              <Dialog open={productDialogOpen} onOpenChange={setProductDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={() => {
-                    setEditingProduct(null);
-                    setProductForm({
-                      category_id: "",
-                      name: "",
-                      brand: "",
-                      model: "",
-                      description: "",
-                      purchase_price: 0,
-                      selling_price: 0,
-                      min_stock_level: 0,
-                    });
-                  }}>
-                    <Plus className="h-4 w-4 mr-2" /> Add Product
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>{editingProduct ? "Edit Product" : "Add Product"}</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 max-h-[70vh] overflow-y-auto">
-                    <div>
-                      <Label>Category *</Label>
-                      <Select
-                        value={productForm.category_id}
-                        onValueChange={(v) => setProductForm({ ...productForm, category_id: v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((c) => (
-                            <SelectItem key={c.id} value={c.id}>
-                              {c.name}
-                              {(c.requires_serial || c.requires_mac) && (
-                                <span className="text-muted-foreground ml-2">
-                                  ({c.requires_serial ? "Serial" : ""}{c.requires_serial && c.requires_mac ? "/" : ""}{c.requires_mac ? "MAC" : ""})
-                                </span>
-                              )}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Product Name *</Label>
-                      <Input
-                        value={productForm.name}
-                        onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Brand</Label>
-                        <Input
-                          value={productForm.brand}
-                          onChange={(e) => setProductForm({ ...productForm, brand: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label>Model</Label>
-                        <Input
-                          value={productForm.model}
-                          onChange={(e) => setProductForm({ ...productForm, model: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Purchase Price</Label>
-                        <Input
-                          type="number"
-                          value={productForm.purchase_price}
-                          onChange={(e) => setProductForm({ ...productForm, purchase_price: Number(e.target.value) })}
-                        />
-                      </div>
-                      <div>
-                        <Label>Selling Price</Label>
-                        <Input
-                          type="number"
-                          value={productForm.selling_price}
-                          onChange={(e) => setProductForm({ ...productForm, selling_price: Number(e.target.value) })}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label>Min Stock Level</Label>
-                      <Input
-                        type="number"
-                        value={productForm.min_stock_level}
-                        onChange={(e) => setProductForm({ ...productForm, min_stock_level: Number(e.target.value) })}
-                      />
-                    </div>
-                    <div>
-                      <Label>Description</Label>
-                      <Input
-                        value={productForm.description}
-                        onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-                      />
-                    </div>
-                    <Button onClick={handleSaveProduct} className="w-full" disabled={saving}>
-                      {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      {editingProduct ? "Update" : "Add"} Product
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {products.map((product) => (
-              <div key={product.id} className="card p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <h3 className="font-medium">{product.name}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {product.brand} {product.model}
-                    </p>
-                  </div>
-                  {(canEdit || canRemove) && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {canEdit && (
-                          <DropdownMenuItem onClick={() => {
-                            setEditingProduct(product);
-                            setProductForm({
-                              category_id: product.category_id || "",
-                              name: product.name,
-                              brand: product.brand || "",
-                              model: product.model || "",
-                              description: product.description || "",
-                              purchase_price: product.purchase_price,
-                              selling_price: product.selling_price,
-                              min_stock_level: product.min_stock_level,
-                            });
-                            setProductDialogOpen(true);
-                          }}>
-                            <Pencil className="h-4 w-4 mr-2" /> Edit
-                          </DropdownMenuItem>
-                        )}
-                        {canRemove && (
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteProduct(product.id)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" /> Delete
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
-                <div className="flex items-center justify-between mt-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Stock</p>
-                    <p className={`font-medium ${product.stock_quantity <= product.min_stock_level ? "text-red-600" : ""}`}>
-                      {product.stock_quantity} units
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground">Price</p>
-                    <p className="font-medium">৳{product.selling_price}</p>
-                  </div>
-                </div>
-                {product.product_categories && (
-                  <Badge variant="outline" className="mt-2">
-                    {product.product_categories.name}
-                  </Badge>
-                )}
-              </div>
-            ))}
-          </div>
-        </TabsContent>
-
         {/* Categories Tab */}
         <TabsContent value="categories" className="space-y-4">
           <div className="flex justify-end">
             {canManage && (
-              <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={() => {
-                    setEditingCategory(null);
-                    setCategoryForm({ name: "", description: "", requires_serial: false, requires_mac: false });
-                  }}>
-                    <Plus className="h-4 w-4 mr-2" /> Add Category
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>{editingCategory ? "Edit Category" : "Add Category"}</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Category Name *</Label>
-                      <Input
-                        value={categoryForm.name}
-                        onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <Label>Description</Label>
-                      <Input
-                        value={categoryForm.description}
-                        onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
-                      />
-                    </div>
-                    
-                    <div className="p-4 bg-muted rounded-lg space-y-3">
-                      <Label className="text-sm font-medium">Tracking Requirements</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Specify what information is required when adding stock items in this category
-                      </p>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="requires_serial"
-                          checked={categoryForm.requires_serial}
-                          onCheckedChange={(checked) => 
-                            setCategoryForm({ ...categoryForm, requires_serial: checked as boolean })
-                          }
-                        />
-                        <label htmlFor="requires_serial" className="text-sm cursor-pointer">
-                          Requires Serial Number
-                        </label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="requires_mac"
-                          checked={categoryForm.requires_mac}
-                          onCheckedChange={(checked) => 
-                            setCategoryForm({ ...categoryForm, requires_mac: checked as boolean })
-                          }
-                        />
-                        <label htmlFor="requires_mac" className="text-sm cursor-pointer">
-                          Requires MAC Address
-                        </label>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Example: ONU/Router needs both. Cable/Consumables need neither.
-                      </p>
-                    </div>
-
-                    <Button onClick={handleSaveCategory} className="w-full" disabled={saving}>
-                      {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      {editingCategory ? "Update" : "Add"} Category
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              <Button onClick={() => {
+                setEditingCategory(null);
+                setCategoryForm({ name: "", description: "", requires_serial: false, requires_mac: false });
+                setCategoryDialogOpen(true);
+              }}>
+                <Plus className="h-4 w-4 mr-2" /> Add Category
+              </Button>
             )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {categories.map((category) => (
-              <div key={category.id} className="card p-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-medium">{category.name}</h3>
-                    <p className="text-sm text-muted-foreground">{category.description || "No description"}</p>
-                  </div>
-                  {(canEdit || canRemove) && (
+              <Card key={category.id}>
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-lg">{category.name}</CardTitle>
+                      {category.description && (
+                        <CardDescription>{category.description}</CardDescription>
+                      )}
+                    </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -1167,8 +950,8 @@ export default function Inventory() {
                         {canEdit && (
                           <DropdownMenuItem onClick={() => {
                             setEditingCategory(category);
-                            setCategoryForm({ 
-                              name: category.name, 
+                            setCategoryForm({
+                              name: category.name,
                               description: category.description || "",
                               requires_serial: category.requires_serial,
                               requires_mac: category.requires_mac,
@@ -1179,32 +962,25 @@ export default function Inventory() {
                           </DropdownMenuItem>
                         )}
                         {canRemove && (
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteCategory(category.id)}
-                            className="text-destructive"
-                          >
+                          <DropdownMenuItem onClick={() => handleDeleteCategory(category.id)} className="text-destructive">
                             <Trash2 className="h-4 w-4 mr-2" /> Delete
                           </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  )}
-                </div>
-                <div className="flex gap-2 mt-3">
-                  {category.requires_serial && (
-                    <Badge variant="outline" className="text-xs">Serial Required</Badge>
-                  )}
-                  {category.requires_mac && (
-                    <Badge variant="outline" className="text-xs">MAC Required</Badge>
-                  )}
-                  {!category.requires_serial && !category.requires_mac && (
-                    <Badge variant="secondary" className="text-xs">No Tracking</Badge>
-                  )}
-                </div>
-                <p className="text-sm mt-2">
-                  {products.filter(p => p.category_id === category.id).length} products
-                </p>
-              </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2">
+                    {category.requires_serial && (
+                      <Badge variant="secondary">Serial Required</Badge>
+                    )}
+                    {category.requires_mac && (
+                      <Badge variant="secondary">MAC Required</Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         </TabsContent>
@@ -1213,102 +989,472 @@ export default function Inventory() {
         <TabsContent value="suppliers" className="space-y-4">
           <div className="flex justify-end">
             {canManage && (
-              <Dialog open={supplierDialogOpen} onOpenChange={setSupplierDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={() => {
-                    setEditingSupplier(null);
-                    setSupplierForm({ name: "", contact_person: "", phone: "", email: "", address: "" });
-                  }}>
-                    <Plus className="h-4 w-4 mr-2" /> Add Supplier
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>{editingSupplier ? "Edit Supplier" : "Add Supplier"}</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Supplier Name *</Label>
-                      <Input value={supplierForm.name} onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })} />
-                    </div>
-                    <div>
-                      <Label>Contact Person</Label>
-                      <Input value={supplierForm.contact_person} onChange={(e) => setSupplierForm({ ...supplierForm, contact_person: e.target.value })} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Phone</Label>
-                        <Input value={supplierForm.phone} onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })} />
-                      </div>
-                      <div>
-                        <Label>Email</Label>
-                        <Input type="email" value={supplierForm.email} onChange={(e) => setSupplierForm({ ...supplierForm, email: e.target.value })} />
-                      </div>
-                    </div>
-                    <div>
-                      <Label>Address</Label>
-                      <Textarea value={supplierForm.address} onChange={(e) => setSupplierForm({ ...supplierForm, address: e.target.value })} rows={2} />
-                    </div>
-                    <Button onClick={handleSaveSupplier} className="w-full" disabled={saving}>
-                      {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      {editingSupplier ? "Update" : "Add"} Supplier
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              <Button onClick={() => {
+                setEditingSupplier(null);
+                setSupplierForm({ name: "", contact_person: "", phone: "", email: "", address: "" });
+                setSupplierDialogOpen(true);
+              }}>
+                <Plus className="h-4 w-4 mr-2" /> Add Supplier
+              </Button>
             )}
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Contact Person</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {suppliers.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No suppliers found</TableCell></TableRow>
-              ) : (
-                suppliers.map((supplier) => (
-                  <TableRow key={supplier.id}>
-                    <TableCell className="font-medium">{supplier.name}</TableCell>
-                    <TableCell>{supplier.contact_person || "-"}</TableCell>
-                    <TableCell>{supplier.phone || "-"}</TableCell>
-                    <TableCell>{supplier.email || "-"}</TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {canEdit && (
-                            <DropdownMenuItem onClick={() => {
-                              setEditingSupplier(supplier);
-                              setSupplierForm({ name: supplier.name, contact_person: supplier.contact_person || "", phone: supplier.phone || "", email: supplier.email || "", address: supplier.address || "" });
-                              setSupplierDialogOpen(true);
-                            }}>
-                              <Pencil className="h-4 w-4 mr-2" /> Edit
-                            </DropdownMenuItem>
-                          )}
-                          {canRemove && (
-                            <DropdownMenuItem onClick={() => handleDeleteSupplier(supplier.id)} className="text-destructive">
-                              <Trash2 className="h-4 w-4 mr-2" /> Delete
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {suppliers.map((supplier) => (
+              <Card key={supplier.id}>
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-lg">{supplier.name}</CardTitle>
+                      {supplier.contact_person && (
+                        <CardDescription>{supplier.contact_person}</CardDescription>
+                      )}
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {canEdit && (
+                          <DropdownMenuItem onClick={() => {
+                            setEditingSupplier(supplier);
+                            setSupplierForm({
+                              name: supplier.name,
+                              contact_person: supplier.contact_person || "",
+                              phone: supplier.phone || "",
+                              email: supplier.email || "",
+                              address: supplier.address || "",
+                            });
+                            setSupplierDialogOpen(true);
+                          }}>
+                            <Pencil className="h-4 w-4 mr-2" /> Edit
+                          </DropdownMenuItem>
+                        )}
+                        {canRemove && (
+                          <DropdownMenuItem onClick={() => handleDeleteSupplier(supplier.id)} className="text-destructive">
+                            <Trash2 className="h-4 w-4 mr-2" /> Delete
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  {supplier.phone && <p>📞 {supplier.phone}</p>}
+                  {supplier.email && <p>✉️ {supplier.email}</p>}
+                  {supplier.address && <p>📍 {supplier.address}</p>}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
       </Tabs>
+
+      {/* Product Dialog */}
+      <Dialog open={productDialogOpen} onOpenChange={setProductDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingProduct ? "Edit Product" : "Add Product"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Category *</Label>
+              <Select value={productForm.category_id} onValueChange={(v) => setProductForm({ ...productForm, category_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Product Name *</Label>
+                <Input value={productForm.name} onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} />
+              </div>
+              <div>
+                <Label>Brand</Label>
+                <Input value={productForm.brand} onChange={(e) => setProductForm({ ...productForm, brand: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Model</Label>
+                <Input value={productForm.model} onChange={(e) => setProductForm({ ...productForm, model: e.target.value })} />
+              </div>
+              <div>
+                <Label>Min Stock Level</Label>
+                <Input type="number" value={productForm.min_stock_level} onChange={(e) => setProductForm({ ...productForm, min_stock_level: Number(e.target.value) })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Purchase Price (৳)</Label>
+                <Input type="number" value={productForm.purchase_price} onChange={(e) => setProductForm({ ...productForm, purchase_price: Number(e.target.value) })} />
+              </div>
+              <div>
+                <Label>Selling Price (৳)</Label>
+                <Input type="number" value={productForm.selling_price} onChange={(e) => setProductForm({ ...productForm, selling_price: Number(e.target.value) })} />
+              </div>
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea value={productForm.description} onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} rows={2} />
+            </div>
+            <Button onClick={handleSaveProduct} className="w-full" disabled={saving}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {editingProduct ? "Update Product" : "Add Product"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Category Dialog */}
+      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingCategory ? "Edit Category" : "Add Category"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Category Name *</Label>
+              <Input value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} />
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea value={categoryForm.description} onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })} rows={2} />
+            </div>
+            <div className="flex gap-6">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="requires_serial"
+                  checked={categoryForm.requires_serial}
+                  onCheckedChange={(v) => setCategoryForm({ ...categoryForm, requires_serial: v as boolean })}
+                />
+                <Label htmlFor="requires_serial">Requires Serial Number</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="requires_mac"
+                  checked={categoryForm.requires_mac}
+                  onCheckedChange={(v) => setCategoryForm({ ...categoryForm, requires_mac: v as boolean })}
+                />
+                <Label htmlFor="requires_mac">Requires MAC Address</Label>
+              </div>
+            </div>
+            <Button onClick={handleSaveCategory} className="w-full" disabled={saving}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {editingCategory ? "Update Category" : "Add Category"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Stock Dialog */}
+      <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingItem ? "Edit Stock Item" : "Add Stock Items"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Product *</Label>
+                <Select value={itemForm.product_id} onValueChange={(v) => setItemForm({ ...itemForm, product_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
+                  <SelectContent>
+                    {products.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name} ({p.brand || "N/A"})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Supplier *</Label>
+                <Select value={itemForm.supplier_id} onValueChange={(v) => setItemForm({ ...itemForm, supplier_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                  <SelectContent>
+                    {suppliers.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {selectedCategory && (
+              <div className="p-3 bg-muted rounded-lg text-sm">
+                <span className="font-medium">Category: {selectedCategory.name}</span>
+                <div className="flex gap-4 mt-1 text-muted-foreground">
+                  <span>Serial: {selectedCategory.requires_serial ? "Required" : "Optional"}</span>
+                  <span>MAC: {selectedCategory.requires_mac ? "Required" : "Optional"}</span>
+                </div>
+              </div>
+            )}
+
+            {!editingItem && (
+              <div>
+                <Label>Quantity</Label>
+                <Input type="number" min={1} value={itemForm.quantity} onChange={(e) => handleQuantityChange(Number(e.target.value))} />
+              </div>
+            )}
+
+            {(requiresSerial || requiresMac) && itemForm.quantity > 0 && (
+              <div className="space-y-3 max-h-[200px] overflow-y-auto border rounded-lg p-3">
+                <Label>Enter {requiresSerial ? "Serial Numbers" : ""} {requiresSerial && requiresMac ? "&" : ""} {requiresMac ? "MAC Addresses" : ""}</Label>
+                {Array.from({ length: editingItem ? 1 : itemForm.quantity }).map((_, idx) => (
+                  <div key={idx} className="grid grid-cols-3 gap-2 items-center">
+                    <span className="text-sm text-muted-foreground">Unit {idx + 1}:</span>
+                    {requiresSerial && (
+                      <Input
+                        placeholder="Serial Number"
+                        value={itemForm.serial_numbers[idx] || ""}
+                        onChange={(e) => {
+                          const arr = [...itemForm.serial_numbers];
+                          arr[idx] = e.target.value;
+                          setItemForm({ ...itemForm, serial_numbers: arr });
+                        }}
+                      />
+                    )}
+                    {requiresMac && (
+                      <Input
+                        placeholder="MAC Address"
+                        value={itemForm.mac_addresses[idx] || ""}
+                        onChange={(e) => {
+                          const arr = [...itemForm.mac_addresses];
+                          arr[idx] = e.target.value;
+                          setItemForm({ ...itemForm, mac_addresses: arr });
+                        }}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {isCableProduct && (
+              <div className="grid grid-cols-3 gap-4 p-3 bg-muted/50 rounded-lg">
+                <div>
+                  <Label>Core Count</Label>
+                  <Input type="number" value={itemForm.core_count} onChange={(e) => setItemForm({ ...itemForm, core_count: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <Label>Color</Label>
+                  <Select value={itemForm.cable_color} onValueChange={(v) => setItemForm({ ...itemForm, cable_color: v })}>
+                    <SelectTrigger><SelectValue placeholder="Color" /></SelectTrigger>
+                    <SelectContent>
+                      {cableColors.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Length (m)</Label>
+                  <Input type="number" value={itemForm.cable_length_m} onChange={(e) => setItemForm({ ...itemForm, cable_length_m: Number(e.target.value) })} />
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label>Purchase Date</Label>
+                <Input type="date" value={itemForm.purchase_date} onChange={(e) => setItemForm({ ...itemForm, purchase_date: e.target.value })} />
+              </div>
+              <div>
+                <Label>Unit Price (৳)</Label>
+                <Input type="number" value={itemForm.purchase_price} onChange={(e) => setItemForm({ ...itemForm, purchase_price: Number(e.target.value) })} />
+              </div>
+              <div>
+                <Label>Warranty End</Label>
+                <Input type="date" value={itemForm.warranty_end_date} onChange={(e) => setItemForm({ ...itemForm, warranty_end_date: e.target.value })} />
+              </div>
+            </div>
+
+            <div>
+              <Label>Notes</Label>
+              <Textarea value={itemForm.notes} onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })} rows={2} />
+            </div>
+
+            <Button onClick={handleSaveItem} className="w-full" disabled={saving}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {editingItem ? "Update Item" : `Add ${itemForm.quantity} Item(s) to Stock`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Supplier Dialog */}
+      <Dialog open={supplierDialogOpen} onOpenChange={setSupplierDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingSupplier ? "Edit Supplier" : "Add Supplier"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Supplier Name *</Label>
+              <Input value={supplierForm.name} onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Contact Person</Label>
+                <Input value={supplierForm.contact_person} onChange={(e) => setSupplierForm({ ...supplierForm, contact_person: e.target.value })} />
+              </div>
+              <div>
+                <Label>Phone</Label>
+                <Input value={supplierForm.phone} onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input type="email" value={supplierForm.email} onChange={(e) => setSupplierForm({ ...supplierForm, email: e.target.value })} />
+            </div>
+            <div>
+              <Label>Address</Label>
+              <Textarea value={supplierForm.address} onChange={(e) => setSupplierForm({ ...supplierForm, address: e.target.value })} rows={2} />
+            </div>
+            <Button onClick={handleSaveSupplier} className="w-full" disabled={saving}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {editingSupplier ? "Update Supplier" : "Add Supplier"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Items Dialog */}
+      <Dialog open={viewItemsDialogOpen} onOpenChange={setViewItemsDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {viewingProduct?.name} - Stock Items
+            </DialogTitle>
+          </DialogHeader>
+          {viewingProduct && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-4 gap-2 text-center">
+                <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                  <p className="text-xs">In Stock</p>
+                  <p className="font-bold text-green-600">{getProductStock(viewingProduct.id).inStock}</p>
+                </div>
+                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                  <p className="text-xs">Assigned</p>
+                  <p className="font-bold text-blue-600">{getProductStock(viewingProduct.id).assigned}</p>
+                </div>
+                <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                  <p className="text-xs">Sold</p>
+                  <p className="font-bold text-purple-600">{getProductStock(viewingProduct.id).sold}</p>
+                </div>
+                <div className="p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded">
+                  <p className="text-xs">Returned</p>
+                  <p className="font-bold text-yellow-600">{getProductStock(viewingProduct.id).returned}</p>
+                </div>
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="p-2 text-left">Serial / MAC</th>
+                      <th className="p-2 text-left">Status</th>
+                      <th className="p-2 text-left">Supplier</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventoryItems
+                      .filter(i => i.product_id === viewingProduct.id)
+                      .map((item) => (
+                        <tr key={item.id} className="border-t">
+                          <td className="p-2 font-mono">
+                            {item.serial_number || item.mac_address || "N/A"}
+                          </td>
+                          <td className="p-2">
+                            <Badge className={statusColors[item.status]}>
+                              {item.status.replace("_", " ")}
+                            </Badge>
+                          </td>
+                          <td className="p-2">{item.suppliers?.name || "-"}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Sell Dialog */}
+      <Dialog open={sellDialogOpen} onOpenChange={setSellDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Sell {sellingProduct?.name}</DialogTitle>
+          </DialogHeader>
+          {sellingProduct && (
+            <div className="space-y-4">
+              <div>
+                <Label>Select Item to Sell *</Label>
+                <Select value={sellForm.item_id} onValueChange={(v) => setSellForm({ ...sellForm, item_id: v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select available item" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getAvailableItemsForProduct(sellingProduct.id).map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.serial_number || item.mac_address || item.id.slice(0, 8)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Selling Price (৳) *</Label>
+                <Input
+                  type="number"
+                  value={sellForm.selling_price}
+                  onChange={(e) => setSellForm({ ...sellForm, selling_price: Number(e.target.value) })}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Default: ৳{sellingProduct.selling_price} | Purchase: ৳{sellingProduct.purchase_price}
+                </p>
+              </div>
+              <div>
+                <Label>Buyer Name</Label>
+                <Input
+                  value={sellForm.buyer_name}
+                  onChange={(e) => setSellForm({ ...sellForm, buyer_name: e.target.value })}
+                  placeholder="Optional - buyer name or company"
+                />
+              </div>
+              <div>
+                <Label>Notes</Label>
+                <Textarea
+                  value={sellForm.notes}
+                  onChange={(e) => setSellForm({ ...sellForm, notes: e.target.value })}
+                  placeholder="Sale notes..."
+                  rows={2}
+                />
+              </div>
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                <p className="text-sm">
+                  <span className="font-medium">Expected Profit:</span>{" "}
+                  <span className="text-green-600 font-bold">
+                    ৳{(sellForm.selling_price - sellingProduct.purchase_price).toLocaleString()}
+                  </span>
+                </p>
+              </div>
+              <Button onClick={handleSellItem} className="w-full" disabled={saving}>
+                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Complete Sale
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
+}
+
+function cn(...classes: (string | boolean | undefined)[]) {
+  return classes.filter(Boolean).join(" ");
 }
