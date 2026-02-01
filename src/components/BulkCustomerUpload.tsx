@@ -52,6 +52,10 @@ interface ParsedCustomer {
   password: string;
   pppoe_username: string;
   pppoe_password: string;
+  latitude: string;
+  longitude: string;
+  connection_type: string;
+  billing_cycle: string;
   isValid: boolean;
   errors: string[];
 }
@@ -63,10 +67,10 @@ interface BulkCustomerUploadProps {
   onSuccess: () => void;
 }
 
-const SAMPLE_CSV = `full_name,phone,alt_phone,address,area_name,router_name,package_name,password,pppoe_username,pppoe_password
-Mohammad Rahman,01712345678,,House 12 Road 5 Dhanmondi Dhaka,Zone A,Main Router,Basic 10Mbps,abc123,user001,pass01
-Fatima Begum,01898765432,01711111111,Flat 4B Green Tower Uttara Dhaka,Zone B,Sub Router,Standard 20Mbps,xyz789,user002,pass02
-Abdul Karim,01512345678,,Shop 23 Banani Commercial Area Dhaka,Zone A,Main Router,Premium 50Mbps,test123,user003,pass03`;
+const SAMPLE_CSV = `full_name,phone,alt_phone,address,area_name,router_name,package_name,password,pppoe_username,pppoe_password,latitude,longitude,connection_type,billing_cycle
+Mohammad Rahman,01712345678,,House 12 Road 5 Dhanmondi Dhaka,Zone A,Main Router,Basic 10Mbps,abc123,user001,pass01,23.7461,90.3742,pppoe,monthly
+Fatima Begum,01898765432,01711111111,Flat 4B Green Tower Uttara Dhaka,Zone B,Sub Router,Standard 20Mbps,xyz789,user002,pass02,23.8765,90.3920,static,quarterly
+Abdul Karim,01512345678,,Shop 23 Banani Commercial Area Dhaka,Zone A,Main Router,Premium 50Mbps,test123,user003,pass03,23.7938,90.4035,pppoe,yearly`;
 
 export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: BulkCustomerUploadProps) {
   const [open, setOpen] = useState(false);
@@ -172,6 +176,10 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
         password: row.password || "",
         pppoe_username: row.pppoe_username || "",
         pppoe_password: row.pppoe_password || "",
+        latitude: row.latitude || "",
+        longitude: row.longitude || "",
+        connection_type: row.connection_type || "pppoe",
+        billing_cycle: row.billing_cycle || "monthly",
         ...validation,
       };
     });
@@ -258,6 +266,13 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
         const expiryDate = addDays(today, pkg.validity_days);
 
         // Create customer
+        const connectionType = ['pppoe', 'static', 'dhcp'].includes(row.connection_type) 
+          ? row.connection_type as 'pppoe' | 'static' | 'dhcp' 
+          : 'pppoe' as const;
+        const billingCycle = ['monthly', 'quarterly', 'yearly'].includes(row.billing_cycle) 
+          ? row.billing_cycle as 'monthly' | 'quarterly' | 'yearly' 
+          : 'monthly' as const;
+
         const { data: newCustomer, error: customerError } = await supabase
           .from("customers")
           .insert({
@@ -272,8 +287,12 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
             password_hash: hashedPassword,
             billing_start_date: format(today, "yyyy-MM-dd"),
             expiry_date: format(expiryDate, "yyyy-MM-dd"),
-            status: "active",
+            status: "active" as const,
             total_due: pkg.monthly_price,
+            latitude: row.latitude ? parseFloat(row.latitude) : null,
+            longitude: row.longitude ? parseFloat(row.longitude) : null,
+            connection_type: connectionType,
+            billing_cycle: billingCycle,
           })
           .select("id")
           .single();

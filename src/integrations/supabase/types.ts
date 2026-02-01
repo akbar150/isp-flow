@@ -100,6 +100,7 @@ export type Database = {
       }
       asset_assignments: {
         Row: {
+          account_type: string | null
           assigned_by: string | null
           assigned_date: string
           condition_on_assign: string | null
@@ -108,13 +109,17 @@ export type Database = {
           customer_id: string
           id: string
           inventory_item_id: string
+          invoice_id: string | null
           item_condition: string | null
           notes: string | null
+          purchase_price_at_assign: number | null
           returned_date: string | null
+          selling_price: number | null
           technician_name: string | null
           updated_at: string
         }
         Insert: {
+          account_type?: string | null
           assigned_by?: string | null
           assigned_date?: string
           condition_on_assign?: string | null
@@ -123,13 +128,17 @@ export type Database = {
           customer_id: string
           id?: string
           inventory_item_id: string
+          invoice_id?: string | null
           item_condition?: string | null
           notes?: string | null
+          purchase_price_at_assign?: number | null
           returned_date?: string | null
+          selling_price?: number | null
           technician_name?: string | null
           updated_at?: string
         }
         Update: {
+          account_type?: string | null
           assigned_by?: string | null
           assigned_date?: string
           condition_on_assign?: string | null
@@ -138,9 +147,12 @@ export type Database = {
           customer_id?: string
           id?: string
           inventory_item_id?: string
+          invoice_id?: string | null
           item_condition?: string | null
           notes?: string | null
+          purchase_price_at_assign?: number | null
           returned_date?: string | null
+          selling_price?: number | null
           technician_name?: string | null
           updated_at?: string
         }
@@ -164,6 +176,13 @@ export type Database = {
             columns: ["inventory_item_id"]
             isOneToOne: false
             referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_assignments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
         ]
