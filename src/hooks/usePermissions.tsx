@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 
@@ -23,6 +23,11 @@ export function usePermissions() {
   }, [role, user]);
 
   const fetchPermissions = async () => {
+    if (!role) {
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from("permissions")
@@ -43,20 +48,28 @@ export function usePermissions() {
     }
   };
 
+  // Memoize permissions map for faster lookups
+  const permissionsMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    permissions.forEach(p => {
+      map.set(`${p.resource}:${p.action}`, p.allowed);
+    });
+    return map;
+  }, [permissions]);
+
   const hasPermission = useCallback(
     (resource: string, action: string): boolean => {
       if (!role) return false;
       
-      // Only super_admin always has full access
+      // super_admin always has full access
       if (role === "super_admin") return true;
       
-      // Admin and staff use permission-based access
-      const permission = permissions.find(
-        (p) => p.resource === resource && p.action === action
-      );
-      return permission?.allowed ?? false;
+      // Admin role - check database permissions
+      // Staff role - check database permissions
+      const key = `${resource}:${action}`;
+      return permissionsMap.get(key) ?? false;
     },
-    [permissions, role]
+    [permissionsMap, role]
   );
 
   const canCreate = useCallback(

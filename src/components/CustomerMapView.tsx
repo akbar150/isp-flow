@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +42,7 @@ interface GoogleMapsWindow extends Window {
 
 interface GoogleMap {
   fitBounds: (bounds: GoogleLatLngBounds) => void;
+  setZoom: (zoom: number) => void;
 }
 
 interface GoogleMarker {
@@ -63,21 +64,57 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<GoogleMap | null>(null);
   const markersRef = useRef<GoogleMarker[]>([]);
+  const scriptLoadedRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [tempApiKey, setTempApiKey] = useState("");
+  const [markersRendered, setMarkersRendered] = useState(0);
   const { toast } = useToast();
 
-  // Filter customers with GPS data
-  const customersWithGps = customers.filter(c => c.latitude && c.longitude);
+  // Filter and deduplicate customers with GPS data
+  const customersWithGps = useMemo(() => {
+    const withGps = customers.filter(c => 
+      c.latitude !== null && 
+      c.longitude !== null && 
+      !isNaN(Number(c.latitude)) && 
+      !isNaN(Number(c.longitude))
+    );
+    
+    // Group overlapping markers with small offset for visibility
+    return withGps.map((customer, index) => {
+      // Check if there are overlapping locations
+      const sameLocation = withGps.filter(
+        c => c.latitude === customer.latitude && c.longitude === customer.longitude
+      );
+      
+      if (sameLocation.length > 1) {
+        const overlapIndex = sameLocation.findIndex(c => c.id === customer.id);
+        // Apply small offset to overlapping markers (spiral pattern)
+        const angle = (overlapIndex * 137.5) * (Math.PI / 180); // Golden angle
+        const distance = 0.0001 * (overlapIndex + 1); // Small offset
+        return {
+          ...customer,
+          latitude: Number(customer.latitude) + distance * Math.cos(angle),
+          longitude: Number(customer.longitude) + distance * Math.sin(angle),
+        };
+      }
+      
+      return {
+        ...customer,
+        latitude: Number(customer.latitude),
+        longitude: Number(customer.longitude),
+      };
+    });
+  }, [customers]);
 
-  // Load API key from settings
+  // Load API key from settings - only once when dialog opens
   useEffect(() => {
+    if (!open) return;
+    
     const loadApiKey = async () => {
       try {
-        // First try to get from system_settings (requires auth)
         const { data, error } = await supabase
           .from("system_settings")
           .select("value")
@@ -85,7 +122,6 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
           .single();
         
         if (!error && data?.value) {
-          // Use decodeSettingValue to properly decode the stored value
           const decodedValue = decodeSettingValue(data.value);
           if (decodedValue && decodedValue !== 'null' && decodedValue.trim() !== '') {
             setApiKey(decodedValue);
@@ -94,7 +130,6 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
           }
         }
         
-        // No API key found
         setLoading(false);
       } catch (err) {
         console.error("Error loading API key:", err);
@@ -102,9 +137,7 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
       }
     };
     
-    if (open) {
-      loadApiKey();
-    }
+    loadApiKey();
   }, [open]);
 
   const saveApiKey = async () => {
@@ -126,15 +159,108 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
     }
   };
 
+  const initMap = useCallback(() => {
+    const windowWithGoogle = window as GoogleMapsWindow;
+    if (!mapRef.current || !windowWithGoogle.google) return;
+
+    try {
+      // Default center (Bangladesh)
+      let center = { lat: 23.8103, lng: 90.4125 };
+      
+      if (customersWithGps.length > 0) {
+        center = {
+          lat: customersWithGps[0].latitude!,
+          lng: customersWithGps[0].longitude!,
+        };
+      }
+
+      const map = new windowWithGoogle.google.maps.Map(mapRef.current, {
+        center,
+        zoom: 12,
+        mapTypeControl: true,
+        streetViewControl: false,
+        fullscreenControl: true,
+      });
+
+      mapInstanceRef.current = map;
+
+      // Clear existing markers
+      markersRef.current.forEach(marker => marker.setMap(null));
+      markersRef.current = [];
+
+      // Create info window
+      const infoWindow = new windowWithGoogle.google.maps.InfoWindow();
+
+      // Add markers for each customer with GPS
+      let renderedCount = 0;
+      customersWithGps.forEach(customer => {
+        const pppoeUsername = customer.mikrotik_users?.[0]?.username || "N/A";
+        
+        const marker = new windowWithGoogle.google.maps.Marker({
+          position: { lat: customer.latitude!, lng: customer.longitude! },
+          map,
+          title: customer.full_name,
+          icon: {
+            url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+          },
+        });
+
+        marker.addListener("click", () => {
+          infoWindow.setContent(`
+            <div style="padding: 8px; min-width: 150px;">
+              <h3 style="margin: 0 0 4px 0; font-weight: 600; font-size: 14px;">${customer.full_name}</h3>
+              <p style="margin: 0; color: #666; font-size: 12px; font-family: monospace;">PPPoE: ${pppoeUsername}</p>
+              <a 
+                href="https://www.google.com/maps/dir/?api=1&destination=${customer.latitude},${customer.longitude}" 
+                target="_blank" 
+                style="display: inline-block; margin-top: 8px; color: #1a73e8; font-size: 12px; text-decoration: none;"
+              >
+                Get Directions →
+              </a>
+            </div>
+          `);
+          infoWindow.open(map, marker);
+        });
+
+        markersRef.current.push(marker);
+        renderedCount++;
+      });
+
+      setMarkersRendered(renderedCount);
+
+      // Fit bounds to show all markers
+      if (markersRef.current.length > 1) {
+        const bounds = new windowWithGoogle.google.maps.LatLngBounds();
+        markersRef.current.forEach(marker => {
+          const pos = marker.getPosition();
+          if (pos) bounds.extend({ lat: pos.lat(), lng: pos.lng() });
+        });
+        map.fitBounds(bounds);
+      }
+
+      setLoading(false);
+      setError(null);
+    } catch (err) {
+      console.error("Error initializing map:", err);
+      setError("Failed to initialize map");
+      setLoading(false);
+    }
+  }, [customersWithGps]);
+
   useEffect(() => {
     if (!open || !apiKey) return;
 
     const windowWithGoogle = window as GoogleMapsWindow;
 
     const loadGoogleMaps = () => {
-      // Check if already loaded with same key
+      // Check if already loaded
       if (windowWithGoogle.google && windowWithGoogle.google.maps) {
         initMap();
+        return;
+      }
+
+      // Check if script is already loading
+      if (scriptLoadedRef.current) {
         return;
       }
 
@@ -143,6 +269,8 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
       if (existingScript) {
         existingScript.remove();
       }
+
+      scriptLoadedRef.current = true;
 
       // Load the script with async loading
       const script = document.createElement("script");
@@ -153,92 +281,9 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
       script.onerror = () => {
         setError("Failed to load Google Maps. Please check your API key and internet connection.");
         setLoading(false);
+        scriptLoadedRef.current = false;
       };
       document.head.appendChild(script);
-    };
-
-    const initMap = () => {
-      if (!mapRef.current || !windowWithGoogle.google) return;
-
-      try {
-        // Default center (Bangladesh)
-        let center = { lat: 23.8103, lng: 90.4125 };
-        
-        // Use first customer's location if available
-        if (customersWithGps.length > 0) {
-          center = {
-            lat: customersWithGps[0].latitude!,
-            lng: customersWithGps[0].longitude!,
-          };
-        }
-
-        const map = new windowWithGoogle.google.maps.Map(mapRef.current, {
-          center,
-          zoom: 12,
-          mapTypeControl: true,
-          streetViewControl: false,
-          fullscreenControl: true,
-        });
-
-        mapInstanceRef.current = map;
-
-        // Clear existing markers
-        markersRef.current.forEach(marker => marker.setMap(null));
-        markersRef.current = [];
-
-        // Create info window
-        const infoWindow = new windowWithGoogle.google.maps.InfoWindow();
-
-        // Add markers for each customer with GPS
-        customersWithGps.forEach(customer => {
-          const pppoeUsername = customer.mikrotik_users?.[0]?.username || "N/A";
-          
-          const marker = new windowWithGoogle.google.maps.Marker({
-            position: { lat: customer.latitude!, lng: customer.longitude! },
-            map,
-            title: customer.full_name,
-            icon: {
-              url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
-            },
-          });
-
-          marker.addListener("click", () => {
-            infoWindow.setContent(`
-              <div style="padding: 8px; min-width: 150px;">
-                <h3 style="margin: 0 0 4px 0; font-weight: 600; font-size: 14px;">${customer.full_name}</h3>
-                <p style="margin: 0; color: #666; font-size: 12px; font-family: monospace;">PPPoE: ${pppoeUsername}</p>
-                <a 
-                  href="https://www.google.com/maps/dir/?api=1&destination=${customer.latitude},${customer.longitude}" 
-                  target="_blank" 
-                  style="display: inline-block; margin-top: 8px; color: #1a73e8; font-size: 12px; text-decoration: none;"
-                >
-                  Get Directions →
-                </a>
-              </div>
-            `);
-            infoWindow.open(map, marker);
-          });
-
-          markersRef.current.push(marker);
-        });
-
-        // Fit bounds to show all markers
-        if (markersRef.current.length > 1) {
-          const bounds = new windowWithGoogle.google.maps.LatLngBounds();
-          markersRef.current.forEach(marker => {
-            const pos = marker.getPosition();
-            if (pos) bounds.extend({ lat: pos.lat(), lng: pos.lng() });
-          });
-          map.fitBounds(bounds);
-        }
-
-        setLoading(false);
-        setError(null);
-      } catch (err) {
-        console.error("Error initializing map:", err);
-        setError("Failed to initialize map");
-        setLoading(false);
-      }
     };
 
     loadGoogleMaps();
@@ -248,7 +293,7 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
       markersRef.current.forEach(marker => marker.setMap(null));
       markersRef.current = [];
     };
-  }, [open, customersWithGps, apiKey]);
+  }, [open, apiKey, initMap]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -258,7 +303,7 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
             <MapPin className="h-5 w-5" />
             Customer Locations Map
             <span className="text-sm font-normal text-muted-foreground ml-2">
-              ({customersWithGps.length} customers with GPS)
+              ({customersWithGps.length} customers with GPS{markersRendered > 0 && `, ${markersRendered} markers shown`})
             </span>
           </DialogTitle>
           <DialogDescription>
@@ -316,7 +361,10 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
             </div>
           ) : loading ? (
             <div className="absolute inset-0 flex items-center justify-center bg-muted/50 z-10">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <div className="text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+                <p className="text-sm text-muted-foreground mt-2">Loading map...</p>
+              </div>
             </div>
           ) : error ? (
             <div className="absolute inset-0 flex items-center justify-center bg-muted/50 z-10">
