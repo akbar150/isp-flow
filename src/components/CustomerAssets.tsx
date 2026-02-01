@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Undo2, Loader2, Receipt, Pencil, Plus } from "lucide-react";
+import { Package, Undo2, Loader2, Receipt, Pencil, Plus, Cable } from "lucide-react";
 import { CustomerAssetEdit } from "./CustomerAssetEdit";
 import { CustomerAssetAdd } from "./CustomerAssetAdd";
 
@@ -54,6 +54,31 @@ interface AssetAssignment {
   } | null;
 }
 
+interface MeteredUsageLog {
+  id: string;
+  product_id: string;
+  customer_id: string;
+  quantity_used: number;
+  usage_type: string;
+  usage_date: string;
+  technician_name: string | null;
+  notes: string | null;
+  core_count: number | null;
+  color: string | null;
+  created_at: string;
+  products: {
+    id: string;
+    name: string;
+    brand: string | null;
+    model: string | null;
+    purchase_price: number;
+    selling_price: number;
+    product_categories: {
+      unit_of_measure: string | null;
+    } | null;
+  } | null;
+}
+
 interface CustomerAssetsProps {
   customerId: string;
   customerName: string;
@@ -64,6 +89,7 @@ const conditionOptions = ["New", "Good", "Fair", "Poor", "Damaged"];
 
 export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAssetsProps) {
   const [assignments, setAssignments] = useState<AssetAssignment[]>([]);
+  const [meteredUsages, setMeteredUsages] = useState<MeteredUsageLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -79,7 +105,8 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
 
   const fetchAssignments = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch discrete asset assignments
+      const { data: discreteData, error: discreteError } = await supabase
         .from("asset_assignments")
         .select(`
           *,
@@ -102,8 +129,31 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
         .eq("customer_id", customerId)
         .order("assigned_date", { ascending: false });
 
-      if (error) throw error;
-      setAssignments(data || []);
+      if (discreteError) throw discreteError;
+      setAssignments(discreteData || []);
+
+      // Fetch metered usage logs (e.g., fiber cable assignments)
+      const { data: meteredData, error: meteredError } = await supabase
+        .from("metered_usage_logs")
+        .select(`
+          *,
+          products (
+            id,
+            name,
+            brand,
+            model,
+            purchase_price,
+            selling_price,
+            product_categories (
+              unit_of_measure
+            )
+          )
+        `)
+        .eq("customer_id", customerId)
+        .order("usage_date", { ascending: false });
+
+      if (meteredError) throw meteredError;
+      setMeteredUsages(meteredData || []);
     } catch (error) {
       console.error("Error fetching assignments:", error);
     } finally {
@@ -314,6 +364,94 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
           </div>
         )}
       </div>
+
+      {/* Metered Products (Fiber Cable, etc.) */}
+      {meteredUsages.length > 0 && (
+        <div>
+          <h3 className="font-medium flex items-center gap-2 mb-3">
+            <Cable className="h-4 w-4" />
+            Cable/Metered Products ({meteredUsages.length})
+          </h3>
+          <div className="space-y-3">
+            {meteredUsages.map((usage) => {
+              const unit = usage.products?.product_categories?.unit_of_measure || "meter";
+              const totalCost = usage.quantity_used * (usage.products?.purchase_price || 0);
+              const totalPrice = usage.quantity_used * (usage.products?.selling_price || 0);
+              const profit = totalPrice - totalCost;
+
+              return (
+                <div key={usage.id} className="p-4 border rounded-lg bg-card">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-medium">
+                        {usage.products?.name || "Unknown Product"}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {usage.products?.brand} {usage.products?.model}
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-blue-600">
+                      {usage.quantity_used} {unit}(s)
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Quantity Used</p>
+                      <p className="font-medium">{usage.quantity_used} {unit}(s)</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Usage Date</p>
+                      <p>{format(new Date(usage.usage_date), "dd MMM yyyy")}</p>
+                    </div>
+                    {usage.core_count && (
+                      <div>
+                        <p className="text-muted-foreground text-xs">Core Count</p>
+                        <p>{usage.core_count}</p>
+                      </div>
+                    )}
+                    {usage.color && (
+                      <div>
+                        <p className="text-muted-foreground text-xs">Color</p>
+                        <p>{usage.color}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 mt-3 text-sm p-2 bg-muted/50 rounded">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Cost (৳{usage.products?.purchase_price || 0}/{unit})</p>
+                      <p>৳{totalCost.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Value (৳{usage.products?.selling_price || 0}/{unit})</p>
+                      <p>৳{totalPrice.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Profit</p>
+                      <p className={profit >= 0 ? "text-green-600 font-medium" : "text-destructive font-medium"}>
+                        ৳{profit.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  {usage.technician_name && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Installed by: {usage.technician_name}
+                    </p>
+                  )}
+
+                  {usage.notes && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Notes: {usage.notes}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Return History */}
       {returnedAssignments.length > 0 && (
