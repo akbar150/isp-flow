@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2 } from "lucide-react";
+import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map } from "lucide-react";
 import { UserManagement } from "@/components/settings/UserManagement";
 import { RolePermissions } from "@/components/settings/RolePermissions";
 import { ExpenseCategories } from "@/components/settings/ExpenseCategories";
@@ -24,6 +24,7 @@ export default function Settings() {
 
   const [settings, setSettings] = useState({
     isp_name: "Smart ISP",
+    google_maps_api_key: "",
     whatsapp_template: `🔔 *পেমেন্ট রিমাইন্ডার / Payment Reminder*
 
 প্রিয় *{CustomerName}*,
@@ -58,10 +59,12 @@ Please pay to avoid disconnection.
         settingsRes.data.forEach(s => {
           settingsMap[s.key] = decodeSettingValue(s.value);
         });
-        setSettings({
+        setSettings(prev => ({
+          ...prev,
           isp_name: settingsMap.isp_name || "Smart ISP",
-          whatsapp_template: settingsMap.whatsapp_template || settings.whatsapp_template,
-        });
+          google_maps_api_key: settingsMap.google_maps_api_key || "",
+          whatsapp_template: settingsMap.whatsapp_template || prev.whatsapp_template,
+        }));
       }
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -79,6 +82,11 @@ Please pay to avoid disconnection.
         supabase.from('system_settings').upsert({ 
           key: 'isp_name', 
           value: settings.isp_name,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' }),
+        supabase.from('system_settings').upsert({ 
+          key: 'google_maps_api_key', 
+          value: settings.google_maps_api_key,
           updated_at: new Date().toISOString()
         }, { onConflict: 'key' }),
         supabase.from('system_settings').upsert({ 
@@ -181,6 +189,31 @@ Please pay to avoid disconnection.
                   This name appears in WhatsApp messages, emails, login pages, and system branding
                 </p>
               </div>
+              
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Map className="h-4 w-4" />
+                  Google Maps API Key
+                </Label>
+                <Input
+                  type="password"
+                  value={settings.google_maps_api_key}
+                  onChange={(e) => setSettings({ ...settings, google_maps_api_key: e.target.value })}
+                  placeholder="AIzaSy..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Required for customer map view. Get your API key from{" "}
+                  <a 
+                    href="https://console.cloud.google.com/apis/credentials" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-primary underline"
+                  >
+                    Google Cloud Console
+                  </a>
+                </p>
+              </div>
+
               <Button onClick={saveSettings} disabled={saving}>
                 <Save className="h-4 w-4 mr-2" />
                 {saving ? "Saving..." : "Save Settings"}
