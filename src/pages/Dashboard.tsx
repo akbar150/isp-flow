@@ -4,6 +4,7 @@ import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
+import { CallCustomerButton } from "@/components/CallCustomerButton";
 import { supabase } from "@/integrations/supabase/client";
 import { useIspSettings } from "@/hooks/useIspSettings";
 import { 
@@ -39,6 +40,7 @@ interface Customer {
   user_id: string;
   full_name: string;
   phone: string;
+  alt_phone?: string | null;
   expiry_date: string;
   status: 'active' | 'expiring' | 'expired' | 'suspended';
   total_due: number;
@@ -232,6 +234,12 @@ export default function Dashboard() {
                       </td>
                       <td>
                         <div className="flex items-center gap-1">
+                          <CallCustomerButton
+                            customerName={customer.full_name}
+                            primaryPhone={customer.phone}
+                            alternativePhone={customer.alt_phone}
+                            variant="icon"
+                          />
                           <QuickCallRecord
                             customerId={customer.id}
                             customerName={customer.full_name}

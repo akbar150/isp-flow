@@ -8,6 +8,7 @@ import { CustomerEditDialog } from "@/components/CustomerEditDialog";
 import { CustomerViewDialog } from "@/components/CustomerViewDialog";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { QuickPaymentRecord } from "@/components/QuickPaymentRecord";
+import { CallCustomerButton } from "@/components/CallCustomerButton";
 import { BulkCustomerUpload } from "@/components/BulkCustomerUpload";
 import { AddCustomerDialog } from "@/components/AddCustomerDialog";
 import { CustomerMapView } from "@/components/CustomerMapView";
@@ -559,6 +560,12 @@ export default function Customers() {
                           {canViewDetails && <DropdownMenuSeparator />}
                           
                           {/* Quick Actions */}
+                          <CallCustomerButton
+                            customerName={customer.full_name}
+                            primaryPhone={customer.phone}
+                            alternativePhone={customer.alt_phone}
+                            variant="dropdown"
+                          />
                           <QuickCallRecord
                             customerId={customer.id}
                             customerName={customer.full_name}
