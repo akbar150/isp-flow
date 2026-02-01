@@ -360,11 +360,15 @@ export function CustomerAssetAdd({
           .eq("id", customerId);
       }
 
-      // Create income transaction
+      // Calculate profit and create income transaction for actual profit only
+      const actualProfit = sellingAmount - purchaseAmount;
+      
+      // Create income transaction for PROFIT (not selling price)
+      // This reflects actual earnings, not revenue
       await supabase.from("transactions").insert({
         type: "income",
-        amount: sellingAmount,
-        description: `Asset sold to ${customerName}: ${productName}`,
+        amount: actualProfit,
+        description: `Asset profit from ${customerName}: ${productName} (Sold: ৳${sellingAmount}, Cost: ৳${purchaseAmount})`,
         payment_method: "due",
         transaction_date: new Date().toISOString().split("T")[0],
         reference_id: invoice.id,
