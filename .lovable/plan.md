@@ -1,53 +1,80 @@
 
-# Implementation Plan: Multi-Feature Enhancement
+# Comprehensive Bug Fixes and Feature Enhancements Plan
 
-## Status: ✅ COMPLETED
+## Issues Identified
 
-## Overview
-This plan addresses several key enhancements including UI action buttons, Google Maps integration, inventory restructuring, permission updates, and utility features.
+### 1. Google Maps "ApiTargetBlockedMapError"
+**Root Cause**: The Google Maps API key exists in the database (`AIzaSyC2gRj_VAVMekVbHKP8MJjMCK9vXk0gD-k`) but the error indicates API restrictions. The key may be:
+- Blocked for the current domain
+- Missing required API services enabled (Maps JavaScript API)
+- Having HTTP referrer restrictions that don't match the preview domain
 
----
+**Note**: This is a Google Cloud Console configuration issue, not a code issue. However, I'll improve the error handling to show clearer instructions.
 
-## Summary of Changes (All Completed)
+### 2. GPS Coordinates Not Saving/Retrieving
+**Root Cause**: The `customers_safe` view already includes `latitude` and `longitude` columns. The issue appears to be:
+- The CustomerEditDialog correctly saves coordinates to the `customers` table
+- However, the form is not being populated properly when editing existing customers
 
-### 1. Customer Page Action Buttons
-Add "Quick Call" and "Go Location" buttons to the Customers page actions menu
+**Fix**: Verify the form initialization and data retrieval flow.
 
-### 2. Google Maps View for Customer Locations
-Display all customers on a map with markers showing PPPoE username and name
+### 3. Missing "Go Location" and "Quick Call" Buttons
+**Current State**: These buttons exist on the Customers page
+**Missing From**: Reminders and Call Records pages need these action buttons
 
-### 3. Inventory Menu Restructuring
-Move "Suppliers" into a sub-menu within Inventory or as a tab
+### 4. Inventory - Fibre Cable Quantity Issue
+**Critical Problem**: When adding 5000 meters of Fibre Cable, the system creates 5000 individual `inventory_items` rows instead of tracking as bulk metered stock.
 
-### 4. Inventory UI/UX Redesign
-Consolidate inventory display to show products by name with total quantity, with drill-down for details
+**Solution Architecture**:
+- Add `is_metered` flag to `product_categories` to identify bulk/metered products
+- For metered products:
+  - Store total quantity in meters directly on the product
+  - Do NOT create individual `inventory_items` rows for each meter
+  - Track usage through a new `cable_usage_logs` table
+  - When assigning to customer, record meters used, color, and link to customer
 
-### 5. User Roles & Permissions Update
-Add missing resources to the permissions system (inventory, hrm, invoices, suppliers)
-
-### 6. Clear Cache Button
-Add cache clearing functionality to the top bar
-
-### 7. Settings > Users Error Fix
-Improve edge function error handling and fallback behavior
+### 5. Customer Asset Assignment Editing
+**Issue**: Cannot edit asset assignments for existing customers
+**Root Cause**: The CustomerAssets component only allows returning devices, not editing assignments
 
 ---
 
 ## Technical Implementation
 
-### Phase 1: Customer Page - Action Buttons
+### Phase 1: Improve Google Maps Error Handling
 
-**Update: `src/pages/Customers.tsx`**
-- Add "Quick Call" button to DropdownMenu (already present, verified)
-- Add "Go Location" button that opens Google Maps with customer GPS coordinates
-- Button only visible when latitude/longitude exist
+**File: `src/components/CustomerMapView.tsx`**
 
-Code change in the DropdownMenuContent:
+Add better error messaging and instructions for API key configuration:
+- Display specific error about domain restrictions
+- Add link to Google Cloud Console for API configuration
+- Show the required APIs that need to be enabled
+
+### Phase 2: Fix GPS Data Flow
+
+**Files to Review/Fix**:
+- `src/components/CustomerEditDialog.tsx` - Already handles GPS correctly
+- `src/components/CustomerViewDialog.tsx` - Need to add GPS editing to the details form
+
+**Changes**:
+Add latitude/longitude fields to the CustomerViewDialog edit form so GPS can be edited inline without needing the separate edit dialog.
+
+### Phase 3: Add Action Buttons to Reminders and Call Records
+
+**File: `src/pages/Reminders.tsx`**
+
+Add to the actions dropdown:
 ```typescript
-{customer.latitude && customer.longitude && (
+<CallCustomerButton
+  customerName={reminder.customers.full_name}
+  primaryPhone={reminder.customers.phone}
+  alternativePhone={reminder.customers.alt_phone}
+  variant="dropdown"
+/>
+{reminder.customers.latitude && reminder.customers.longitude && (
   <DropdownMenuItem
     onClick={() => window.open(
-      `https://www.google.com/maps?q=${customer.latitude},${customer.longitude}`, 
+      `https://www.google.com/maps?q=${reminder.customers.latitude},${reminder.customers.longitude}`, 
       "_blank"
     )}
   >
@@ -57,262 +84,170 @@ Code change in the DropdownMenuContent:
 )}
 ```
 
-### Phase 2: Google Maps Customer Map View
+**File: `src/pages/CallRecords.tsx`**
 
-**New Component: `src/components/CustomerMapView.tsx`**
-- Modal dialog with embedded Google Maps
-- Display markers for all customers with GPS data
-- Each marker shows PPPoE username and customer name on click
-- Use provided API key: `AIzaSyC2gRj_VAVMekVbHKP8MJjMCK9vXk0gD-k`
+Ensure both buttons are properly implemented (CallCustomerButton was added, verify Go Location).
 
-**Update: `src/pages/Customers.tsx`**
-- Add "Map View" button next to "Bulk Import"
-- Opens the CustomerMapView modal
+### Phase 4: Redesign Inventory for Metered Products (Fibre Cable)
 
-**Implementation approach:**
-```typescript
-// Load Google Maps JavaScript API dynamically
-// Create markers for each customer with GPS coordinates
-// InfoWindow displays customer name and PPPoE username
-```
+This is the most complex change requiring database schema updates.
 
-**Future Settings Configuration:**
-- Store Google Maps API key in `system_settings` table
-- Add configuration field in Settings page (General tab)
+**Database Migration**:
 
-### Phase 3: Inventory Menu & UI Restructuring
-
-**Option A: Nest Suppliers in Inventory (Recommended)**
-
-**Update: `src/components/AppSidebar.tsx`**
-- Remove standalone "Suppliers" menu item
-- Keep single "Inventory" menu that leads to combined page
-
-**Update: `src/pages/Inventory.tsx`**
-- Add "Suppliers" tab alongside existing tabs (Stock Items, Products, Categories)
-- Move Suppliers management UI into this new tab
-
-**Complete UI/UX Redesign:**
-
-Current issue: Each MAC/Serial number creates a separate row
-Solution: Group inventory items by product name
-
-New display structure:
-```text
-+---------------------+----------+---------+----------+
-| Product Name        | In Stock | Assigned| Actions  |
-+---------------------+----------+---------+----------+
-| ONU ZTE F601        | 15       | 23      | [...]    |
-| Router TP-Link      | 8        | 12      | [...]    |
-| Fibre Cable 4-Core  | 500m     | 200m    | [...]    |
-+---------------------+----------+---------+----------+
-```
-
-Actions dropdown reveals:
-- View available items (shows MAC/Serial list)
-- View assigned items
-- Add more stock
-- Edit product details
-
-**Update: `src/App.tsx`**
-- Remove `/suppliers` route if consolidating
-- Or keep route but update navigation flow
-
-### Phase 4: Role Permissions Update
-
-**Update: `src/components/settings/RolePermissions.tsx`**
-
-Current RESOURCES array is missing:
-- inventory
-- hrm  
-- invoices
-- suppliers (if kept separate)
-
-Updated RESOURCES array:
-```typescript
-const RESOURCES = [
-  { key: "customers", label: "Customers", icon: Users },
-  { key: "payments", label: "Payments", icon: CreditCard },
-  { key: "packages", label: "Packages", icon: Package },
-  { key: "routers", label: "Routers", icon: Router },
-  { key: "areas", label: "Areas/Zones", icon: MapPin },
-  { key: "call_records", label: "Call Records", icon: Phone },
-  { key: "reminders", label: "Reminders", icon: Bell },
-  { key: "reports", label: "Reports", icon: FileText },
-  { key: "transactions", label: "Transactions", icon: Receipt },
-  { key: "invoices", label: "Invoices", icon: FileText },     // NEW
-  { key: "inventory", label: "Inventory", icon: Boxes },       // NEW
-  { key: "hrm", label: "HRM", icon: UserCog },                 // NEW
-  { key: "expense_categories", label: "Expense Categories", icon: FolderOpen },
-  { key: "settings", label: "Settings", icon: Settings },
-  { key: "users", label: "User Management", icon: User },
-];
-```
-
-**Database Migration:**
-Insert new permission rows for the missing resources:
 ```sql
-INSERT INTO permissions (role, resource, action, allowed)
-SELECT r.role, res.resource, act.action, 
-  CASE WHEN r.role IN ('super_admin', 'admin') THEN true ELSE false END
-FROM (VALUES ('super_admin'), ('admin'), ('staff')) AS r(role)
-CROSS JOIN (VALUES ('inventory'), ('hrm'), ('invoices'), ('suppliers')) AS res(resource)
-CROSS JOIN (VALUES ('create'), ('read'), ('update'), ('delete')) AS act(action)
-ON CONFLICT DO NOTHING;
+-- Add metered product support to categories
+ALTER TABLE product_categories ADD COLUMN IF NOT EXISTS is_metered BOOLEAN DEFAULT false;
+ALTER TABLE product_categories ADD COLUMN IF NOT EXISTS unit_of_measure TEXT DEFAULT 'piece';
+
+-- Add metered quantity tracking to products
+ALTER TABLE products ADD COLUMN IF NOT EXISTS metered_quantity NUMERIC DEFAULT 0;
+
+-- Create cable/metered usage log table
+CREATE TABLE IF NOT EXISTS metered_usage_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id UUID NOT NULL REFERENCES products(id),
+  customer_id UUID REFERENCES customers(id),
+  quantity_used NUMERIC NOT NULL,
+  color TEXT,
+  core_count INTEGER,
+  usage_type TEXT NOT NULL DEFAULT 'assignment', -- assignment, sale, waste
+  notes TEXT,
+  technician_name TEXT,
+  usage_date DATE DEFAULT CURRENT_DATE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  created_by UUID REFERENCES auth.users(id)
+);
+
+-- Enable RLS
+ALTER TABLE metered_usage_logs ENABLE ROW LEVEL SECURITY;
+
+-- Add RLS policies
+CREATE POLICY "Admins can manage metered_usage_logs" ON metered_usage_logs
+  FOR ALL TO authenticated
+  USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'super_admin'));
+
+CREATE POLICY "Staff can view metered_usage_logs" ON metered_usage_logs
+  FOR SELECT TO authenticated
+  USING (has_role(auth.uid(), 'staff'));
+
+CREATE POLICY "Staff can insert metered_usage_logs" ON metered_usage_logs
+  FOR INSERT TO authenticated
+  WITH CHECK (has_role(auth.uid(), 'staff') OR has_role(auth.uid(), 'admin'));
+
+-- Update Fibre Cable category to be metered
+UPDATE product_categories 
+SET is_metered = true, unit_of_measure = 'meter'
+WHERE name ILIKE '%fibre%' OR name ILIKE '%fiber%' OR name ILIKE '%cable%';
 ```
 
-### Phase 5: Clear Cache Button
+**File: `src/pages/Inventory.tsx`**
 
-**Update: `src/components/DashboardLayout.tsx`**
+Major changes needed:
 
-Add "Clear Cache" button next to AdminNotifications:
-```typescript
-const handleClearCache = async () => {
-  try {
-    // Clear localStorage
-    localStorage.clear();
-    
-    // Clear sessionStorage  
-    sessionStorage.clear();
-    
-    // Clear service worker caches if available
-    if ('caches' in window) {
-      const cacheNames = await caches.keys();
-      await Promise.all(
-        cacheNames.map(cacheName => caches.delete(cacheName))
-      );
-    }
-    
-    toast({ title: "Cache cleared", description: "Application cache has been cleared" });
-    
-    // Reload the page to ensure fresh state
-    window.location.reload();
-  } catch (error) {
-    toast({ title: "Error", description: "Failed to clear cache", variant: "destructive" });
-  }
-};
-```
+1. **Add Stock Dialog Changes**:
+   - Detect if selected product category is metered
+   - If metered: Show single quantity field (in meters) instead of serial/MAC arrays
+   - Add fields for cable color, core count
+   - On save: Update product's `metered_quantity` instead of creating inventory_items
 
-UI placement:
-```typescript
-<div className="flex items-center gap-2">
-  <Button 
-    variant="ghost" 
-    size="icon"
-    onClick={handleClearCache}
-    title="Clear Cache"
-  >
-    <RefreshCcw className="h-4 w-4" />
-  </Button>
-  <AdminNotifications />
-</div>
-```
+2. **Product Card Display Changes**:
+   - For metered products: Show "Available: 4500m" instead of counting items
+   - Show "Used: 500m" based on usage logs
 
-### Phase 6: Settings > Users Error Handling
+3. **Assign to Customer Flow**:
+   - For metered products: Ask for meters to use, color, technician
+   - Create entry in `metered_usage_logs` instead of `asset_assignments`
+   - Deduct from product's `metered_quantity`
 
-The error "Failed to connect to the server. Using local data." is expected fallback behavior when the edge function has issues.
+4. **View Customer Cable Usage**:
+   - In CustomerAssets or CustomerViewDialog, show cable usage history
+   - Display: Date, Meters Used, Color, Core Count, Technician
 
-**Review & Improve: `src/components/settings/UserManagement.tsx`**
-- The fallback to `fetchUsersLocally` is already implemented
-- The toast notification is informative but could be less alarming
+**New Component: `src/components/MeteredProductAssignment.tsx`**
 
-**Improvements:**
-1. Make the toast less alarming when local data works fine
-2. Add retry mechanism
-3. Better error state UI
+Dialog for assigning metered products (cable) to customers:
+- Customer selector
+- Meters to use (with validation against available stock)
+- Color dropdown
+- Core count display
+- Technician name
+- Notes
 
-```typescript
-// Change toast from "destructive" to "default" when fallback works
-toast({
-  title: "Using cached data",
-  description: "Fetching latest user list...",
-  // Remove variant: "destructive"
-});
-```
+### Phase 5: Fix Customer Asset Assignment Editing
+
+**File: `src/components/CustomerAssets.tsx`**
+
+Add edit functionality for existing assignments:
+- Add "Edit" button to each active assignment card
+- Edit dialog to modify:
+  - Account type (Free/Paid)
+  - Selling price (if Paid)
+  - Technician name
+  - Condition
+  - Notes
 
 ---
 
-## Files to Create
-
-| File | Purpose |
-|------|---------|
-| `src/components/CustomerMapView.tsx` | Google Maps modal showing all customer locations |
-
-## Files to Modify
+## Summary of Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/pages/Customers.tsx` | Add Go Location action, Map View button |
-| `src/pages/Inventory.tsx` | Add Suppliers tab, redesign stock display |
-| `src/components/AppSidebar.tsx` | Remove standalone Suppliers link |
-| `src/components/settings/RolePermissions.tsx` | Add missing resources |
-| `src/components/settings/UserManagement.tsx` | Improve error handling |
-| `src/components/DashboardLayout.tsx` | Add Clear Cache button |
-| `src/App.tsx` | Route adjustments if needed |
+| `src/components/CustomerMapView.tsx` | Better error handling and API key instructions |
+| `src/components/CustomerViewDialog.tsx` | Add GPS fields to edit form |
+| `src/pages/Reminders.tsx` | Add CallCustomerButton and Go Location actions |
+| `src/pages/CallRecords.tsx` | Verify and fix action buttons |
+| `src/pages/Inventory.tsx` | Complete redesign for metered products support |
+| `src/components/CustomerAssets.tsx` | Add edit assignment functionality |
+
+## New Files to Create
+
+| File | Purpose |
+|------|---------|
+| `src/components/MeteredProductAssignment.tsx` | Dialog for assigning cable/metered products to customers |
+| `src/components/CableUsageHistory.tsx` | Display cable usage for a customer |
 
 ## Database Migration
 
-```sql
--- Add missing permission records for new resources
-INSERT INTO permissions (role, resource, action, allowed)
-SELECT 
-  r.role::app_role, 
-  res.resource, 
-  act.action, 
-  CASE 
-    WHEN r.role = 'super_admin' THEN true
-    WHEN r.role = 'admin' THEN true
-    ELSE false 
-  END
-FROM (VALUES ('super_admin'), ('admin'), ('staff')) AS r(role)
-CROSS JOIN (
-  VALUES 
-    ('inventory'), 
-    ('hrm'), 
-    ('invoices'),
-    ('suppliers')
-) AS res(resource)
-CROSS JOIN (VALUES ('create'), ('read'), ('update'), ('delete')) AS act(action)
-WHERE NOT EXISTS (
-  SELECT 1 FROM permissions p 
-  WHERE p.role = r.role::app_role 
-    AND p.resource = res.resource 
-    AND p.action = act.action
-);
-```
+New migration file to add metered product support:
+- Add columns to `product_categories`
+- Add column to `products`
+- Create `metered_usage_logs` table with RLS policies
+- Update existing Fibre Cable category
 
 ---
 
 ## User Experience Flows
 
-**Viewing Customer Locations on Map:**
-1. Go to Customers page
-2. Click "Map View" button (beside Bulk Import)
-3. See all customers with GPS data as markers
-4. Click marker to see PPPoE username and name
-5. Click marker info to navigate or view customer
+### Adding Fibre Cable Stock (After Fix):
+1. Go to Inventory > Stock Items > Add Stock
+2. Select "Bizli 2 Core FTTH" (a Fibre Cable product)
+3. System detects it's a metered product
+4. Enter: 5000 meters, Purchase Price per meter
+5. Select Color, Core Count
+6. Click Save
+7. System updates product's metered_quantity to 5000
 
-**Going to Customer Location:**
-1. In Customers table, click Actions on any customer
-2. If GPS data exists, "Go Location" appears
-3. Click to open Google Maps with directions
+### Assigning Cable to Customer (After Fix):
+1. Go to Customer > View Details > Assets
+2. Click "Assign Cable"
+3. Select cable product from dropdown
+4. Enter: 50 meters, Select Color (Blue)
+5. Enter Technician Name
+6. Click Assign
+7. System creates usage log, deducts 50m from stock
+8. Customer's asset tab shows "Bizli 2 Core FTTH - 50m (Blue)"
 
-**Managing Inventory (Redesigned):**
-1. Go to Inventory page
-2. See consolidated product list with quantities
-3. Click Actions on any product
-4. Choose "View Available Stock" to see MAC/Serial list
-5. Suppliers tab for vendor management
-
-**Clearing Application Cache:**
-1. Click cache icon in top bar
-2. Confirmation clears all browser storage
-3. Page reloads with fresh state
+### Editing Existing Asset Assignment:
+1. Go to Customer > View Details > Assets
+2. Click Edit on an active assignment
+3. Modify account type, selling price, notes
+4. Save changes
 
 ---
 
 ## Notes
 
-- Google Maps API key is stored in code for now; future enhancement will make it configurable from Settings
-- The edge function for user management is working; the error message appears when there's a network hiccup but fallback data is used successfully
-- Permission updates require database migration to add new resource rows
+- The Google Maps API key configuration is a Google Cloud Console issue - I'll add clear instructions in the error UI
+- Metered products require a fundamentally different tracking approach than discrete items
+- This change is backward-compatible - existing discrete products (ONUs) work as before
+- The `inventory_items` table continues to be used for discrete products only
