@@ -11,6 +11,7 @@ import {
   Router,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Wifi,
   Phone,
   FileBarChart,
@@ -18,7 +19,6 @@ import {
   Boxes,
   UserCog,
   FileText,
-  Building2,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -27,25 +27,45 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useIspSettings } from "@/hooks/useIspSettings";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 interface NavItem {
   path: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  resource?: string; // Resource for permission check
+  resource?: string;
+  children?: NavItem[];
 }
 
 const navItems: NavItem[] = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/customers", label: "Customers", icon: Users, resource: "customers" },
+  { 
+    path: "/customers", 
+    label: "Customers", 
+    icon: Users, 
+    resource: "customers",
+    children: [
+      { path: "/reminders", label: "Reminders", icon: Bell, resource: "reminders" },
+      { path: "/call-records", label: "Call Records", icon: Phone, resource: "call_records" },
+    ]
+  },
   { path: "/packages", label: "Packages", icon: Package, resource: "packages" },
   { path: "/payments", label: "Payments", icon: CreditCard, resource: "payments" },
-  { path: "/invoices", label: "Invoices", icon: FileText, resource: "invoices" },
-  { path: "/reminders", label: "Reminders", icon: Bell, resource: "reminders" },
-  { path: "/call-records", label: "Call Records", icon: Phone, resource: "call_records" },
+  { 
+    path: "/accounting", 
+    label: "Accounting", 
+    icon: Calculator, 
+    resource: "transactions",
+    children: [
+      { path: "/invoices", label: "Invoices", icon: FileText, resource: "invoices" },
+    ]
+  },
   { path: "/inventory", label: "Inventory", icon: Boxes, resource: "inventory" },
   { path: "/hrm", label: "HRM", icon: UserCog, resource: "hrm" },
-  { path: "/accounting", label: "Accounting", icon: Calculator, resource: "transactions" },
   { path: "/reports", label: "Reports", icon: FileBarChart, resource: "reports" },
   { path: "/routers", label: "Routers", icon: Router, resource: "routers" },
   { path: "/settings", label: "Settings", icon: Settings, resource: "settings" },
@@ -62,22 +82,138 @@ export function AppSidebar({ className }: AppSidebarProps) {
   const { canRead } = usePermissions();
   const { ispName } = useIspSettings();
   const [collapsed, setCollapsed] = useState(false);
+  const [openMenus, setOpenMenus] = useState<string[]>([]);
+
+  const toggleMenu = (path: string) => {
+    setOpenMenus(prev => 
+      prev.includes(path) 
+        ? prev.filter(p => p !== path)
+        : [...prev, path]
+    );
+  };
+
+  const canAccessItem = (item: NavItem): boolean => {
+    if (!item.resource) return true;
+    if (role === "super_admin") return true;
+    return canRead(item.resource);
+  };
 
   // Filter navigation items based on user permissions
   const visibleNavItems = navItems.filter((item) => {
-    // Dashboard is always visible for authenticated users
-    if (!item.resource) return true;
+    if (!canAccessItem(item)) return false;
     
-    // super_admin always sees all items
-    if (role === "super_admin") return true;
+    // If item has children, check if at least one child is accessible
+    if (item.children) {
+      const hasVisibleChild = item.children.some(child => canAccessItem(child));
+      return hasVisibleChild || canAccessItem(item);
+    }
     
-    // Check database permission for read access
-    return canRead(item.resource);
+    return true;
   });
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/auth");
+  };
+
+  const isPathActive = (path: string, children?: NavItem[]) => {
+    if (location.pathname === path) return true;
+    if (children) {
+      return children.some(child => location.pathname === child.path);
+    }
+    return false;
+  };
+
+  const renderNavItem = (item: NavItem) => {
+    const isActive = isPathActive(item.path, item.children);
+    const hasChildren = item.children && item.children.length > 0;
+    const isOpen = openMenus.includes(item.path);
+    
+    // Filter visible children
+    const visibleChildren = item.children?.filter(child => canAccessItem(child)) || [];
+
+    if (hasChildren && visibleChildren.length > 0) {
+      return (
+        <Collapsible
+          key={item.path}
+          open={isOpen || isActive}
+          onOpenChange={() => !collapsed && toggleMenu(item.path)}
+        >
+          <CollapsibleTrigger asChild>
+            <button
+              className={cn(
+                "nav-item w-full justify-between",
+                isActive && "active"
+              )}
+              onClick={(e) => {
+                if (collapsed) {
+                  e.preventDefault();
+                  navigate(item.path);
+                }
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <item.icon className="w-5 h-5 flex-shrink-0" />
+                {!collapsed && <span>{item.label}</span>}
+              </div>
+              {!collapsed && (
+                <ChevronDown 
+                  className={cn(
+                    "w-4 h-4 transition-transform duration-200",
+                    (isOpen || isActive) && "rotate-180"
+                  )} 
+                />
+              )}
+            </button>
+          </CollapsibleTrigger>
+          
+          {/* Parent link */}
+          {!collapsed && (
+            <CollapsibleContent className="pl-4 space-y-1 mt-1">
+              <Link
+                to={item.path}
+                className={cn(
+                  "nav-item text-sm",
+                  location.pathname === item.path && "active"
+                )}
+              >
+                <item.icon className="w-4 h-4 flex-shrink-0" />
+                <span>All {item.label}</span>
+              </Link>
+              
+              {/* Child items */}
+              {visibleChildren.map((child) => (
+                <Link
+                  key={child.path}
+                  to={child.path}
+                  className={cn(
+                    "nav-item text-sm",
+                    location.pathname === child.path && "active"
+                  )}
+                >
+                  <child.icon className="w-4 h-4 flex-shrink-0" />
+                  <span>{child.label}</span>
+                </Link>
+              ))}
+            </CollapsibleContent>
+          )}
+        </Collapsible>
+      );
+    }
+
+    return (
+      <Link
+        key={item.path}
+        to={item.path}
+        className={cn(
+          "nav-item",
+          isActive && "active"
+        )}
+      >
+        <item.icon className="w-5 h-5 flex-shrink-0" />
+        {!collapsed && <span>{item.label}</span>}
+      </Link>
+    );
   };
 
   return (
@@ -103,22 +239,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto custom-scrollbar">
-        {visibleNavItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={cn(
-                "nav-item",
-                isActive && "active"
-              )}
-            >
-              <item.icon className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
-            </Link>
-          );
-        })}
+        {visibleNavItems.map(renderNavItem)}
       </nav>
 
       {/* Bottom actions */}
