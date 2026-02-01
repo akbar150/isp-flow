@@ -2,11 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, MapPin } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2, MapPin, Settings } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface Customer {
   id: string;
@@ -21,9 +26,6 @@ interface CustomerMapViewProps {
   onOpenChange: (open: boolean) => void;
   customers: Customer[];
 }
-
-// Google Maps API Key - In future, this should come from Settings
-const GOOGLE_MAPS_API_KEY = "AIzaSyC2gRj_VAVMekVbHKP8MJjMCK9vXk0gD-k";
 
 interface GoogleMapsWindow extends Window {
   google?: {
@@ -62,36 +64,75 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
   const markersRef = useRef<GoogleMarker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  const [tempApiKey, setTempApiKey] = useState("");
+  const { toast } = useToast();
 
   // Filter customers with GPS data
   const customersWithGps = customers.filter(c => c.latitude && c.longitude);
 
+  // Load API key from settings
   useEffect(() => {
-    if (!open) return;
+    const loadApiKey = async () => {
+      const { data } = await supabase
+        .from("system_settings")
+        .select("value")
+        .eq("key", "google_maps_api_key")
+        .single();
+      
+      if (data?.value) {
+        setApiKey(data.value as string);
+      }
+    };
+    loadApiKey();
+  }, []);
+
+  const saveApiKey = async () => {
+    if (!tempApiKey.trim()) return;
+    
+    const { error } = await supabase
+      .from("system_settings")
+      .upsert({ 
+        key: "google_maps_api_key", 
+        value: tempApiKey.trim() 
+      }, { onConflict: "key" });
+    
+    if (error) {
+      toast({ title: "Error", description: "Failed to save API key", variant: "destructive" });
+    } else {
+      setApiKey(tempApiKey.trim());
+      setShowApiKeyInput(false);
+      toast({ title: "Success", description: "Google Maps API key saved" });
+    }
+  };
+
+  useEffect(() => {
+    if (!open || !apiKey) return;
 
     const windowWithGoogle = window as GoogleMapsWindow;
 
     const loadGoogleMaps = () => {
-      // Check if already loaded
+      // Check if already loaded with same key
       if (windowWithGoogle.google && windowWithGoogle.google.maps) {
         initMap();
         return;
       }
 
-      // Check if script is already loading
-      if (document.querySelector(`script[src*="maps.googleapis.com"]`)) {
-        windowWithGoogle.initGoogleMaps = initMap;
-        return;
+      // Remove any existing Google Maps script
+      const existingScript = document.querySelector(`script[src*="maps.googleapis.com"]`);
+      if (existingScript) {
+        existingScript.remove();
       }
 
-      // Load the script
+      // Load the script with async loading
       const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&callback=initGoogleMaps`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initGoogleMaps&loading=async`;
       script.async = true;
       script.defer = true;
       windowWithGoogle.initGoogleMaps = initMap;
       script.onerror = () => {
-        setError("Failed to load Google Maps. Please check your internet connection.");
+        setError("Failed to load Google Maps. Please check your API key and internet connection.");
         setLoading(false);
       };
       document.head.appendChild(script);
@@ -188,7 +229,7 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
       markersRef.current.forEach(marker => marker.setMap(null));
       markersRef.current = [];
     };
-  }, [open, customersWithGps]);
+  }, [open, customersWithGps, apiKey]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -201,34 +242,71 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
               ({customersWithGps.length} customers with GPS)
             </span>
           </DialogTitle>
+          <DialogDescription>
+            View all customer locations on the map. Click a marker to see details.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="relative flex-1 min-h-[400px] rounded-lg overflow-hidden border">
-          {loading && (
+          {!apiKey ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-muted/50 z-10">
+              <div className="text-center p-6 max-w-md">
+                <Settings className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="font-semibold mb-2">Google Maps API Key Required</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Please enter your Google Maps API key to display the map.
+                </p>
+                {showApiKeyInput ? (
+                  <div className="space-y-3">
+                    <div className="text-left">
+                      <Label htmlFor="apiKey">API Key</Label>
+                      <Input
+                        id="apiKey"
+                        type="password"
+                        value={tempApiKey}
+                        onChange={(e) => setTempApiKey(e.target.value)}
+                        placeholder="Enter your Google Maps API key"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={saveApiKey} className="flex-1">Save</Button>
+                      <Button variant="outline" onClick={() => setShowApiKeyInput(false)}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button onClick={() => setShowApiKeyInput(true)}>
+                    <Settings className="h-4 w-4 mr-2" />
+                    Configure API Key
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : loading ? (
             <div className="absolute inset-0 flex items-center justify-center bg-muted/50 z-10">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          )}
-          
-          {error && (
+          ) : error ? (
             <div className="absolute inset-0 flex items-center justify-center bg-muted/50 z-10">
               <div className="text-center p-4">
                 <p className="text-destructive mb-2">{error}</p>
-                <Button variant="outline" onClick={() => onOpenChange(false)}>
-                  Close
-                </Button>
+                <div className="flex gap-2 justify-center">
+                  <Button variant="outline" onClick={() => setShowApiKeyInput(true)}>
+                    Update API Key
+                  </Button>
+                  <Button variant="outline" onClick={() => onOpenChange(false)}>
+                    Close
+                  </Button>
+                </div>
               </div>
             </div>
-          )}
-
-          {customersWithGps.length === 0 && !loading && (
+          ) : customersWithGps.length === 0 ? (
             <div className="absolute inset-0 flex items-center justify-center bg-muted/50 z-10">
               <div className="text-center p-4">
                 <MapPin className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
                 <p className="text-muted-foreground">No customers with GPS coordinates found</p>
               </div>
             </div>
-          )}
+          ) : null}
 
           <div ref={mapRef} className="w-full h-full" />
         </div>
