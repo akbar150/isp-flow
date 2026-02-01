@@ -304,19 +304,27 @@ export default function Accounting() {
   });
 
   // Calculate summaries
-  const totalPaymentIncome = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+  // Payment collections = cash received from customers
+  const totalPaymentCollections = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0);
   
+  // Income transactions = profit from sales, other income (NOT revenue)
   const totalTransactionIncome = transactions
     .filter((t) => t.type === "income")
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
-  const totalIncome = totalPaymentIncome + totalTransactionIncome;
+  // Total cash inflow = collections + other income
+  const totalCashInflow = totalPaymentCollections + totalTransactionIncome;
 
   const totalExpense = transactions
     .filter((t) => t.type === "expense")
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
-  const netProfit = totalIncome - totalExpense;
+  // Net Profit = Income (profit entries) - Expenses
+  // Collections are cash flow, not profit (the profit is already in income transactions)
+  const netProfit = totalTransactionIncome - totalExpense;
+  
+  // Cash Balance = Collections + Income - Expenses
+  const cashBalance = totalCashInflow - totalExpense;
 
   const paymentMethodSummary: PaymentSummary[] = payments.reduce((acc: PaymentSummary[], p) => {
     const existing = acc.find((item) => item.method === p.method);
@@ -515,19 +523,19 @@ export default function Accounting() {
       ) : (
         <>
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Payment Collections
+                  Collections
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(totalPaymentIncome)}
+                  {formatCurrency(totalPaymentCollections)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  From customer payments
+                  Cash from customers
                 </p>
               </CardContent>
             </Card>
@@ -535,7 +543,7 @@ export default function Accounting() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Other Income
+                  Other Income/Profit
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -543,7 +551,7 @@ export default function Accounting() {
                   {formatCurrency(totalTransactionIncome)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  External income entries
+                  Asset profit & extras
                 </p>
               </CardContent>
             </Card>
@@ -560,6 +568,22 @@ export default function Accounting() {
                 </p>
                 <p className="text-xs text-muted-foreground">
                   All recorded expenses
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className={cashBalance >= 0 ? "border-blue-200 bg-blue-50/50" : "border-orange-200 bg-orange-50/50"}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Cash Balance
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className={`text-2xl font-bold ${cashBalance >= 0 ? "text-blue-600" : "text-orange-600"}`}>
+                  {formatCurrency(Math.abs(cashBalance))}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Inflow - Expenses
                 </p>
               </CardContent>
             </Card>
@@ -698,7 +722,7 @@ export default function Accounting() {
                           <p className="font-medium">Customer Payments</p>
                           <p className="text-sm text-muted-foreground">{payments.length} payments</p>
                         </div>
-                        <p className="font-bold text-green-600">{formatCurrency(totalPaymentIncome)}</p>
+                        <p className="font-bold text-green-600">{formatCurrency(totalPaymentCollections)}</p>
                       </div>
                       {incomeCategorySummary.map((item) => (
                         <div key={item.category} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
@@ -770,7 +794,7 @@ export default function Accounting() {
                     <div className="space-y-4">
                       <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
                         <span>Total Income</span>
-                        <span className="font-bold text-green-600">{formatCurrency(totalIncome)}</span>
+                        <span className="font-bold text-green-600">{formatCurrency(totalTransactionIncome)}</span>
                       </div>
                       <div className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
                         <span>Total Expenses</span>
