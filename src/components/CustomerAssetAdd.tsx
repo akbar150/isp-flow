@@ -117,7 +117,8 @@ export function CustomerAssetAdd({
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch discrete inventory items
+      // Fetch discrete inventory items - include in_stock items
+      // Note: Returned items in Good/Fair condition are set to "in_stock" status
       const { data: items, error: itemsError } = await supabase
         .from("inventory_items")
         .select("id, product_id, serial_number, mac_address, status, purchase_price, products(id, name, brand, model, purchase_price, selling_price)")
@@ -263,7 +264,7 @@ export function CustomerAssetAdd({
 
     setSaving(true);
     try {
-      // Log the metered usage
+      // Log the metered usage with account_type and selling_price
       const { error: usageError } = await supabase
         .from("metered_usage_logs")
         .insert({
@@ -274,6 +275,8 @@ export function CustomerAssetAdd({
           technician_name: meteredTechnicianName || null,
           notes: meteredNotes || null,
           usage_date: new Date().toISOString().split("T")[0],
+          account_type: meteredAccountType,
+          selling_price: meteredAccountType === "paid" ? totalPrice : 0,
         });
 
       if (usageError) throw usageError;

@@ -883,6 +883,7 @@ export type Database = {
       }
       metered_usage_logs: {
         Row: {
+          account_type: string | null
           color: string | null
           core_count: number | null
           created_at: string | null
@@ -892,11 +893,13 @@ export type Database = {
           notes: string | null
           product_id: string
           quantity_used: number
+          selling_price: number | null
           technician_name: string | null
           usage_date: string | null
           usage_type: string
         }
         Insert: {
+          account_type?: string | null
           color?: string | null
           core_count?: number | null
           created_at?: string | null
@@ -906,11 +909,13 @@ export type Database = {
           notes?: string | null
           product_id: string
           quantity_used: number
+          selling_price?: number | null
           technician_name?: string | null
           usage_date?: string | null
           usage_type?: string
         }
         Update: {
+          account_type?: string | null
           color?: string | null
           core_count?: number | null
           created_at?: string | null
@@ -920,6 +925,7 @@ export type Database = {
           notes?: string | null
           product_id?: string
           quantity_used?: number
+          selling_price?: number | null
           technician_name?: string | null
           usage_date?: string | null
           usage_type?: string
