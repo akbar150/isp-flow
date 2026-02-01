@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map } from "lucide-react";
+import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map, Trash2 } from "lucide-react";
 import { UserManagement } from "@/components/settings/UserManagement";
 import { RolePermissions } from "@/components/settings/RolePermissions";
 import { ExpenseCategories } from "@/components/settings/ExpenseCategories";
@@ -15,10 +15,13 @@ import { AreaManagement } from "@/components/settings/AreaManagement";
 import { SmsSettings } from "@/components/settings/SmsSettings";
 import { FirebaseOtpSettings } from "@/components/settings/FirebaseOtpSettings";
 import { EmailTemplates } from "@/components/settings/EmailTemplates";
+import { DataResetPanel } from "@/components/settings/DataResetPanel";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { decodeSettingValue, normalizeTemplateVars } from "@/lib/settingsValue";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Settings() {
+  const { isSuperAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -167,6 +170,12 @@ Please pay to avoid disconnection.
               <Shield className="h-4 w-4" />
               <span className="hidden sm:inline">Permissions</span>
             </TabsTrigger>
+            {isSuperAdmin && (
+              <TabsTrigger value="reset" className="flex items-center gap-1.5 px-3 py-2 text-destructive">
+                <Trash2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Reset</span>
+              </TabsTrigger>
+            )}
           </TabsList>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
@@ -304,6 +313,18 @@ Please pay to avoid disconnection.
         <TabsContent value="permissions">
           <RolePermissions />
         </TabsContent>
+
+        {isSuperAdmin && (
+          <TabsContent value="reset">
+            <div className="form-section max-w-2xl">
+              <h3 className="form-section-title flex items-center gap-2 text-destructive">
+                <Trash2 className="h-5 w-5" />
+                Data Reset (Super Admin Only)
+              </h3>
+              <DataResetPanel />
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
     </DashboardLayout>
   );
