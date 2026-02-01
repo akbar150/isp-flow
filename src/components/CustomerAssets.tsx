@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Undo2, Loader2 } from "lucide-react";
+import { Package, Undo2, Loader2, Receipt } from "lucide-react";
 
 interface AssetAssignment {
   id: string;
@@ -32,16 +32,22 @@ interface AssetAssignment {
   technician_name: string | null;
   item_condition: string | null;
   notes: string | null;
+  account_type: string | null;
+  selling_price: number | null;
+  purchase_price_at_assign: number | null;
   inventory_items: {
     id: string;
     serial_number: string | null;
     mac_address: string | null;
     status: string;
+    product_id: string;
     products: {
       id: string;
       name: string;
       brand: string | null;
       model: string | null;
+      purchase_price: number;
+      selling_price: number;
     } | null;
   } | null;
 }
@@ -78,11 +84,14 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
             serial_number,
             mac_address,
             status,
+            product_id,
             products (
               id,
               name,
               brand,
-              model
+              model,
+              purchase_price,
+              selling_price
             )
           )
         `)
@@ -123,6 +132,22 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
 
       if (itemError) throw itemError;
 
+      // Update product stock quantity (increase by 1)
+      if (selectedAssignment.inventory_items?.product_id) {
+        const { data: product } = await supabase
+          .from("products")
+          .select("stock_quantity")
+          .eq("id", selectedAssignment.inventory_items.product_id)
+          .single();
+        
+        if (product) {
+          await supabase
+            .from("products")
+            .update({ stock_quantity: product.stock_quantity + 1 })
+            .eq("id", selectedAssignment.inventory_items.product_id);
+        }
+      }
+
       toast({ title: "Device returned successfully" });
       setReturnDialogOpen(false);
       setSelectedAssignment(null);
@@ -152,14 +177,31 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
   const activeAssignments = assignments.filter(a => !a.returned_date);
   const returnedAssignments = assignments.filter(a => a.returned_date);
 
+  // Calculate total profit from paid assignments
+  const totalProfit = activeAssignments
+    .filter(a => a.account_type === 'paid')
+    .reduce((sum, a) => {
+      const selling = a.selling_price || a.inventory_items?.products?.selling_price || 0;
+      const purchase = a.purchase_price_at_assign || a.inventory_items?.products?.purchase_price || 0;
+      return sum + (selling - purchase);
+    }, 0);
+
   return (
     <div className="space-y-6">
       {/* Active Assignments */}
       <div>
-        <h3 className="font-medium mb-3 flex items-center gap-2">
-          <Package className="h-4 w-4" />
-          Active Devices ({activeAssignments.length})
-        </h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-medium flex items-center gap-2">
+            <Package className="h-4 w-4" />
+            Active Devices ({activeAssignments.length})
+          </h3>
+          {totalProfit > 0 && (
+            <Badge variant="outline" className="text-green-600">
+              <Receipt className="h-3 w-3 mr-1" />
+              Profit: ৳{totalProfit.toLocaleString()}
+            </Badge>
+          )}
+        </div>
 
         {activeAssignments.length === 0 ? (
           <p className="text-muted-foreground text-sm py-4">No devices assigned to this customer</p>
@@ -176,7 +218,12 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
                       {assignment.inventory_items?.products?.brand} {assignment.inventory_items?.products?.model}
                     </div>
                   </div>
-                  <Badge variant="default">Active</Badge>
+                  <div className="flex gap-2">
+                    <Badge variant={assignment.account_type === 'paid' ? 'default' : 'secondary'}>
+                      {assignment.account_type === 'paid' ? 'Paid' : 'Free'}
+                    </Badge>
+                    <Badge variant="default">Active</Badge>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
@@ -197,6 +244,26 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
                     <p>{assignment.condition_on_assign || assignment.item_condition || "-"}</p>
                   </div>
                 </div>
+
+                {assignment.account_type === 'paid' && (
+                  <div className="grid grid-cols-3 gap-4 mt-3 text-sm p-2 bg-muted/50 rounded">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Purchase Price</p>
+                      <p>৳{assignment.purchase_price_at_assign || assignment.inventory_items?.products?.purchase_price || 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Selling Price</p>
+                      <p>৳{assignment.selling_price || assignment.inventory_items?.products?.selling_price || 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Profit</p>
+                      <p className="text-green-600 font-medium">
+                        ৳{((assignment.selling_price || assignment.inventory_items?.products?.selling_price || 0) - 
+                           (assignment.purchase_price_at_assign || assignment.inventory_items?.products?.purchase_price || 0))}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {assignment.technician_name && (
                   <p className="text-sm text-muted-foreground mt-2">

@@ -56,6 +56,7 @@ interface ProductAssignment {
   inventory_item_id: string;
   condition: string;
   notes: string;
+  account_type: 'free' | 'paid';
 }
 
 interface AddCustomerDialogProps {
@@ -147,7 +148,7 @@ export function AddCustomerDialog({
   };
 
   const addProductAssignment = () => {
-    setProductAssignments([...productAssignments, { inventory_item_id: "", condition: "New", notes: "" }]);
+    setProductAssignments([...productAssignments, { inventory_item_id: "", condition: "New", notes: "", account_type: "free" }]);
   };
 
   const removeProductAssignment = (index: number) => {
@@ -270,7 +271,14 @@ export function AddCustomerDialog({
         const validAssignments = productAssignments.filter(pa => pa.inventory_item_id);
         
         for (const assignment of validAssignments) {
-          // Create assignment
+          // Get item details for pricing
+          const { data: itemData } = await supabase
+            .from('inventory_items')
+            .select('product_id, purchase_price, products(purchase_price, selling_price)')
+            .eq('id', assignment.inventory_item_id)
+            .single();
+
+          // Create assignment with account type and pricing
           await supabase.from('asset_assignments').insert({
             customer_id: newCustomer.id,
             inventory_item_id: assignment.inventory_item_id,
@@ -278,6 +286,9 @@ export function AddCustomerDialog({
             item_condition: assignment.condition,
             technician_name: formData.technician_name || null,
             notes: assignment.notes || null,
+            account_type: assignment.account_type,
+            purchase_price_at_assign: itemData?.purchase_price || (itemData?.products as any)?.purchase_price || 0,
+            selling_price: assignment.account_type === 'paid' ? (itemData?.products as any)?.selling_price || 0 : 0,
           });
 
           // Update inventory item status
@@ -285,6 +296,36 @@ export function AddCustomerDialog({
             .from('inventory_items')
             .update({ status: 'assigned' })
             .eq('id', assignment.inventory_item_id);
+
+          // Update product stock quantity (decrease by 1)
+          if (itemData?.product_id) {
+            const { data: product } = await supabase
+              .from('products')
+              .select('stock_quantity')
+              .eq('id', itemData.product_id)
+              .single();
+            
+            if (product) {
+              await supabase
+                .from('products')
+                .update({ stock_quantity: Math.max(0, product.stock_quantity - 1) })
+                .eq('id', itemData.product_id);
+            }
+          }
+
+          // If paid, create a transaction for accounting
+          if (assignment.account_type === 'paid' && itemData?.products) {
+            const profit = ((itemData.products as any).selling_price || 0) - ((itemData.products as any).purchase_price || 0);
+            
+            // Record as income transaction
+            await supabase.from('transactions').insert({
+              type: 'income',
+              amount: (itemData.products as any).selling_price || 0,
+              payment_method: 'cash',
+              description: `Product sale: ${assignment.inventory_item_id.slice(0, 8)} to ${formData.full_name}`,
+              transaction_date: format(today, 'yyyy-MM-dd'),
+            });
+          }
         }
       }
 
@@ -602,7 +643,7 @@ export function AddCustomerDialog({
                         </Button>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                         <div>
                           <Label className="text-xs">Select Item</Label>
                           <Select
@@ -635,6 +676,22 @@ export function AddCustomerDialog({
                               {conditionOptions.map((c) => (
                                 <SelectItem key={c} value={c}>{c}</SelectItem>
                               ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label className="text-xs">Account Type *</Label>
+                          <Select
+                            value={assignment.account_type}
+                            onValueChange={(v) => updateProductAssignment(index, "account_type", v)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="free">Free (No Invoice)</SelectItem>
+                              <SelectItem value="paid">Paid (Generate Invoice)</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>

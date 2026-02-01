@@ -4,9 +4,17 @@ import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { EmailButton } from "@/components/EmailButton";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { QuickPaymentRecord } from "@/components/QuickPaymentRecord";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfDay, differenceInDays } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MoreHorizontal, Navigation } from "lucide-react";
 
 interface MikrotikUser {
   id: string;
@@ -22,6 +30,8 @@ interface Customer {
   expiry_date: string;
   status: 'active' | 'expiring' | 'expired' | 'suspended';
   total_due: number;
+  latitude?: number | null;
+  longitude?: number | null;
   packages: {
     name: string;
     monthly_price: number;
@@ -54,7 +64,7 @@ export default function Reminders() {
   const fetchData = async () => {
     try {
       const [customersRes, logsRes] = await Promise.all([
-        supabase.from('customers_safe').select('*, packages(name, monthly_price), mikrotik_users:mikrotik_users_safe(id, username, status)'),
+        supabase.from('customers').select('*, packages(name, monthly_price), mikrotik_users:mikrotik_users(id, username, status)'),
         supabase
           .from('reminder_logs')
           .select('*, customers(user_id, full_name)')
@@ -87,21 +97,13 @@ export default function Reminders() {
       const expiry = startOfDay(new Date(customer.expiry_date));
       const daysDiff = differenceInDays(expiry, today);
 
-      // 3 days before expiry (expiry is 3 days in the future)
       if (daysDiff === 3) {
         threeDaysBefore.push(customer);
-      }
-      // 1 day before expiry (expiry is 1 day in the future)
-      else if (daysDiff === 1) {
+      } else if (daysDiff === 1) {
         oneDayBefore.push(customer);
-      }
-      // Expiring today (expiry is today)
-      else if (daysDiff === 0) {
+      } else if (daysDiff === 0) {
         expiryDay.push(customer);
-      }
-      // 3 days overdue (expired 3 days ago, daysDiff would be -3)
-      // Also include customers who are MORE than 3 days overdue (daysDiff <= -3)
-      else if (daysDiff <= -3 && daysDiff >= -30) {
+      } else if (daysDiff <= -3 && daysDiff >= -30) {
         threeDaysOverdue.push(customer);
       }
     });
@@ -110,6 +112,10 @@ export default function Reminders() {
   };
 
   const { threeDaysBefore, oneDayBefore, expiryDay, threeDaysOverdue } = categorizeCustomers();
+
+  const openGoogleMaps = (lat: number, lng: number) => {
+    window.open(`https://www.google.com/maps?q=${lat},${lng}`, "_blank");
+  };
 
   const renderCustomerTable = (customerList: Customer[], title: string) => (
     <div className="form-section">
@@ -155,40 +161,64 @@ export default function Reminders() {
                     </td>
                     <td className="amount-due">৳{customer.total_due}</td>
                     <td>
-                      <div className="flex items-center gap-1 flex-wrap">
-                        <QuickCallRecord
-                          customerId={customer.id}
-                          customerName={customer.full_name}
-                          onSuccess={fetchData}
-                        />
-                        <WhatsAppButton
-                          phone={customer.phone}
-                          customerName={customer.full_name}
-                          userId={customer.user_id}
-                          packageName={customer.packages?.name || 'Internet'}
-                          expiryDate={new Date(customer.expiry_date)}
-                          amount={customer.packages?.monthly_price || customer.total_due}
-                          variant="icon"
-                          pppoeUsername={pppoeUsername}
-                        />
-                        <EmailButton
-                          phone={customer.phone}
-                          customerName={customer.full_name}
-                          userId={customer.user_id}
-                          packageName={customer.packages?.name || 'Internet'}
-                          expiryDate={new Date(customer.expiry_date)}
-                          amount={customer.packages?.monthly_price || customer.total_due}
-                          variant="icon"
-                          pppoeUsername={pppoeUsername}
-                        />
-                        <QuickPaymentRecord
-                          customerId={customer.id}
-                          customerName={customer.full_name}
-                          dueAmount={customer.total_due}
-                          monthlyPrice={customer.packages?.monthly_price || 0}
-                          onSuccess={fetchData}
-                        />
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          {/* Quick Call */}
+                          <QuickCallRecord
+                            customerId={customer.id}
+                            customerName={customer.full_name}
+                            onSuccess={fetchData}
+                            variant="dropdown"
+                          />
+                          
+                          {/* WhatsApp */}
+                          <WhatsAppButton
+                            phone={customer.phone}
+                            customerName={customer.full_name}
+                            userId={customer.user_id}
+                            packageName={customer.packages?.name || 'Internet'}
+                            expiryDate={new Date(customer.expiry_date)}
+                            amount={customer.packages?.monthly_price || customer.total_due}
+                            variant="dropdown"
+                            pppoeUsername={pppoeUsername}
+                          />
+                          
+                          {/* Email */}
+                          <EmailButton
+                            phone={customer.phone}
+                            customerName={customer.full_name}
+                            userId={customer.user_id}
+                            packageName={customer.packages?.name || 'Internet'}
+                            expiryDate={new Date(customer.expiry_date)}
+                            amount={customer.packages?.monthly_price || customer.total_due}
+                            variant="dropdown"
+                            pppoeUsername={pppoeUsername}
+                          />
+                          
+                          {/* Quick Payment */}
+                          <QuickPaymentRecord
+                            customerId={customer.id}
+                            customerName={customer.full_name}
+                            dueAmount={customer.total_due}
+                            monthlyPrice={customer.packages?.monthly_price || 0}
+                            onSuccess={fetchData}
+                            variant="dropdown"
+                          />
+                          
+                          {/* Go Location */}
+                          {customer.latitude && customer.longitude && (
+                            <DropdownMenuItem onClick={() => openGoogleMaps(customer.latitude!, customer.longitude!)}>
+                              <Navigation className="h-4 w-4 mr-2" />
+                              Go Location
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 );
