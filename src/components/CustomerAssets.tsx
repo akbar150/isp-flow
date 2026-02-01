@@ -19,8 +19,9 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Undo2, Loader2, Receipt, Pencil } from "lucide-react";
+import { Package, Undo2, Loader2, Receipt, Pencil, Plus } from "lucide-react";
 import { CustomerAssetEdit } from "./CustomerAssetEdit";
+import { CustomerAssetAdd } from "./CustomerAssetAdd";
 
 interface AssetAssignment {
   id: string;
@@ -66,6 +67,7 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
   const [loading, setLoading] = useState(true);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<AssetAssignment | null>(null);
   const [returnCondition, setReturnCondition] = useState("Good");
   const [returnNotes, setReturnNotes] = useState("");
@@ -197,12 +199,20 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
             <Package className="h-4 w-4" />
             Active Devices ({activeAssignments.length})
           </h3>
-          {totalProfit > 0 && (
-            <Badge variant="outline" className="text-green-600">
-              <Receipt className="h-3 w-3 mr-1" />
-              Profit: ৳{totalProfit.toLocaleString()}
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {totalProfit > 0 && (
+              <Badge variant="outline" className="text-green-600">
+                <Receipt className="h-3 w-3 mr-1" />
+                Profit: ৳{totalProfit.toLocaleString()}
+              </Badge>
+            )}
+            {canEdit && (
+              <Button size="sm" onClick={() => setAddDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                Add Product
+              </Button>
+            )}
+          </div>
         </div>
 
         {activeAssignments.length === 0 ? (
@@ -392,6 +402,15 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
           onSuccess={fetchAssignments}
         />
       )}
+
+      {/* Add Product Dialog */}
+      <CustomerAssetAdd
+        customerId={customerId}
+        customerName={customerName}
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        onSuccess={fetchAssignments}
+      />
     </div>
   );
 }
