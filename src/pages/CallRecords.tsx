@@ -24,6 +24,7 @@ import { Phone, Search, Download, Calendar as CalendarIcon, User, FileText, More
 import { format, startOfDay, endOfDay } from "date-fns";
 import { CallRecordDialog } from "@/components/CallRecordDialog";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
+import { CallCustomerButton } from "@/components/CallCustomerButton";
 import { cn } from "@/lib/utils";
 import { exportToCSV, exportToPDF, formatDateForExport } from "@/lib/exportUtils";
 
@@ -44,6 +45,7 @@ interface CallRecordWithCustomer {
     user_id: string;
     full_name: string;
     phone: string;
+    alt_phone?: string | null;
     latitude?: number | null;
     longitude?: number | null;
   } | null;
@@ -55,6 +57,7 @@ interface CustomerOption {
   user_id: string;
   full_name: string;
   phone: string;
+  alt_phone?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   mikrotik_users?: MikrotikUser[] | null;
@@ -80,11 +83,11 @@ export default function CallRecords() {
       const [recordsRes, customersRes] = await Promise.all([
         supabase
           .from("call_records")
-          .select("*, customers:customer_id(id, user_id, full_name, phone, latitude, longitude)")
+          .select("*, customers:customer_id(id, user_id, full_name, phone, alt_phone, latitude, longitude)")
           .order("call_date", { ascending: false }),
         supabase
           .from("customers_safe")
-          .select("id, user_id, full_name, phone, latitude, longitude, mikrotik_users:mikrotik_users_safe(id, username)")
+          .select("id, user_id, full_name, phone, alt_phone, latitude, longitude, mikrotik_users:mikrotik_users_safe(id, username)")
           .order("full_name"),
       ]);
 
@@ -100,6 +103,7 @@ export default function CallRecords() {
           mikrotik_users: customer?.mikrotik_users,
           customers: {
             ...record.customers,
+            alt_phone: customer?.alt_phone,
             latitude: customer?.latitude,
             longitude: customer?.longitude,
           },
@@ -393,7 +397,15 @@ export default function CallRecords() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                          {/* Quick Call */}
+                          {/* Call Customer */}
+                          <CallCustomerButton
+                            customerName={record.customers?.full_name || "Unknown"}
+                            primaryPhone={record.customers?.phone || ""}
+                            alternativePhone={record.customers?.alt_phone}
+                            variant="dropdown"
+                          />
+                          
+                          {/* Quick Call Record */}
                           <QuickCallRecord
                             customerId={record.customer_id}
                             customerName={record.customers?.full_name || "Unknown"}

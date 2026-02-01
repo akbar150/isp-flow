@@ -4,6 +4,7 @@ import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { EmailButton } from "@/components/EmailButton";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { QuickPaymentRecord } from "@/components/QuickPaymentRecord";
+import { CallCustomerButton } from "@/components/CallCustomerButton";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -27,6 +28,7 @@ interface Customer {
   user_id: string;
   full_name: string;
   phone: string;
+  alt_phone?: string | null;
   expiry_date: string;
   status: 'active' | 'expiring' | 'expired' | 'suspended';
   total_due: number;
@@ -168,7 +170,15 @@ export default function Reminders() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                          {/* Quick Call */}
+                          {/* Call Customer */}
+                          <CallCustomerButton
+                            customerName={customer.full_name}
+                            primaryPhone={customer.phone}
+                            alternativePhone={customer.alt_phone}
+                            variant="dropdown"
+                          />
+                          
+                          {/* Quick Call Record */}
                           <QuickCallRecord
                             customerId={customer.id}
                             customerName={customer.full_name}

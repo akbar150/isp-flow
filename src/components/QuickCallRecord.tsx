@@ -2,6 +2,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -93,65 +100,80 @@ export function QuickCallRecord({
     }
   };
 
-  // For dropdown variant, render as a DropdownMenuItem that triggers the popover
+  const formContent = (
+    <div className="space-y-4">
+      <div className="p-3 bg-muted rounded-lg">
+        <p className="text-sm font-medium">{customerName}</p>
+        <p className="text-xs text-muted-foreground">
+          Recording call at: {new Date().toLocaleString("en-BD")}
+        </p>
+      </div>
+      
+      <Select value={outcome} onValueChange={setOutcome}>
+        <SelectTrigger>
+          <SelectValue placeholder="Select outcome..." />
+        </SelectTrigger>
+        <SelectContent>
+          {CALL_OUTCOMES.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="কল নোট... (optional)"
+        className="min-h-[100px] text-sm"
+      />
+
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1"
+          onClick={() => setOpen(false)}
+        >
+          Cancel
+        </Button>
+        <Button
+          size="sm"
+          className="flex-1"
+          onClick={handleSubmit}
+          disabled={saving || !outcome}
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+
+  // For dropdown variant, use Dialog instead of Popover to prevent closing issues
   if (variant === "dropdown") {
     return (
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
           <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
             <Phone className="h-4 w-4 mr-2" />
             Add Call Record
           </DropdownMenuItem>
-        </PopoverTrigger>
-        <PopoverContent className="w-80" align="end" side="left">
-          <div className="space-y-3">
-            <div className="font-medium text-sm">Quick Call Record</div>
-            <p className="text-xs text-muted-foreground">{customerName}</p>
-            
-            <Select value={outcome} onValueChange={setOutcome}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select outcome..." />
-              </SelectTrigger>
-              <SelectContent>
-                {CALL_OUTCOMES.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="কল নোট... (optional)"
-              className="min-h-[80px] text-sm"
-            />
-
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1"
-                onClick={() => setOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                className="flex-1"
-                onClick={handleSubmit}
-                disabled={saving || !outcome}
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
-              </Button>
-            </div>
-          </div>
-        </PopoverContent>
-      </Popover>
+        </DialogTrigger>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Phone className="h-5 w-5" />
+              Quick Call Record
+            </DialogTitle>
+          </DialogHeader>
+          {formContent}
+        </DialogContent>
+      </Dialog>
     );
   }
 
+  // For icon/button variants, use Popover
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -167,49 +189,10 @@ export function QuickCallRecord({
         )}
       </PopoverTrigger>
       <PopoverContent className="w-80" align="end">
-        <div className="space-y-3">
-          <div className="font-medium text-sm">Quick Call Record</div>
-          <p className="text-xs text-muted-foreground">{customerName}</p>
-          
-          <Select value={outcome} onValueChange={setOutcome}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select outcome..." />
-            </SelectTrigger>
-            <SelectContent>
-              {CALL_OUTCOMES.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="কল নোট... (optional)"
-            className="min-h-[80px] text-sm"
-          />
-
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => setOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              className="flex-1"
-              onClick={handleSubmit}
-              disabled={saving || !outcome}
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
-            </Button>
-          </div>
+        <div className="space-y-1 mb-3">
+          <h4 className="font-medium text-sm">Quick Call Record</h4>
         </div>
+        {formContent}
       </PopoverContent>
     </Popover>
   );
