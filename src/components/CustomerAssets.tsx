@@ -19,7 +19,8 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Undo2, Loader2, Receipt } from "lucide-react";
+import { Package, Undo2, Loader2, Receipt, Pencil } from "lucide-react";
+import { CustomerAssetEdit } from "./CustomerAssetEdit";
 
 interface AssetAssignment {
   id: string;
@@ -64,6 +65,7 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
   const [assignments, setAssignments] = useState<AssetAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<AssetAssignment | null>(null);
   const [returnCondition, setReturnCondition] = useState("Good");
   const [returnNotes, setReturnNotes] = useState("");
@@ -272,7 +274,18 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
                 )}
 
                 {canEdit && (
-                  <div className="mt-4 pt-4 border-t">
+                  <div className="mt-4 pt-4 border-t flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedAssignment(assignment);
+                        setEditDialogOpen(true);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -369,6 +382,16 @@ export function CustomerAssets({ customerId, customerName, canEdit }: CustomerAs
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Assignment Dialog */}
+      {selectedAssignment && editDialogOpen && (
+        <CustomerAssetEdit
+          assignment={selectedAssignment}
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          onSuccess={fetchAssignments}
+        />
+      )}
     </div>
   );
 }

@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, MapPin, Settings } from "lucide-react";
+import { AlertTriangle, Loader2, MapPin, Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -285,6 +285,16 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
                         placeholder="Enter your Google Maps API key"
                       />
                     </div>
+                    <div className="text-left text-xs text-muted-foreground mb-2 space-y-1">
+                      <p><strong>Setup Instructions:</strong></p>
+                      <ol className="list-decimal list-inside space-y-1">
+                        <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google Cloud Console</a></li>
+                        <li>Create or select a project</li>
+                        <li>Enable "Maps JavaScript API"</li>
+                        <li>Create an API key under Credentials</li>
+                        <li>Add your domain to HTTP referrer restrictions</li>
+                      </ol>
+                    </div>
                     <div className="flex gap-2">
                       <Button onClick={saveApiKey} className="flex-1">Save</Button>
                       <Button variant="outline" onClick={() => setShowApiKeyInput(false)}>Cancel</Button>
@@ -304,8 +314,22 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
             </div>
           ) : error ? (
             <div className="absolute inset-0 flex items-center justify-center bg-muted/50 z-10">
-              <div className="text-center p-4">
-                <p className="text-destructive mb-2">{error}</p>
+              <div className="text-center p-6 max-w-md">
+                <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
+                <p className="text-destructive font-medium mb-2">{error}</p>
+                <div className="text-xs text-muted-foreground mb-4 text-left bg-muted p-3 rounded">
+                  <p className="font-medium mb-1">Common causes:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li><strong>ApiTargetBlockedMapError:</strong> Domain not allowed in API key restrictions</li>
+                    <li><strong>Maps JavaScript API</strong> not enabled in Google Cloud Console</li>
+                    <li><strong>Billing</strong> not enabled on Google Cloud project</li>
+                  </ul>
+                  <p className="mt-2">
+                    <a href="https://console.cloud.google.com/apis/library/maps-backend.googleapis.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                      Enable Maps API →
+                    </a>
+                  </p>
+                </div>
                 <div className="flex gap-2 justify-center">
                   <Button variant="outline" onClick={() => setShowApiKeyInput(true)}>
                     Update API Key

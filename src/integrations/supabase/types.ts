@@ -881,6 +881,73 @@ export type Database = {
         }
         Relationships: []
       }
+      metered_usage_logs: {
+        Row: {
+          color: string | null
+          core_count: number | null
+          created_at: string | null
+          created_by: string | null
+          customer_id: string | null
+          id: string
+          notes: string | null
+          product_id: string
+          quantity_used: number
+          technician_name: string | null
+          usage_date: string | null
+          usage_type: string
+        }
+        Insert: {
+          color?: string | null
+          core_count?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          customer_id?: string | null
+          id?: string
+          notes?: string | null
+          product_id: string
+          quantity_used: number
+          technician_name?: string | null
+          usage_date?: string | null
+          usage_type?: string
+        }
+        Update: {
+          color?: string | null
+          core_count?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          customer_id?: string | null
+          id?: string
+          notes?: string | null
+          product_id?: string
+          quantity_used?: number
+          technician_name?: string | null
+          usage_date?: string | null
+          usage_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metered_usage_logs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metered_usage_logs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metered_usage_logs_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mikrotik_users: {
         Row: {
           created_at: string
@@ -1137,9 +1204,11 @@ export type Database = {
           description: string | null
           id: string
           is_active: boolean
+          is_metered: boolean | null
           name: string
           requires_mac: boolean | null
           requires_serial: boolean | null
+          unit_of_measure: string | null
           updated_at: string
         }
         Insert: {
@@ -1147,9 +1216,11 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean
+          is_metered?: boolean | null
           name: string
           requires_mac?: boolean | null
           requires_serial?: boolean | null
+          unit_of_measure?: string | null
           updated_at?: string
         }
         Update: {
@@ -1157,9 +1228,11 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean
+          is_metered?: boolean | null
           name?: string
           requires_mac?: boolean | null
           requires_serial?: boolean | null
+          unit_of_measure?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -1172,6 +1245,7 @@ export type Database = {
           description: string | null
           id: string
           is_active: boolean
+          metered_quantity: number | null
           min_stock_level: number
           model: string | null
           name: string
@@ -1187,6 +1261,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean
+          metered_quantity?: number | null
           min_stock_level?: number
           model?: string | null
           name: string
@@ -1202,6 +1277,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean
+          metered_quantity?: number | null
           min_stock_level?: number
           model?: string | null
           name?: string
