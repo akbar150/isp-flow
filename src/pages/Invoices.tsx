@@ -290,6 +290,17 @@ export default function Invoices() {
     setItems(newItems);
   };
 
+  // HTML escape function to prevent XSS
+  const escapeHtml = (text: string | null | undefined): string => {
+    if (!text) return "";
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  };
+
   const handlePrintInvoice = (invoice: Invoice) => {
     const customer = invoice.customers;
     const printWindow = window.open("", "_blank");
@@ -298,11 +309,18 @@ export default function Invoices() {
       return;
     }
 
+    // Escape all user-provided content to prevent XSS
+    const safeInvoiceNumber = escapeHtml(invoice.invoice_number);
+    const safeCustomerName = escapeHtml(customer?.full_name);
+    const safeCustomerAddress = escapeHtml(customer?.address);
+    const safeCustomerPhone = escapeHtml(customer?.phone);
+    const safeNotes = escapeHtml(invoice.notes);
+
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Invoice ${invoice.invoice_number}</title>
+        <title>Invoice ${safeInvoiceNumber}</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
           .header { display: flex; justify-content: space-between; margin-bottom: 30px; }
@@ -324,7 +342,7 @@ export default function Invoices() {
         <div class="header">
           <div>
             <div class="invoice-title">INVOICE</div>
-            <div class="invoice-number">#${invoice.invoice_number}</div>
+            <div class="invoice-number">#${safeInvoiceNumber}</div>
           </div>
           <div style="text-align: right;">
             <div style="font-weight: bold;">EasyLink Broadband</div>
@@ -334,9 +352,9 @@ export default function Invoices() {
         
         <div class="customer-info">
           <strong>Bill To:</strong><br>
-          ${customer?.full_name || "N/A"}<br>
-          ${customer?.address || ""}<br>
-          ${customer?.phone || ""}
+          ${safeCustomerName || "N/A"}<br>
+          ${safeCustomerAddress || ""}<br>
+          ${safeCustomerPhone || ""}
         </div>
         
         <div class="dates">
@@ -356,7 +374,7 @@ export default function Invoices() {
           <tbody>
             ${invoice.invoice_items?.map(item => `
               <tr>
-                <td>${item.description}</td>
+                <td>${escapeHtml(item.description)}</td>
                 <td style="text-align: center;">${item.quantity}</td>
                 <td style="text-align: right;">৳${item.unit_price.toLocaleString()}</td>
                 <td style="text-align: right;">৳${item.total.toLocaleString()}</td>
@@ -398,7 +416,7 @@ export default function Invoices() {
           ` : ""}
         </table>
         
-        ${invoice.notes ? `<div style="margin-top: 30px;"><strong>Notes:</strong><br>${invoice.notes}</div>` : ""}
+        ${safeNotes ? `<div style="margin-top: 30px;"><strong>Notes:</strong><br>${safeNotes}</div>` : ""}
         
         <div class="footer">
           Thank you for your business!
