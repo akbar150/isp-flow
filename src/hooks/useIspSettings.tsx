@@ -11,6 +11,7 @@ interface IspSettings {
   emailTemplateReminder: string;
   smsTemplate: string;
   smsTemplateEn: string;
+  googleMapsApiKey: string;
   loading: boolean;
   refetch: () => Promise<void>;
 }
@@ -58,6 +59,7 @@ const IspSettingsContext = createContext<IspSettings>({
   emailTemplateReminder: defaultEmailTemplate,
   smsTemplate: defaultSmsTemplate,
   smsTemplateEn: "",
+  googleMapsApiKey: "",
   loading: true,
   refetch: async () => {},
 });
@@ -72,6 +74,7 @@ export function IspSettingsProvider({ children }: { children: ReactNode }) {
     emailTemplateReminder: defaultEmailTemplate,
     smsTemplate: defaultSmsTemplate,
     smsTemplateEn: "",
+    googleMapsApiKey: "",
     loading: true,
     refetch: async () => {},
   });
@@ -113,6 +116,7 @@ export function IspSettingsProvider({ children }: { children: ReactNode }) {
           emailTemplateReminder: settingsMap.email_template_reminder || prev.emailTemplateReminder,
           smsTemplate: settingsMap.sms_template || prev.smsTemplate,
           smsTemplateEn: settingsMap.sms_template_en || "",
+          googleMapsApiKey: settingsMap.google_maps_api_key || "",
           loading: false,
         }));
       } else {
