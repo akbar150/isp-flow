@@ -54,6 +54,10 @@ serve(async (req) => {
           throw new Error("Missing user_id or password");
         }
 
+        // Pre-generated dummy bcrypt hash for constant-time comparison
+        // This ensures timing is consistent whether user exists or not (prevents user enumeration)
+        const DUMMY_HASH = "$2b$10$dummyHashForTimingAttackPreventionXXXXXXXXXXXXXXXXX";
+
         // Find customer by user_id
         const { data: customer, error: customerError } = await supabaseAdmin
           .from("customers")
@@ -61,17 +65,17 @@ serve(async (req) => {
           .eq("user_id", user_id.toUpperCase())
           .single();
 
-        if (customerError || !customer) {
-          throw new Error("Invalid user ID or password");
-        }
-
-        // Verify password using the database function
+        // Always perform password verification to prevent timing attacks
+        // Use dummy hash if customer not found to maintain constant timing
+        const hashToVerify = customer?.password_hash || DUMMY_HASH;
+        
         const { data: isValid, error: verifyError } = await supabaseAdmin.rpc("verify_password", {
           raw_password: password,
-          hashed_password: customer.password_hash,
+          hashed_password: hashToVerify,
         });
 
-        if (verifyError || !isValid) {
+        // Check both conditions together after constant-time verification
+        if (customerError || !customer || verifyError || !isValid) {
           throw new Error("Invalid user ID or password");
         }
 
