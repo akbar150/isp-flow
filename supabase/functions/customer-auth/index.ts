@@ -115,6 +115,26 @@ serve(async (req) => {
           throw new Error("Missing required fields: full_name, phone, password");
         }
 
+        // Validate full_name (2-100 characters, letters/spaces/dots/hyphens only)
+        if (full_name.length < 2 || full_name.length > 100) {
+          throw new Error("Name must be 2-100 characters");
+        }
+        // Allow Bengali/Unicode characters, spaces, dots, hyphens
+        if (!/^[\p{L}\p{M}\s.\-']+$/u.test(full_name)) {
+          throw new Error("Name contains invalid characters");
+        }
+
+        // Validate phone (Bangladesh format: 01XXXXXXXXX - 11 digits starting with 01)
+        const cleanPhone = phone.replace(/[\s\-]/g, "");
+        if (!/^01[3-9]\d{8}$/.test(cleanPhone)) {
+          throw new Error("Invalid phone number format. Use: 01XXXXXXXXX");
+        }
+
+        // Validate address length if provided
+        if (address && address.length > 500) {
+          throw new Error("Address is too long (max 500 characters)");
+        }
+
         // Validate password (min 6 chars, alphanumeric only)
         if (password.length < 6) {
           throw new Error("Password must be at least 6 characters");
@@ -258,9 +278,30 @@ serve(async (req) => {
       }
 
       case "update_profile": {
-        const { user_id, password, phone, address, new_password } = body;
+        const { user_id, password, phone, email, address, new_password } = body;
         if (!user_id || !password) {
           throw new Error("Authentication required");
+        }
+
+        // Validate phone if provided
+        if (phone) {
+          const cleanPhone = phone.replace(/[\s\-]/g, "");
+          if (!/^01[3-9]\d{8}$/.test(cleanPhone)) {
+            throw new Error("Invalid phone number format. Use: 01XXXXXXXXX");
+          }
+        }
+
+        // Validate email format if provided
+        if (email) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email)) {
+            throw new Error("Invalid email format");
+          }
+        }
+
+        // Validate address length if provided
+        if (address && address.length > 500) {
+          throw new Error("Address is too long (max 500 characters)");
         }
 
         // Verify current password first
@@ -288,7 +329,8 @@ serve(async (req) => {
           updated_at: new Date().toISOString(),
         };
 
-        if (phone) updates.phone = phone;
+        if (phone) updates.phone = phone.replace(/[\s\-]/g, "");
+        if (email) updates.email = email;
         if (address) updates.address = address;
 
         if (new_password) {

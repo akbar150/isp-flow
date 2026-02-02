@@ -1,10 +1,46 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+// Allowed origins for CORS - production domains only
+const allowedOrigins = [
+  "https://easylinkbd.lovable.app",
+  "https://id-preview--f3ea74ef-bbb2-4d36-9390-fa74e8d6e7df.lovable.app",
+];
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get("origin") || "";
+  const isAllowed = allowedOrigins.some(allowed => 
+    origin === allowed || origin.endsWith(".lovable.app")
+  );
+  return {
+    "Access-Control-Allow-Origin": isAllowed ? origin : allowedOrigins[0],
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  };
+}
+
+// Helper to verify JWT and get user claims
+async function verifyAuth(req: Request): Promise<{ userId: string; error?: string }> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return { userId: "", error: "Missing or invalid Authorization header" };
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+
+  const token = authHeader.replace("Bearer ", "");
+  const { data, error } = await supabase.auth.getClaims(token);
+  
+  if (error || !data?.claims) {
+    return { userId: "", error: "Invalid or expired token" };
+  }
+
+  return { userId: data.claims.sub as string };
+}
 
 interface EmailRequest {
   to: string;
@@ -215,17 +251,37 @@ async function sendViaResend(
 }
 
 const handler = async (req: Request): Promise<Response> => {
+  const corsHeaders = getCorsHeaders(req);
+  
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // Verify authentication - only authenticated users can send emails
+    const { userId, error: authError } = await verifyAuth(req);
+    if (authError || !userId) {
+      console.error("Authentication failed:", authError);
+      return new Response(
+        JSON.stringify({ success: false, error: "Unauthorized: " + (authError || "Invalid token") }),
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    console.log(`Authenticated user: ${userId}`);
+
     const { to, subject, htmlContent, textContent, senderName, senderEmail }: EmailRequest = await req.json();
 
     // Validate required fields
     if (!to || !subject || !htmlContent) {
       throw new Error("Missing required fields: to, subject, htmlContent");
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(to)) {
+      throw new Error("Invalid email format");
     }
 
     console.log(`=== Email Request ===`);
