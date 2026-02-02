@@ -207,30 +207,51 @@ serve(async (req) => {
           );
         }
 
-        // Generate temporary password
-        const tempPassword = `Temp${Math.random().toString(36).substring(2, 10)}!`;
+        // Generate temporary password (secure random)
+        const tempPassword = `Temp${crypto.randomUUID().substring(0, 8)}`;
         
         // Hash the temporary password
-        const { data: hashedPassword } = await supabaseAdmin.rpc("hash_password", {
+        const { data: hashedPassword, error: hashError } = await supabaseAdmin.rpc("hash_password", {
           raw_password: tempPassword,
         });
 
+        if (hashError) {
+          console.error("Failed to hash password:", hashError);
+          throw new Error("Failed to process password reset");
+        }
+
         // Update customer password
-        await supabaseAdmin
+        const { error: updateError } = await supabaseAdmin
           .from("customers")
           .update({ password_hash: hashedPassword })
           .eq("id", customer.id);
 
-        // In production, send SMS with temp password
-        // For now, we'll return it (would be sent via SMS in real app)
-        console.log(`Password reset for ${customer.user_id}: ${tempPassword}`);
+        if (updateError) {
+          console.error("Failed to update password:", updateError);
+          throw new Error("Failed to reset password");
+        }
 
+        // Log password reset event (without the actual password)
+        console.log(`Password reset completed for customer: ${customer.user_id}`);
+
+        // TODO: In production, integrate SMS gateway to send temp password
+        // Example: await sendSMS(customer.phone, `Your temporary password is: ${tempPassword}`);
+        
+        // For now, create an admin notification so staff can communicate the password
+        await supabaseAdmin.from("admin_notifications").insert({
+          type: "system",
+          title: "Password Reset Request",
+          message: `Customer ${customer.user_id} (${customer.full_name}) requested a password reset. Please contact them at ${customer.phone} to provide the new temporary password.`,
+          entity_type: "customer",
+          entity_id: customer.id,
+        });
+
+        // SECURITY: Do NOT return the temp_password in the response
+        // The password should only be communicated via secure channel (SMS/admin contact)
         return new Response(
           JSON.stringify({
             success: true,
-            message: "A temporary password has been set. Please contact your ISP administrator to receive it, or check your registered phone for SMS.",
-            // In production, remove this - it would be sent via SMS
-            temp_password: tempPassword,
+            message: "Password reset successful. Please contact your ISP administrator or check your registered phone for your new temporary password.",
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
         );
