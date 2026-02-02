@@ -66,7 +66,8 @@ export default function Reminders() {
   const fetchData = async () => {
     try {
       const [customersRes, logsRes] = await Promise.all([
-        supabase.from('customers').select('*, packages(name, monthly_price), mikrotik_users:mikrotik_users(id, username, status)'),
+        // Use customers_safe view to prevent password_hash exposure
+        supabase.from('customers_safe').select('*, packages(name, monthly_price), mikrotik_users:mikrotik_users_safe(id, username, status)'),
         supabase
           .from('reminder_logs')
           .select('*, customers(user_id, full_name)')
