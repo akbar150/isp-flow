@@ -229,6 +229,13 @@ export type Database = {
             referencedRelation: "employees"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "attendance_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       billing_records: {
@@ -849,6 +856,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "leave_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "leave_requests_leave_type_id_fkey"
             columns: ["leave_type_id"]
             isOneToOne: false
@@ -1176,6 +1190,13 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -1651,6 +1672,66 @@ export type Database = {
           },
         ]
       }
+      employees_safe: {
+        Row: {
+          created_at: string | null
+          department_id: string | null
+          designation_id: string | null
+          employee_code: string | null
+          full_name: string | null
+          id: string | null
+          joining_date: string | null
+          notes: string | null
+          status: Database["public"]["Enums"]["employee_status"] | null
+          termination_date: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          department_id?: string | null
+          designation_id?: string | null
+          employee_code?: string | null
+          full_name?: string | null
+          id?: string | null
+          joining_date?: string | null
+          notes?: string | null
+          status?: Database["public"]["Enums"]["employee_status"] | null
+          termination_date?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          department_id?: string | null
+          designation_id?: string | null
+          employee_code?: string | null
+          full_name?: string | null
+          id?: string | null
+          joining_date?: string | null
+          notes?: string | null
+          status?: Database["public"]["Enums"]["employee_status"] | null
+          termination_date?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employees_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employees_designation_id_fkey"
+            columns: ["designation_id"]
+            isOneToOne: false
+            referencedRelation: "designations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mikrotik_users_safe: {
         Row: {
           created_at: string | null
@@ -1712,6 +1793,51 @@ export type Database = {
             columns: ["router_id"]
             isOneToOne: false
             referencedRelation: "routers_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_safe: {
+        Row: {
+          created_at: string | null
+          employee_id: string | null
+          id: string | null
+          month: number | null
+          status: Database["public"]["Enums"]["payroll_status"] | null
+          updated_at: string | null
+          year: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          employee_id?: string | null
+          id?: string | null
+          month?: number | null
+          status?: Database["public"]["Enums"]["payroll_status"] | null
+          updated_at?: string | null
+          year?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          employee_id?: string | null
+          id?: string | null
+          month?: number | null
+          status?: Database["public"]["Enums"]["payroll_status"] | null
+          updated_at?: string | null
+          year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_safe"
             referencedColumns: ["id"]
           },
         ]
