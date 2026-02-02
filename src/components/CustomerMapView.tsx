@@ -110,17 +110,30 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
     });
   }, [customers]);
 
-  // Load API key from global settings context
+  // Sync API key from global settings context - only update when settings change
   useEffect(() => {
     if (!open) return;
     
-    if (!settingsLoading) {
-      if (googleMapsApiKey && googleMapsApiKey.trim() !== '') {
-        setApiKey(googleMapsApiKey);
-      }
-      setLoading(false);
+    // Wait for settings to finish loading
+    if (settingsLoading) {
+      setLoading(true);
+      return;
     }
+    
+    // Once settings are loaded, use the API key from context
+    if (googleMapsApiKey && googleMapsApiKey.trim() !== '') {
+      setApiKey(googleMapsApiKey);
+    }
+    setLoading(false);
   }, [open, settingsLoading, googleMapsApiKey]);
+
+  // Reset loading state when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setLoading(true);
+      setError(null);
+    }
+  }, [open]);
 
   const saveApiKey = async () => {
     if (!tempApiKey.trim()) return;
