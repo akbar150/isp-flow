@@ -8,19 +8,32 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Bell, X, AlertTriangle, Users, Package, DollarSign, Info } from "lucide-react";
+import { Bell, AlertTriangle, Users, Package, DollarSign, Info, UserPlus, Receipt, Boxes, Briefcase, Calculator } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
+type NotificationType = 
+  | 'overdue_customer' 
+  | 'expiring_customer' 
+  | 'low_stock' 
+  | 'payment_received' 
+  | 'system'
+  | 'new_customer'
+  | 'billing_generated'
+  | 'asset_assigned'
+  | 'hrm_update'
+  | 'accounting_update';
+
 interface Notification {
   id: string;
-  type: 'overdue_customer' | 'expiring_customer' | 'low_stock' | 'payment_received' | 'system';
+  type: NotificationType;
   title: string;
   message: string;
   entity_type: string | null;
   entity_id: string | null;
   is_read: boolean;
   created_at: string;
+  target_role?: 'super_admin' | 'admin' | 'staff' | null;
 }
 
 const notificationIcons: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -29,6 +42,11 @@ const notificationIcons: Record<string, React.ComponentType<{ className?: string
   low_stock: Package,
   payment_received: DollarSign,
   system: Info,
+  new_customer: UserPlus,
+  billing_generated: Receipt,
+  asset_assigned: Boxes,
+  hrm_update: Briefcase,
+  accounting_update: Calculator,
 };
 
 const notificationColors: Record<string, string> = {
@@ -37,17 +55,25 @@ const notificationColors: Record<string, string> = {
   low_stock: "text-orange-500",
   payment_received: "text-green-500",
   system: "text-blue-500",
+  new_customer: "text-primary",
+  billing_generated: "text-violet-500",
+  asset_assigned: "text-cyan-500",
+  hrm_update: "text-indigo-500",
+  accounting_update: "text-emerald-500",
 };
 
 export function AdminNotifications() {
-  const { isAdmin, isSuperAdmin } = useAuth();
+  const { isAdmin, isSuperAdmin, isStaff, user, role } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Check if user should see notifications (all authenticated users)
+  const canViewNotifications = user && (isSuperAdmin || isAdmin || isStaff);
+
   useEffect(() => {
-    if (!isAdmin && !isSuperAdmin) return;
+    if (!canViewNotifications) return;
 
     // Create audio element for notification sound
     audioRef.current = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleC8QLYl/hXdqWExacHOTmZyXk4yNh4l4bHByh5WPhnd6b1pWZoKSl5GGdWZbTkU5Pz9CRkxOUFJWVVJPSklITlVdY2lrbm5ra21vcXJzeHN5dXF3dHNxamFdXmRpbnN2dnNwd3N0dXVxb3N3hYuMiH94dG9oZWJfZ21ze36DhIJ+eHRvbXJwb3JydXt/gIB+e3d4fH2AgYOEhIKEhYWGhYSDg4SGhomLioiHh4eFhIOBgH9+fn5+fX1/gIGDhIWFhoaGhYWEhIODg4ODgoKBgIB/f39+fn5+fn5+foCBgoKDg4ODg4OCgoKBgYCAgH9/f39/f4CAgICBgYGCgoKCgoKCgoKBgYGAgICAgICAf4B/gICAgICAgYGBgYGBgYGBgYGBgYGAgICAgA==");
@@ -95,7 +121,7 @@ export function AdminNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isAdmin, isSuperAdmin]);
+  }, [canViewNotifications]);
 
   const fetchNotifications = async () => {
     try {
@@ -106,8 +132,17 @@ export function AdminNotifications() {
         .limit(50);
 
       if (error) throw error;
-      setNotifications(data || []);
-      setUnreadCount(data?.filter(n => !n.is_read).length || 0);
+      
+      // Filter notifications based on user role
+      const filteredData = (data || []).filter(n => {
+        // If no target_role specified, show to all
+        if (!n.target_role) return true;
+        // Show if target_role matches user's role
+        return n.target_role === role;
+      }) as Notification[];
+      
+      setNotifications(filteredData);
+      setUnreadCount(filteredData.filter(n => !n.is_read).length);
     } catch (error) {
       console.error("Error fetching notifications:", error);
     }
@@ -146,7 +181,7 @@ export function AdminNotifications() {
     }
   };
 
-  if (!isAdmin && !isSuperAdmin) return null;
+  if (!canViewNotifications) return null;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
