@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { AlertTriangle, Loader2, MapPin, Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { decodeSettingValue } from "@/lib/settingsValue";
+import { useIspSettings } from "@/hooks/useIspSettings";
 
 interface Customer {
   id: string;
@@ -72,6 +72,7 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
   const [tempApiKey, setTempApiKey] = useState("");
   const [markersRendered, setMarkersRendered] = useState(0);
   const { toast } = useToast();
+  const { googleMapsApiKey, loading: settingsLoading, refetch: refetchSettings } = useIspSettings();
 
   // Filter and deduplicate customers with GPS data
   const customersWithGps = useMemo(() => {
@@ -109,36 +110,17 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
     });
   }, [customers]);
 
-  // Load API key from settings - only once when dialog opens
+  // Load API key from global settings context
   useEffect(() => {
     if (!open) return;
     
-    const loadApiKey = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("system_settings")
-          .select("value")
-          .eq("key", "google_maps_api_key")
-          .single();
-        
-        if (!error && data?.value) {
-          const decodedValue = decodeSettingValue(data.value);
-          if (decodedValue && decodedValue !== 'null' && decodedValue.trim() !== '') {
-            setApiKey(decodedValue);
-            setLoading(false);
-            return;
-          }
-        }
-        
-        setLoading(false);
-      } catch (err) {
-        console.error("Error loading API key:", err);
-        setLoading(false);
+    if (!settingsLoading) {
+      if (googleMapsApiKey && googleMapsApiKey.trim() !== '') {
+        setApiKey(googleMapsApiKey);
       }
-    };
-    
-    loadApiKey();
-  }, [open]);
+      setLoading(false);
+    }
+  }, [open, settingsLoading, googleMapsApiKey]);
 
   const saveApiKey = async () => {
     if (!tempApiKey.trim()) return;
@@ -156,6 +138,8 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
       setApiKey(tempApiKey.trim());
       setShowApiKeyInput(false);
       toast({ title: "Success", description: "Google Maps API key saved" });
+      // Refresh global settings context so other components get the new key
+      refetchSettings();
     }
   };
 
