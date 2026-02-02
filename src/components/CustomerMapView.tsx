@@ -249,46 +249,62 @@ export function CustomerMapView({ open, onOpenChange, customers }: CustomerMapVi
 
     const windowWithGoogle = window as GoogleMapsWindow;
 
-    const loadGoogleMaps = () => {
-      // Check if already loaded
-      if (windowWithGoogle.google && windowWithGoogle.google.maps) {
-        initMap();
-        return;
-      }
+    // Small delay to ensure DOM element is ready after dialog opens
+    const timeoutId = setTimeout(() => {
+      if (!mapRef.current) return;
 
-      // Check if script is already loading
-      if (scriptLoadedRef.current) {
-        return;
-      }
+      const loadGoogleMaps = () => {
+        // Check if already loaded - if so, just reinitialize the map
+        if (windowWithGoogle.google && windowWithGoogle.google.maps) {
+          initMap();
+          return;
+        }
 
-      // Remove any existing Google Maps script
-      const existingScript = document.querySelector(`script[src*="maps.googleapis.com"]`);
-      if (existingScript) {
-        existingScript.remove();
-      }
+        // Check if script is already loading
+        if (scriptLoadedRef.current) {
+          // Script is loading, wait for it and then init
+          const checkGoogle = setInterval(() => {
+            if (windowWithGoogle.google && windowWithGoogle.google.maps) {
+              clearInterval(checkGoogle);
+              initMap();
+            }
+          }, 100);
+          // Clear interval after 10 seconds to prevent infinite loop
+          setTimeout(() => clearInterval(checkGoogle), 10000);
+          return;
+        }
 
-      scriptLoadedRef.current = true;
+        // Remove any existing Google Maps script
+        const existingScript = document.querySelector(`script[src*="maps.googleapis.com"]`);
+        if (existingScript) {
+          existingScript.remove();
+        }
 
-      // Load the script with async loading
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initGoogleMaps&loading=async`;
-      script.async = true;
-      script.defer = true;
-      windowWithGoogle.initGoogleMaps = initMap;
-      script.onerror = () => {
-        setError("Failed to load Google Maps. Please check your API key and internet connection.");
-        setLoading(false);
-        scriptLoadedRef.current = false;
+        scriptLoadedRef.current = true;
+
+        // Load the script with async loading
+        const script = document.createElement("script");
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initGoogleMaps&loading=async`;
+        script.async = true;
+        script.defer = true;
+        windowWithGoogle.initGoogleMaps = initMap;
+        script.onerror = () => {
+          setError("Failed to load Google Maps. Please check your API key and internet connection.");
+          setLoading(false);
+          scriptLoadedRef.current = false;
+        };
+        document.head.appendChild(script);
       };
-      document.head.appendChild(script);
-    };
 
-    loadGoogleMaps();
+      loadGoogleMaps();
+    }, 50);
 
     return () => {
-      // Cleanup markers on unmount
+      clearTimeout(timeoutId);
+      // Cleanup markers and map instance on unmount
       markersRef.current.forEach(marker => marker.setMap(null));
       markersRef.current = [];
+      mapInstanceRef.current = null;
     };
   }, [open, apiKey, initMap]);
 
