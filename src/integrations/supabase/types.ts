@@ -52,6 +52,7 @@ export type Database = {
           id: string
           is_read: boolean
           message: string
+          target_role: Database["public"]["Enums"]["app_role"] | null
           title: string
           type: Database["public"]["Enums"]["notification_type"]
         }
@@ -62,6 +63,7 @@ export type Database = {
           id?: string
           is_read?: boolean
           message: string
+          target_role?: Database["public"]["Enums"]["app_role"] | null
           title: string
           type: Database["public"]["Enums"]["notification_type"]
         }
@@ -72,6 +74,7 @@ export type Database = {
           id?: string
           is_read?: boolean
           message?: string
+          target_role?: Database["public"]["Enums"]["app_role"] | null
           title?: string
           type?: Database["public"]["Enums"]["notification_type"]
         }
@@ -1824,6 +1827,11 @@ export type Database = {
         | "low_stock"
         | "payment_received"
         | "system"
+        | "new_customer"
+        | "billing_generated"
+        | "asset_assigned"
+        | "hrm_update"
+        | "accounting_update"
       payment_method: "bkash" | "cash" | "bank_transfer" | "due"
       payroll_status: "draft" | "approved" | "paid"
       reminder_type:
@@ -1982,6 +1990,11 @@ export const Constants = {
         "low_stock",
         "payment_received",
         "system",
+        "new_customer",
+        "billing_generated",
+        "asset_assigned",
+        "hrm_update",
+        "accounting_update",
       ],
       payment_method: ["bkash", "cash", "bank_transfer", "due"],
       payroll_status: ["draft", "approved", "paid"],
