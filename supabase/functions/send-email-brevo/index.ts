@@ -1,22 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 
-// Allowed origins for CORS - production domains only
-const allowedOrigins = [
-  "https://easylinkbd.lovable.app",
-  "https://id-preview--f3ea74ef-bbb2-4d36-9390-fa74e8d6e7df.lovable.app",
-];
+// Version for deployment verification
+const VERSION = "v1.0.2";
 
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get("origin") || "";
-  const isAllowed = allowedOrigins.some(allowed => 
-    origin === allowed || origin.endsWith(".lovable.app")
-  );
-  return {
-    "Access-Control-Allow-Origin": isAllowed ? origin : allowedOrigins[0],
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-  };
-}
+// Standard CORS headers that allow all origins (required for Lovable preview)
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
 
 // Helper to verify JWT and get user claims
 async function verifyAuth(req: Request): Promise<{ userId: string; error?: string }> {
@@ -131,7 +123,7 @@ async function getEmailSettings(): Promise<EmailSettings | null> {
       return null;
     }
 
-    console.log("Decrypted API key prefix:", decryptedKey.substring(0, 10) + "...");
+    console.log(`[${VERSION}] Decrypted API key prefix:`, decryptedKey.substring(0, 10) + "...");
 
     return {
       api_key: decryptedKey,
@@ -139,7 +131,7 @@ async function getEmailSettings(): Promise<EmailSettings | null> {
       sender_name: settings.email_from_name || "ISP Billing System",
     };
   } catch (error) {
-    console.error("Error getting email settings:", error);
+    console.error(`[${VERSION}] Error getting email settings:`, error);
     return null;
   }
 }
@@ -153,8 +145,8 @@ async function sendViaBrevo(
   senderName?: string,
   senderEmail?: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  console.log(`Sending email via Brevo to: ${to}`);
-  console.log(`API key type: ${apiKey.startsWith("xkeysib-") ? "API Key" : apiKey.startsWith("xsmtpsib-") ? "SMTP Key (may not work!)" : "Unknown"}`);
+  console.log(`[${VERSION}] Sending email via Brevo to: ${to}`);
+  console.log(`[${VERSION}] API key type: ${apiKey.startsWith("xkeysib-") ? "API Key" : apiKey.startsWith("xsmtpsib-") ? "SMTP Key (may not work!)" : "Unknown"}`);
   
   const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -176,8 +168,8 @@ async function sendViaBrevo(
   });
 
   const responseText = await response.text();
-  console.log(`Brevo API response status: ${response.status}`);
-  console.log(`Brevo API response: ${responseText}`);
+  console.log(`[${VERSION}] Brevo API response status: ${response.status}`);
+  console.log(`[${VERSION}] Brevo API response: ${responseText}`);
 
   if (!response.ok) {
     let errorMessage = `Brevo API error (${response.status})`;
@@ -211,7 +203,7 @@ async function sendViaResend(
     ? `${senderName || "ISP Billing"} <${senderEmail}>` 
     : `${senderName || "ISP Billing System"} <onboarding@resend.dev>`;
   
-  console.log(`Sending email via Resend to: ${to}`);
+  console.log(`[${VERSION}] Sending email via Resend to: ${to}`);
   
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -229,7 +221,7 @@ async function sendViaResend(
   });
 
   const responseText = await response.text();
-  console.log(`Resend API response status: ${response.status}`);
+  console.log(`[${VERSION}] Resend API response status: ${response.status}`);
 
   if (!response.ok) {
     let errorMessage = `Resend API error (${response.status})`;
@@ -251,25 +243,25 @@ async function sendViaResend(
 }
 
 const handler = async (req: Request): Promise<Response> => {
-  const corsHeaders = getCorsHeaders(req);
+  console.log(`[${VERSION}] Request received at ${new Date().toISOString()}`);
   
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
     // Verify authentication - only authenticated users can send emails
     const { userId, error: authError } = await verifyAuth(req);
     if (authError || !userId) {
-      console.error("Authentication failed:", authError);
+      console.error(`[${VERSION}] Authentication failed:`, authError);
       return new Response(
-        JSON.stringify({ success: false, error: "Unauthorized: " + (authError || "Invalid token") }),
+        JSON.stringify({ success: false, error: "Unauthorized: " + (authError || "Invalid token"), _version: VERSION }),
         { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
-    console.log(`Authenticated user: ${userId}`);
+    console.log(`[${VERSION}] Authenticated user: ${userId}`);
 
     const { to, subject, htmlContent, textContent, senderName, senderEmail }: EmailRequest = await req.json();
 
@@ -284,9 +276,9 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Invalid email format");
     }
 
-    console.log(`=== Email Request ===`);
-    console.log(`To: ${to}`);
-    console.log(`Subject: ${subject}`);
+    console.log(`[${VERSION}] === Email Request ===`);
+    console.log(`[${VERSION}] To: ${to}`);
+    console.log(`[${VERSION}] Subject: ${subject}`);
 
     // Try methods in order of preference:
     // 1. User-configured API key from database
@@ -298,7 +290,7 @@ const handler = async (req: Request): Promise<Response> => {
     // 1. Try user-configured settings first
     const emailSettings = await getEmailSettings();
     if (emailSettings) {
-      console.log("Attempting to send via user-configured API key...");
+      console.log(`[${VERSION}] Attempting to send via user-configured API key...`);
       const result = await sendViaBrevo(
         emailSettings.api_key,
         to,
@@ -310,17 +302,18 @@ const handler = async (req: Request): Promise<Response> => {
       );
       
       if (result.success) {
-        console.log("Email sent successfully via user settings");
+        console.log(`[${VERSION}] Email sent successfully via user settings`);
         return new Response(JSON.stringify({ 
           success: true, 
           messageId: result.messageId, 
-          provider: "brevo-configured" 
+          provider: "brevo-configured",
+          _version: VERSION
         }), {
           status: 200,
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
       } else {
-        console.error("User-configured API key failed:", result.error);
+        console.error(`[${VERSION}] User-configured API key failed:`, result.error);
         errors.push(`Configured API: ${result.error}`);
       }
     }
@@ -328,21 +321,22 @@ const handler = async (req: Request): Promise<Response> => {
     // 2. Try BREVO_API_KEY environment secret
     const brevoApiKey = Deno.env.get("BREVO_API_KEY");
     if (brevoApiKey) {
-      console.log("Attempting to send via BREVO_API_KEY secret...");
+      console.log(`[${VERSION}] Attempting to send via BREVO_API_KEY secret...`);
       const result = await sendViaBrevo(brevoApiKey, to, subject, htmlContent, textContent, senderName, senderEmail);
       
       if (result.success) {
-        console.log("Email sent successfully via BREVO_API_KEY");
+        console.log(`[${VERSION}] Email sent successfully via BREVO_API_KEY`);
         return new Response(JSON.stringify({ 
           success: true, 
           messageId: result.messageId, 
-          provider: "brevo" 
+          provider: "brevo",
+          _version: VERSION
         }), {
           status: 200,
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
       } else {
-        console.error("BREVO_API_KEY failed:", result.error);
+        console.error(`[${VERSION}] BREVO_API_KEY failed:`, result.error);
         errors.push(`BREVO_API_KEY: ${result.error}`);
       }
     }
@@ -350,21 +344,22 @@ const handler = async (req: Request): Promise<Response> => {
     // 3. Try RESEND_API_KEY environment secret
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     if (resendApiKey) {
-      console.log("Attempting to send via RESEND_API_KEY secret...");
+      console.log(`[${VERSION}] Attempting to send via RESEND_API_KEY secret...`);
       const result = await sendViaResend(resendApiKey, to, subject, htmlContent, textContent, senderName, senderEmail);
       
       if (result.success) {
-        console.log("Email sent successfully via RESEND_API_KEY");
+        console.log(`[${VERSION}] Email sent successfully via RESEND_API_KEY`);
         return new Response(JSON.stringify({ 
           success: true, 
           messageId: result.messageId, 
-          provider: "resend" 
+          provider: "resend",
+          _version: VERSION
         }), {
           status: 200,
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
       } else {
-        console.error("RESEND_API_KEY failed:", result.error);
+        console.error(`[${VERSION}] RESEND_API_KEY failed:`, result.error);
         errors.push(`RESEND_API_KEY: ${result.error}`);
       }
     }
@@ -379,11 +374,12 @@ const handler = async (req: Request): Promise<Response> => {
       "(starts with xkeysib-). Note: SMTP keys (xsmtpsib-) do not work with the HTTP API."
     );
   } catch (error: unknown) {
-    console.error("Error in send-email-brevo function:", error);
+    console.error(`[${VERSION}] Error in send-email-brevo function:`, error);
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error" 
+        error: error instanceof Error ? error.message : "Unknown error",
+        _version: VERSION
       }),
       {
         status: 500,
