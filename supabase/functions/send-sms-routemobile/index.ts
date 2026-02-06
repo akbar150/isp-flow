@@ -192,13 +192,23 @@ serve(async (req) => {
     console.log("[send-sms-routemobile] API URL (without password):", 
       fullUrl.replace(password, "****"));
 
-    // Send the SMS request
-    const response = await fetch(fullUrl, {
-      method: "GET",
-      headers: {
-        "Accept": "text/plain",
-      },
-    });
+    // Send the SMS request - try GET first, some endpoints prefer POST
+    let response: Response;
+    try {
+      response = await fetch(fullUrl, {
+        method: "GET",
+      });
+    } catch (fetchError) {
+      console.error("[send-sms-routemobile] GET request failed, trying POST:", fetchError);
+      // Fallback to POST with form data
+      response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: params.toString(),
+      });
+    }
 
     const responseText = await response.text();
     console.log("[send-sms-routemobile] API Response:", responseText);
