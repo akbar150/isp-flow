@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.generate-billing]
 verify_jwt = false
+
+[functions.send-sms-routemobile]
+verify_jwt = false
