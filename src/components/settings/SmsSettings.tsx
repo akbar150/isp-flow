@@ -16,6 +16,7 @@ export function SmsSettings() {
 
   const [settings, setSettings] = useState({
     sms_enabled: false,
+    routemobile_api_url: "https://smsplus.routemobile.com:8080/bulksms/bulksms",
     routemobile_username: "",
     routemobile_password: "",
     routemobile_sender_id: "",
@@ -40,6 +41,7 @@ export function SmsSettings() {
         });
         setSettings({
           sms_enabled: settingsMap.sms_enabled === "true",
+          routemobile_api_url: settingsMap.routemobile_api_url || "https://smsplus.routemobile.com:8080/bulksms/bulksms",
           routemobile_username: settingsMap.routemobile_username || "",
           routemobile_password: settingsMap.routemobile_password || "",
           routemobile_sender_id: settingsMap.routemobile_sender_id || "",
@@ -60,6 +62,7 @@ export function SmsSettings() {
     try {
       const updates = [
         { key: "sms_enabled", value: JSON.stringify(settings.sms_enabled) },
+        { key: "routemobile_api_url", value: JSON.stringify(settings.routemobile_api_url) },
         { key: "routemobile_username", value: JSON.stringify(settings.routemobile_username) },
         { key: "routemobile_password", value: JSON.stringify(settings.routemobile_password) },
         { key: "routemobile_sender_id", value: JSON.stringify(settings.routemobile_sender_id) },
@@ -168,6 +171,20 @@ export function SmsSettings() {
                 setSettings({ ...settings, sms_enabled: checked })
               }
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label>API URL (Server Address)</Label>
+            <Input
+              value={settings.routemobile_api_url}
+              onChange={(e) =>
+                setSettings({ ...settings, routemobile_api_url: e.target.value })
+              }
+              placeholder="http://<server>:8080/bulksms/bulksms"
+            />
+            <p className="text-xs text-muted-foreground">
+              RouteMobile থেকে প্রাপ্ত সার্ভার URL। যেমন: http://203.92.42.14:8080/bulksms/bulksms
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

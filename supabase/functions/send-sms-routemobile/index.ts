@@ -7,8 +7,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// RouteMobile API Configuration
-const ROUTEMOBILE_API_URL = "https://smsplus.routemobile.com/bulksms/bulksms";
+// RouteMobile API Configuration - URL is now fetched from system_settings
 
 // Error code mapping from RouteMobile API documentation
 const ERROR_CODES: Record<string, string> = {
@@ -90,6 +89,7 @@ serve(async (req) => {
       .select("key, value")
       .in("key", [
         "sms_enabled",
+        "routemobile_api_url",
         "routemobile_username",
         "routemobile_password",
         "routemobile_sender_id",
@@ -124,10 +124,22 @@ serve(async (req) => {
     }
 
     // Validate required settings
+    const apiUrl = settingsMap.routemobile_api_url || "";
     const username = settingsMap.routemobile_username;
     const password = settingsMap.routemobile_password;
     const senderId = settingsMap.routemobile_sender_id;
     const route = settingsMap.routemobile_route || "1";
+
+    if (!apiUrl) {
+      console.error("[send-sms-routemobile] Missing API URL");
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: "RouteMobile API URL not configured. Please set the server address in SMS settings (e.g., http://203.92.42.14:8080/bulksms/bulksms)." 
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (!username || !password || !senderId) {
       console.error("[send-sms-routemobile] Missing RouteMobile credentials");
@@ -140,7 +152,7 @@ serve(async (req) => {
       );
     }
 
-    console.log("[send-sms-routemobile] Username:", username, "Sender ID:", senderId, "Route:", route);
+    console.log("[send-sms-routemobile] API URL:", apiUrl, "Username:", username, "Sender ID:", senderId, "Route:", route);
 
     // Format phone number for Bangladesh
     let formattedPhone = phone.replace(/[^0-9+]/g, "");
@@ -174,14 +186,14 @@ serve(async (req) => {
       message: message,
     });
 
-    const apiUrl = `${ROUTEMOBILE_API_URL}?${params.toString()}`;
+    const fullUrl = `${apiUrl}?${params.toString()}`;
     
     console.log("[send-sms-routemobile] Sending SMS via RouteMobile...");
     console.log("[send-sms-routemobile] API URL (without password):", 
-      apiUrl.replace(password, "****"));
+      fullUrl.replace(password, "****"));
 
     // Send the SMS request
-    const response = await fetch(apiUrl, {
+    const response = await fetch(fullUrl, {
       method: "GET",
       headers: {
         "Accept": "text/plain",
