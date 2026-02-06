@@ -95,8 +95,9 @@ export default function Reminders() {
     const threeDaysOverdue: Customer[] = [];
 
     customers.forEach(customer => {
-      // Skip suspended customers
+      // Skip suspended customers and customers with no dues
       if (customer.status === 'suspended') return;
+      if (customer.total_due <= 0) return;
       
       const expiry = startOfDay(new Date(customer.expiry_date));
       const daysDiff = differenceInDays(expiry, today);
