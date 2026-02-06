@@ -16,7 +16,7 @@ export function SmsSettings() {
 
   const [settings, setSettings] = useState({
     sms_enabled: false,
-    routemobile_api_url: "https://smsplus.routemobile.com:8080/bulksms/bulksms",
+    routemobile_api_url: "https://apibd.rmlconnect.net:8443/bulksms/personalizedbulksms",
     routemobile_username: "",
     routemobile_password: "",
     routemobile_sender_id: "",
@@ -41,7 +41,7 @@ export function SmsSettings() {
         });
         setSettings({
           sms_enabled: settingsMap.sms_enabled === "true",
-          routemobile_api_url: settingsMap.routemobile_api_url || "https://smsplus.routemobile.com:8080/bulksms/bulksms",
+          routemobile_api_url: settingsMap.routemobile_api_url || "https://apibd.rmlconnect.net:8443/bulksms/personalizedbulksms",
           routemobile_username: settingsMap.routemobile_username || "",
           routemobile_password: settingsMap.routemobile_password || "",
           routemobile_sender_id: settingsMap.routemobile_sender_id || "",
