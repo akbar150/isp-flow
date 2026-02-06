@@ -5,6 +5,7 @@ import { EmailButton } from "@/components/EmailButton";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { QuickPaymentRecord } from "@/components/QuickPaymentRecord";
 import { CallCustomerButton } from "@/components/CallCustomerButton";
+import { SmsReminderButton } from "@/components/SmsReminderButton";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -209,6 +210,20 @@ export default function Reminders() {
                             amount={customer.packages?.monthly_price || customer.total_due}
                             variant="dropdown"
                             pppoeUsername={pppoeUsername}
+                          />
+                          
+                          {/* SMS Reminder */}
+                          <SmsReminderButton
+                            phone={customer.phone}
+                            customerName={customer.full_name}
+                            userId={customer.user_id}
+                            packageName={customer.packages?.name || 'Internet'}
+                            expiryDate={new Date(customer.expiry_date)}
+                            amount={customer.packages?.monthly_price || customer.total_due}
+                            customerId={customer.id}
+                            variant="dropdown"
+                            pppoeUsername={pppoeUsername}
+                            onSuccess={fetchData}
                           />
                           
                           {/* Quick Payment */}
