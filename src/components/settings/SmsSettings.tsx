@@ -97,17 +97,44 @@ export function SmsSettings() {
       return;
     }
 
+    // First save the settings
+    await saveSettings();
+
     setTesting(true);
     try {
-      // This would call an edge function to send test SMS
-      toast({
-        title: "Test SMS queued",
-        description: `Test message will be sent to ${testPhone}`,
+      const testMessage = settings.sms_template
+        .replace("{CustomerName}", "Test User")
+        .replace("{PackageName}", "10 Mbps")
+        .replace("{ExpiryDate}", new Date().toLocaleDateString())
+        .replace("{Amount}", "500")
+        .replace("{ISPName}", "EasyLink BD")
+        .replace("{PPPoEUsername}", "test001");
+
+      const { data, error } = await supabase.functions.invoke("send-sms-routemobile", {
+        body: {
+          phone: testPhone,
+          message: testMessage,
+          type: "unicode", // Use unicode for Bangla
+        },
       });
+
+      if (error) {
+        throw new Error(error.message || "Failed to send SMS");
+      }
+
+      if (data?.success) {
+        toast({
+          title: "Test SMS Sent!",
+          description: `Message sent to ${testPhone}. Message ID: ${data.messageId || "N/A"}`,
+        });
+      } else {
+        throw new Error(data?.error || "SMS sending failed");
+      }
     } catch (error) {
+      console.error("SMS Test Error:", error);
       toast({
-        title: "Error",
-        description: "Failed to send test SMS",
+        title: "SMS Test Failed",
+        description: error instanceof Error ? error.message : "Failed to send test SMS",
         variant: "destructive",
       });
     } finally {
