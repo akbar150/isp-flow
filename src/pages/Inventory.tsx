@@ -12,7 +12,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -33,6 +32,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { exportToCSV, exportToPDF } from "@/lib/exportUtils";
 import { 
   Plus, 
   Search, 
@@ -52,8 +52,14 @@ import {
   TrendingDown,
   DollarSign,
   CheckCircle,
+  Download,
+  FileText,
+  RotateCcw,
+  Shield,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 
 interface ProductCategory {
   id: string;
@@ -134,6 +140,18 @@ const statusColors: Record<string, string> = {
 
 const cableColors = ["Blue", "Orange", "Green", "Brown", "White", "Yellow", "Red", "Black"];
 
+const PAGE_SIZE = 25;
+
+// Warranty helper
+function getWarrantyInfo(warrantyEndDate: string | null) {
+  if (!warrantyEndDate) return { label: "N/A", color: "" };
+  const daysLeft = differenceInDays(new Date(warrantyEndDate), new Date());
+  if (daysLeft < 0) return { label: "Expired", color: "text-red-600 bg-red-50 dark:bg-red-900/20" };
+  if (daysLeft <= 30) return { label: `${daysLeft}d left`, color: "text-red-600 bg-red-50 dark:bg-red-900/20" };
+  if (daysLeft <= 90) return { label: `${daysLeft}d left`, color: "text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20" };
+  return { label: format(new Date(warrantyEndDate), "dd MMM yyyy"), color: "text-green-600 bg-green-50 dark:bg-green-900/20" };
+}
+
 export default function Inventory() {
   const { toast } = useToast();
   const { isSuperAdmin } = useAuth();
@@ -152,6 +170,19 @@ export default function Inventory() {
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [viewingCustomer, setViewingCustomer] = useState<{ id: string; full_name: string; phone: string } | null>(null);
   
+  // New: Status filter + pagination
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // New: Bulk selection
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [bulkActionSaving, setBulkActionSaving] = useState(false);
+
+  // New: Return workflow
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [returningItem, setReturningItem] = useState<InventoryItem | null>(null);
+  const [returnForm, setReturnForm] = useState({ condition: "good", notes: "" });
+
   // Dialog states
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
@@ -198,7 +229,7 @@ export default function Inventory() {
     core_count: 0,
     cable_color: "",
     cable_length_m: 0,
-    metered_quantity: 0, // for metered products (meters to add)
+    metered_quantity: 0,
   });
   const [supplierForm, setSupplierForm] = useState({
     name: "",
@@ -253,6 +284,11 @@ export default function Inventory() {
   const getItemCustomer = (itemId: string) => {
     const assignment = assetAssignments.find(a => a.inventory_item_id === itemId && !a.returned_date);
     return assignment?.customers || null;
+  };
+
+  // Get assignment for an item
+  const getItemAssignment = (itemId: string) => {
+    return assetAssignments.find(a => a.inventory_item_id === itemId && !a.returned_date) || null;
   };
 
   // Calculate actual available stock per product
@@ -387,7 +423,7 @@ export default function Inventory() {
     }
   };
 
-  // Inventory item handlers - BULK ADD (handles both metered and discrete products)
+  // Inventory item handlers
   const handleSaveItem = async () => {
     setSaving(true);
     try {
@@ -400,19 +436,15 @@ export default function Inventory() {
       const unit = category?.unit_of_measure || "meter";
 
       if (isMetered) {
-        // METERED PRODUCT: Update metered_quantity directly on products table
         if (itemForm.metered_quantity <= 0) throw new Error(`Please enter quantity in ${unit}s`);
-
         const currentQty = product?.metered_quantity || 0;
         const { error } = await supabase
           .from("products")
           .update({ metered_quantity: currentQty + itemForm.metered_quantity })
           .eq("id", itemForm.product_id);
-
         if (error) throw error;
         toast({ title: "Success", description: `Added ${itemForm.metered_quantity} ${unit}(s) to stock` });
       } else {
-        // DISCRETE PRODUCT: Create individual inventory_items
         if (requiresSerial) {
           const emptySerials = itemForm.serial_numbers.filter(s => !s.trim());
           if (emptySerials.length > 0) throw new Error(`Please enter all ${itemForm.quantity} serial numbers`);
@@ -462,7 +494,6 @@ export default function Inventory() {
           const { error } = await supabase.from("inventory_items").insert(items);
           if (error) throw error;
 
-          // Update product stock quantity
           if (product) {
             await supabase.from("products").update({ stock_quantity: product.stock_quantity + itemForm.quantity }).eq("id", product.id);
           }
@@ -485,13 +516,11 @@ export default function Inventory() {
   const handleDeleteItem = async (id: string) => {
     if (!confirm("Delete this inventory item?")) return;
     try {
-      // Get item to find product
       const item = inventoryItems.find(i => i.id === id);
       
       const { error } = await supabase.from("inventory_items").delete().eq("id", id);
       if (error) throw error;
       
-      // Update product stock if item was in_stock
       if (item && item.status === 'in_stock') {
         const product = products.find(p => p.id === item.product_id);
         if (product) {
@@ -516,7 +545,6 @@ export default function Inventory() {
       const item = inventoryItems.find(i => i.id === sellForm.item_id);
       if (!item) throw new Error("Item not found");
 
-      // Update item status to sold
       const { error: itemError } = await supabase
         .from("inventory_items")
         .update({ status: 'sold' })
@@ -524,7 +552,6 @@ export default function Inventory() {
       
       if (itemError) throw itemError;
 
-      // Update product stock quantity
       const product = products.find(p => p.id === item.product_id);
       if (product) {
         await supabase
@@ -533,7 +560,6 @@ export default function Inventory() {
           .eq("id", product.id);
       }
 
-      // Record sale transaction
       const profit = sellForm.selling_price - (item.purchase_price || product?.purchase_price || 0);
       await supabase.from("transactions").insert({
         type: 'income',
@@ -556,6 +582,133 @@ export default function Inventory() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ========== RETURN WORKFLOW ==========
+  const handleReturnItem = async () => {
+    if (!returningItem) return;
+    setSaving(true);
+    try {
+      const assignment = getItemAssignment(returningItem.id);
+      if (!assignment) throw new Error("No active assignment found for this item");
+
+      const newStatus = returnForm.condition === "damaged" ? "damaged" : "in_stock";
+
+      // Update asset_assignments
+      await supabase
+        .from("asset_assignments")
+        .update({
+          returned_date: format(new Date(), "yyyy-MM-dd"),
+          condition_on_return: returnForm.condition,
+        })
+        .eq("id", assignment.id);
+
+      // Update inventory_items status
+      await supabase
+        .from("inventory_items")
+        .update({ status: newStatus })
+        .eq("id", returningItem.id);
+
+      // Update product stock if re-stocked
+      if (newStatus === "in_stock") {
+        const product = products.find(p => p.id === returningItem.product_id);
+        if (product) {
+          await supabase.from("products").update({ stock_quantity: product.stock_quantity + 1 }).eq("id", product.id);
+        }
+      }
+
+      // Log stock movement
+      await supabase.from("stock_movements").insert({
+        inventory_item_id: returningItem.id,
+        from_status: "assigned",
+        to_status: newStatus,
+        movement_type: "returned",
+        notes: `Returned in ${returnForm.condition} condition. ${returnForm.notes}`.trim(),
+      });
+
+      const customer = getItemCustomer(returningItem.id);
+      toast({
+        title: "Item Returned",
+        description: `${returningItem.products?.name} returned from ${customer?.full_name || "customer"} in ${returnForm.condition} condition → ${newStatus === "in_stock" ? "Re-stocked" : "Marked damaged"}`,
+      });
+
+      setReturnDialogOpen(false);
+      setReturningItem(null);
+      setReturnForm({ condition: "good", notes: "" });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ========== BULK STATUS UPDATES ==========
+  const handleBulkStatusChange = async (newStatus: string) => {
+    if (selectedItems.size === 0) return;
+    if (!confirm(`Change status of ${selectedItems.size} item(s) to "${newStatus.replace("_", " ")}"?`)) return;
+    
+    setBulkActionSaving(true);
+    try {
+      const ids = Array.from(selectedItems);
+      
+      // Update all selected items
+      const { error } = await supabase
+        .from("inventory_items")
+        .update({ status: newStatus as "in_stock" | "assigned" | "returned" | "damaged" | "sold" })
+        .in("id", ids);
+      
+      if (error) throw error;
+
+      // Log stock movements for each
+      const movements = ids.map(id => {
+        const item = inventoryItems.find(i => i.id === id);
+        return {
+          inventory_item_id: id,
+          from_status: item?.status || "unknown",
+          to_status: newStatus,
+          movement_type: "status_change",
+          notes: "Bulk status update",
+        };
+      });
+      await supabase.from("stock_movements").insert(movements);
+
+      toast({
+        title: "Bulk Update Complete",
+        description: `${ids.length} item(s) changed to "${newStatus.replace("_", " ")}"`,
+      });
+
+      setSelectedItems(new Set());
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setBulkActionSaving(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedItems.size === 0) return;
+    if (!confirm(`Are you sure you want to DELETE ${selectedItems.size} item(s)? This cannot be undone.`)) return;
+    
+    setBulkActionSaving(true);
+    try {
+      const ids = Array.from(selectedItems);
+      const { error } = await supabase.from("inventory_items").delete().in("id", ids);
+      if (error) throw error;
+
+      toast({
+        title: "Bulk Delete Complete",
+        description: `${ids.length} item(s) deleted`,
+      });
+
+      setSelectedItems(new Set());
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setBulkActionSaving(false);
     }
   };
 
@@ -603,6 +756,72 @@ export default function Inventory() {
     }
   };
 
+  // ========== EXPORT HANDLERS ==========
+  const handleExportProducts = (type: "csv" | "pdf") => {
+    const headers = [
+      { key: "name", label: "Product Name" },
+      { key: "category", label: "Category" },
+      { key: "brand", label: "Brand" },
+      { key: "model", label: "Model" },
+      { key: "purchase_price", label: "Purchase Price" },
+      { key: "selling_price", label: "Selling Price" },
+      { key: "stock", label: "Stock" },
+    ];
+    const data = products.map(p => ({
+      name: p.name,
+      category: p.product_categories?.name || "N/A",
+      brand: p.brand || "",
+      model: p.model || "",
+      purchase_price: `৳${p.purchase_price}`,
+      selling_price: `৳${p.selling_price}`,
+      stock: p.product_categories?.is_metered ? `${p.metered_quantity || 0} ${p.product_categories.unit_of_measure || "unit"}` : String(getProductStock(p.id).inStock),
+    }));
+    if (type === "csv") exportToCSV(data, headers, "inventory-products");
+    else exportToPDF(data, headers, "Inventory Products", "inventory-products");
+  };
+
+  const handleExportStockItems = (type: "csv" | "pdf") => {
+    const headers = [
+      { key: "product", label: "Product" },
+      { key: "serial", label: "Serial" },
+      { key: "mac", label: "MAC" },
+      { key: "supplier", label: "Supplier" },
+      { key: "status", label: "Status" },
+      { key: "price", label: "Purchase Price" },
+      { key: "warranty", label: "Warranty End" },
+    ];
+    const data = getFilteredStockItems().map(i => ({
+      product: i.products?.name || "N/A",
+      serial: i.serial_number || "-",
+      mac: i.mac_address || "-",
+      supplier: i.suppliers?.name || "-",
+      status: i.status.replace("_", " "),
+      price: `৳${i.purchase_price || i.products?.purchase_price || 0}`,
+      warranty: i.warranty_end_date ? format(new Date(i.warranty_end_date), "dd MMM yyyy") : "-",
+    }));
+    if (type === "csv") exportToCSV(data, headers, "stock-items");
+    else exportToPDF(data, headers, "Stock Items", "stock-items");
+  };
+
+  const handleExportSuppliers = (type: "csv" | "pdf") => {
+    const headers = [
+      { key: "name", label: "Name" },
+      { key: "contact", label: "Contact Person" },
+      { key: "phone", label: "Phone" },
+      { key: "email", label: "Email" },
+      { key: "address", label: "Address" },
+    ];
+    const data = suppliers.map(s => ({
+      name: s.name,
+      contact: s.contact_person || "",
+      phone: s.phone || "",
+      email: s.email || "",
+      address: s.address || "",
+    }));
+    if (type === "csv") exportToCSV(data, headers, "suppliers");
+    else exportToPDF(data, headers, "Suppliers", "suppliers");
+  };
+
   // Calculate summary stats
   const totalProducts = products.length;
   const totalItems = inventoryItems.length;
@@ -617,12 +836,83 @@ export default function Inventory() {
     .filter(i => i.status === 'in_stock')
     .reduce((sum, i) => sum + (i.purchase_price || i.products?.purchase_price || 0), 0);
 
+  // Warranty expiring soon count
+  const warrantyExpiringSoon = inventoryItems.filter(i => {
+    if (!i.warranty_end_date || i.status === 'sold') return false;
+    const daysLeft = differenceInDays(new Date(i.warranty_end_date), new Date());
+    return daysLeft >= 0 && daysLeft <= 30;
+  });
+
   // Filtered products for display
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.product_categories?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // ========== FILTERED STOCK ITEMS (with status filter + search + warranty filter) ==========
+  const getFilteredStockItems = () => {
+    return inventoryItems.filter((item) => {
+      // Status filter
+      if (statusFilter === "expiring_soon") {
+        if (!item.warranty_end_date) return false;
+        const daysLeft = differenceInDays(new Date(item.warranty_end_date), new Date());
+        if (daysLeft < 0 || daysLeft > 30) return false;
+      } else if (statusFilter !== "all") {
+        if (item.status !== statusFilter) return false;
+      }
+
+      // Search filter
+      if (!stockSearchTerm) return true;
+      const search = stockSearchTerm.toLowerCase();
+      
+      if (stockSearchFilter === "serial") {
+        return (item.serial_number?.toLowerCase().includes(search) || 
+                item.mac_address?.toLowerCase().includes(search));
+      }
+      if (stockSearchFilter === "supplier") {
+        return item.suppliers?.name?.toLowerCase().includes(search);
+      }
+      if (stockSearchFilter === "product") {
+        return item.products?.name?.toLowerCase().includes(search);
+      }
+      return (
+        item.serial_number?.toLowerCase().includes(search) ||
+        item.mac_address?.toLowerCase().includes(search) ||
+        item.suppliers?.name?.toLowerCase().includes(search) ||
+        item.products?.name?.toLowerCase().includes(search) ||
+        item.products?.brand?.toLowerCase().includes(search)
+      );
+    });
+  };
+
+  const filteredStockItems = getFilteredStockItems();
+  const totalPages = Math.max(1, Math.ceil(filteredStockItems.length / PAGE_SIZE));
+  const paginatedItems = filteredStockItems.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedItems(new Set());
+  }, [statusFilter, stockSearchTerm, stockSearchFilter]);
+
+  // Toggle selection
+  const toggleItemSelection = (id: string) => {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedItems.size === paginatedItems.length) {
+      setSelectedItems(new Set());
+    } else {
+      setSelectedItems(new Set(paginatedItems.map(i => i.id)));
+    }
+  };
 
   if (loading) {
     return (
@@ -647,7 +937,7 @@ export default function Inventory() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground text-sm">
@@ -702,15 +992,35 @@ export default function Inventory() {
             <p className="text-2xl font-bold mt-1">{lowStockProducts.length}</p>
           </CardContent>
         </Card>
+        <Card className={warrantyExpiringSoon.length > 0 ? "border-orange-500 bg-orange-50 dark:bg-orange-900/20" : ""}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-orange-600 text-sm">
+              <Shield className="h-4 w-4" />
+              Warranty Alert
+            </div>
+            <p className="text-2xl font-bold mt-1">{warrantyExpiringSoon.length}</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Low Stock Alert */}
       {lowStockProducts.length > 0 && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-4">
           <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
             <AlertTriangle className="h-5 w-5" />
             <span className="font-medium">Low Stock Alert:</span>
             <span>{lowStockProducts.map(p => `${p.name} (${getProductStock(p.id).inStock} left)`).join(", ")}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Warranty Expiry Alert */}
+      {warrantyExpiringSoon.length > 0 && (
+        <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4 mb-6">
+          <div className="flex items-center gap-2 text-orange-800 dark:text-orange-200">
+            <Shield className="h-5 w-5" />
+            <span className="font-medium">Warranty Expiring Soon ({warrantyExpiringSoon.length} items):</span>
+            <span className="text-sm">{warrantyExpiringSoon.slice(0, 5).map(i => `${i.products?.name} (${i.serial_number || i.id.slice(0, 8)})`).join(", ")}{warrantyExpiringSoon.length > 5 ? ` +${warrantyExpiringSoon.length - 5} more` : ""}</span>
           </div>
         </div>
       )}
@@ -731,7 +1041,7 @@ export default function Inventory() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Products Tab - REDESIGNED */}
+        {/* Products Tab */}
         <TabsContent value="products" className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-4 justify-between">
             <div className="relative flex-1 max-w-sm">
@@ -743,15 +1053,32 @@ export default function Inventory() {
                 className="pl-10"
               />
             </div>
-            {canManage && (
-              <Button onClick={() => {
-                setEditingProduct(null);
-                setProductForm({ category_id: "", name: "", brand: "", model: "", description: "", purchase_price: 0, selling_price: 0, min_stock_level: 0 });
-                setProductDialogOpen(true);
-              }}>
-                <Plus className="h-4 w-4 mr-2" /> Add Product
-              </Button>
-            )}
+            <div className="flex gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Download className="h-4 w-4 mr-2" /> Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => handleExportProducts("csv")}>
+                    <FileText className="h-4 w-4 mr-2" /> Export CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExportProducts("pdf")}>
+                    <FileText className="h-4 w-4 mr-2" /> Export PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {canManage && (
+                <Button onClick={() => {
+                  setEditingProduct(null);
+                  setProductForm({ category_id: "", name: "", brand: "", model: "", description: "", purchase_price: 0, selling_price: 0, min_stock_level: 0 });
+                  setProductDialogOpen(true);
+                }}>
+                  <Plus className="h-4 w-4 mr-2" /> Add Product
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -763,7 +1090,7 @@ export default function Inventory() {
               filteredProducts.map((product) => {
                 const stock = getProductStock(product.id);
                 const isMetered = product.product_categories?.is_metered || false;
-                const meteredUnit = product.product_categories?.unit_of_measure || "meter";
+                const mUnit = product.product_categories?.unit_of_measure || "meter";
                 const meteredQty = product.metered_quantity || 0;
                 const isLowStock = isMetered 
                   ? meteredQty <= product.min_stock_level 
@@ -850,28 +1177,27 @@ export default function Inventory() {
                         </Badge>
                         {isMetered && (
                           <Badge variant="secondary" className="bg-primary/10 text-primary">
-                            {meteredUnit}
+                            {mUnit}
                           </Badge>
                         )}
                       </div>
                     </CardHeader>
                     <CardContent>
                       {isMetered ? (
-                        // Metered product display
                         <div className="space-y-3">
                           <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded text-center">
                             <p className="text-xs text-muted-foreground">Available Stock</p>
                             <p className="text-2xl font-bold text-green-600">
-                              {meteredQty.toLocaleString()} {meteredUnit}
+                              {meteredQty.toLocaleString()} {mUnit}
                             </p>
                           </div>
                           <div className="flex justify-between text-sm border-t pt-2">
                             <div>
-                              <p className="text-muted-foreground">Price/{meteredUnit}</p>
+                              <p className="text-muted-foreground">Price/{mUnit}</p>
                               <p className="font-medium">৳{product.selling_price}</p>
                             </div>
                             <div>
-                              <p className="text-muted-foreground">Cost/{meteredUnit}</p>
+                              <p className="text-muted-foreground">Cost/{mUnit}</p>
                               <p className="font-medium">৳{product.purchase_price}</p>
                             </div>
                             <div>
@@ -881,20 +1207,27 @@ export default function Inventory() {
                           </div>
                         </div>
                       ) : (
-                        // Discrete product display
                         <>
-                          <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                            <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded">
-                              <p className="text-xs text-muted-foreground">In Stock</p>
-                              <p className="text-lg font-bold text-green-600">{stock.inStock}</p>
+                          <div className="grid grid-cols-5 gap-1 text-center mb-3">
+                            <div className="p-1">
+                              <p className="text-xs text-muted-foreground">Stock</p>
+                              <p className="font-bold text-green-600">{stock.inStock}</p>
                             </div>
-                            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                            <div className="p-1">
                               <p className="text-xs text-muted-foreground">Assigned</p>
-                              <p className="text-lg font-bold text-blue-600">{stock.assigned}</p>
+                              <p className="font-bold text-blue-600">{stock.assigned}</p>
                             </div>
-                            <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                            <div className="p-1">
                               <p className="text-xs text-muted-foreground">Sold</p>
-                              <p className="text-lg font-bold text-purple-600">{stock.sold}</p>
+                              <p className="font-bold text-purple-600">{stock.sold}</p>
+                            </div>
+                            <div className="p-1">
+                              <p className="text-xs text-muted-foreground">Returned</p>
+                              <p className="font-bold text-yellow-600">{stock.returned}</p>
+                            </div>
+                            <div className="p-1">
+                              <p className="text-xs text-muted-foreground">Damaged</p>
+                              <p className="font-bold text-red-600">{stock.damaged}</p>
                             </div>
                           </div>
                           <div className="flex justify-between text-sm border-t pt-2">
@@ -921,7 +1254,7 @@ export default function Inventory() {
           </div>
         </TabsContent>
 
-        {/* Stock Items Tab */}
+        {/* Stock Items Tab - ENHANCED with status filter, pagination, warranty, bulk */}
         <TabsContent value="items" className="space-y-4">
           <div className="flex flex-col sm:flex-row justify-between gap-4">
             <div className="flex flex-col sm:flex-row gap-2 flex-1">
@@ -945,71 +1278,100 @@ export default function Inventory() {
                   <SelectItem value="product">Product Name</SelectItem>
                 </SelectContent>
               </Select>
+              {/* NEW: Status Filter */}
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-44">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="in_stock">In Stock</SelectItem>
+                  <SelectItem value="assigned">Assigned</SelectItem>
+                  <SelectItem value="returned">Returned</SelectItem>
+                  <SelectItem value="damaged">Damaged</SelectItem>
+                  <SelectItem value="sold">Sold</SelectItem>
+                  <SelectItem value="expiring_soon">⚠ Warranty Expiring</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            {canManage && (
-              <Button onClick={() => {
-                setEditingItem(null);
-                setItemForm({ product_id: "", supplier_id: "", quantity: 1, serial_numbers: [""], mac_addresses: [""], purchase_date: "", purchase_price: 0, warranty_end_date: "", notes: "", core_count: 0, cable_color: "", cable_length_m: 0, metered_quantity: 0 });
-                setItemDialogOpen(true);
-              }}>
-                <Plus className="h-4 w-4 mr-2" /> Add Stock
-              </Button>
-            )}
+            <div className="flex gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Download className="h-4 w-4 mr-2" /> Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => handleExportStockItems("csv")}>
+                    <FileText className="h-4 w-4 mr-2" /> Export CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExportStockItems("pdf")}>
+                    <FileText className="h-4 w-4 mr-2" /> Export PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {canManage && (
+                <Button onClick={() => {
+                  setEditingItem(null);
+                  setItemForm({ product_id: "", supplier_id: "", quantity: 1, serial_numbers: [""], mac_addresses: [""], purchase_date: "", purchase_price: 0, warranty_end_date: "", notes: "", core_count: 0, cable_color: "", cable_length_m: 0, metered_quantity: 0 });
+                  setItemDialogOpen(true);
+                }}>
+                  <Plus className="h-4 w-4 mr-2" /> Add Stock
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Results count */}
+          <div className="text-sm text-muted-foreground">
+            Showing {paginatedItems.length} of {filteredStockItems.length} items
+            {statusFilter !== "all" && ` (filtered: ${statusFilter.replace("_", " ")})`}
           </div>
 
           <div className="form-section overflow-x-auto">
             <table className="data-table">
               <thead>
                 <tr>
+                  {/* Bulk select checkbox */}
+                  {canManage && (
+                    <th className="w-10">
+                      <Checkbox
+                        checked={paginatedItems.length > 0 && selectedItems.size === paginatedItems.length}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </th>
+                  )}
                   <th>Product</th>
                   <th>Serial / MAC</th>
                   <th>Supplier</th>
                   <th>Status</th>
                   <th>Purchase Price</th>
+                  <th>Warranty</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {(() => {
-                  const filteredItems = inventoryItems.filter((item) => {
-                    if (!stockSearchTerm) return true;
-                    const search = stockSearchTerm.toLowerCase();
-                    
-                    if (stockSearchFilter === "serial") {
-                      return (item.serial_number?.toLowerCase().includes(search) || 
-                              item.mac_address?.toLowerCase().includes(search));
-                    }
-                    if (stockSearchFilter === "supplier") {
-                      return item.suppliers?.name?.toLowerCase().includes(search);
-                    }
-                    if (stockSearchFilter === "product") {
-                      return item.products?.name?.toLowerCase().includes(search);
-                    }
-                    // all fields
-                    return (
-                      item.serial_number?.toLowerCase().includes(search) ||
-                      item.mac_address?.toLowerCase().includes(search) ||
-                      item.suppliers?.name?.toLowerCase().includes(search) ||
-                      item.products?.name?.toLowerCase().includes(search) ||
-                      item.products?.brand?.toLowerCase().includes(search)
-                    );
-                  });
-
-                  if (filteredItems.length === 0) {
-                    return (
-                      <tr>
-                        <td colSpan={6} className="text-center py-8 text-muted-foreground">
-                          {stockSearchTerm ? "No items match your search" : "No stock items found"}
-                        </td>
-                      </tr>
-                    );
-                  }
-
-                  return filteredItems.slice(0, 100).map((item) => {
+                {paginatedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={canManage ? 8 : 7} className="text-center py-8 text-muted-foreground">
+                      {stockSearchTerm || statusFilter !== "all" ? "No items match your filters" : "No stock items found"}
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedItems.map((item) => {
                     const customer = getItemCustomer(item.id);
+                    const warranty = getWarrantyInfo(item.warranty_end_date);
                     
                     return (
-                      <tr key={item.id}>
+                      <tr key={item.id} className={selectedItems.has(item.id) ? "bg-primary/5" : ""}>
+                        {canManage && (
+                          <td>
+                            <Checkbox
+                              checked={selectedItems.has(item.id)}
+                              onCheckedChange={() => toggleItemSelection(item.id)}
+                            />
+                          </td>
+                        )}
                         <td>
                           <div className="font-medium">{item.products?.name || "N/A"}</div>
                           <div className="text-xs text-muted-foreground">{item.products?.brand}</div>
@@ -1039,52 +1401,149 @@ export default function Inventory() {
                           )}
                         </td>
                         <td>৳{item.purchase_price || item.products?.purchase_price || 0}</td>
-                      <td>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {canEdit && item.status === 'in_stock' && (
-                              <DropdownMenuItem onClick={() => {
-                                setEditingItem(item);
-                                setItemForm({
-                                  product_id: item.product_id,
-                                  supplier_id: item.supplier_id || "",
-                                  quantity: 1,
-                                  serial_numbers: [item.serial_number || ""],
-                                  mac_addresses: [item.mac_address || ""],
-                                  purchase_date: item.purchase_date || "",
-                                  purchase_price: item.purchase_price || 0,
-                                  warranty_end_date: item.warranty_end_date || "",
-                                  notes: item.notes || "",
-                                  core_count: item.core_count || 0,
-                                  cable_color: item.cable_color || "",
-                                  cable_length_m: item.cable_length_m || 0,
-                                  metered_quantity: 0,
-                                });
-                                setItemDialogOpen(true);
-                              }}>
-                                <Pencil className="h-4 w-4 mr-2" /> Edit
-                              </DropdownMenuItem>
-                            )}
-                            {canRemove && (
-                              <DropdownMenuItem onClick={() => handleDeleteItem(item.id)} className="text-destructive">
-                                <Trash2 className="h-4 w-4 mr-2" /> Delete
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  );
-                });
-              })()}
+                        <td>
+                          {warranty.label !== "N/A" ? (
+                            <span className={cn("text-xs px-2 py-1 rounded", warranty.color)}>
+                              {warranty.label}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                        </td>
+                        <td>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {/* Return action for assigned items */}
+                              {canEdit && item.status === 'assigned' && (
+                                <DropdownMenuItem onClick={() => {
+                                  setReturningItem(item);
+                                  setReturnForm({ condition: "good", notes: "" });
+                                  setReturnDialogOpen(true);
+                                }}>
+                                  <RotateCcw className="h-4 w-4 mr-2" /> Return Item
+                                </DropdownMenuItem>
+                              )}
+                              {canEdit && item.status === 'in_stock' && (
+                                <DropdownMenuItem onClick={() => {
+                                  setEditingItem(item);
+                                  setItemForm({
+                                    product_id: item.product_id,
+                                    supplier_id: item.supplier_id || "",
+                                    quantity: 1,
+                                    serial_numbers: [item.serial_number || ""],
+                                    mac_addresses: [item.mac_address || ""],
+                                    purchase_date: item.purchase_date || "",
+                                    purchase_price: item.purchase_price || 0,
+                                    warranty_end_date: item.warranty_end_date || "",
+                                    notes: item.notes || "",
+                                    core_count: item.core_count || 0,
+                                    cable_color: item.cable_color || "",
+                                    cable_length_m: item.cable_length_m || 0,
+                                    metered_quantity: 0,
+                                  });
+                                  setItemDialogOpen(true);
+                                }}>
+                                  <Pencil className="h-4 w-4 mr-2" /> Edit
+                                </DropdownMenuItem>
+                              )}
+                              {canRemove && (
+                                <DropdownMenuItem onClick={() => handleDeleteItem(item.id)} className="text-destructive">
+                                  <Trash2 className="h-4 w-4 mr-2" /> Delete
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-2">
+              <p className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                </Button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let page: number;
+                  if (totalPages <= 5) {
+                    page = i + 1;
+                  } else if (currentPage <= 3) {
+                    page = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    page = totalPages - 4 + i;
+                  } else {
+                    page = currentPage - 2 + i;
+                  }
+                  return (
+                    <Button
+                      key={page}
+                      variant={currentPage === page ? "default" : "outline"}
+                      size="sm"
+                      className="w-9"
+                      onClick={() => setCurrentPage(page)}
+                    >
+                      {page}
+                    </Button>
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Bulk Action Bar */}
+          {selectedItems.size > 0 && canManage && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-background border-2 border-primary shadow-xl rounded-lg px-6 py-3 flex items-center gap-4">
+              <span className="font-medium text-sm">{selectedItems.size} selected</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" disabled={bulkActionSaving}>
+                    {bulkActionSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Change Status
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => handleBulkStatusChange("in_stock")}>In Stock</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleBulkStatusChange("damaged")}>Damaged</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleBulkStatusChange("returned")}>Returned</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {canRemove && (
+                <Button size="sm" variant="destructive" onClick={handleBulkDelete} disabled={bulkActionSaving}>
+                  <Trash2 className="h-4 w-4 mr-1" /> Delete
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => setSelectedItems(new Set())}>
+                Cancel
+              </Button>
+            </div>
+          )}
         </TabsContent>
 
         {/* Categories Tab */}
@@ -1169,7 +1628,22 @@ export default function Inventory() {
 
         {/* Suppliers Tab */}
         <TabsContent value="suppliers" className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex justify-between">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Download className="h-4 w-4 mr-2" /> Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => handleExportSuppliers("csv")}>
+                  <FileText className="h-4 w-4 mr-2" /> Export CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExportSuppliers("pdf")}>
+                  <FileText className="h-4 w-4 mr-2" /> Export PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {canManage && (
               <Button onClick={() => {
                 setEditingSupplier(null);
@@ -1310,7 +1784,6 @@ export default function Inventory() {
               <Textarea value={categoryForm.description} onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })} rows={2} />
             </div>
             
-            {/* Metered Product Toggle */}
             <div className="p-4 border rounded-lg space-y-3">
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -1319,7 +1792,6 @@ export default function Inventory() {
                   onCheckedChange={(v) => setCategoryForm({ 
                     ...categoryForm, 
                     is_metered: v as boolean,
-                    // Disable serial/mac for metered products
                     requires_serial: v ? false : categoryForm.requires_serial,
                     requires_mac: v ? false : categoryForm.requires_mac,
                   })}
@@ -1352,7 +1824,6 @@ export default function Inventory() {
               )}
             </div>
 
-            {/* Serial/MAC Requirements (only for non-metered) */}
             {!categoryForm.is_metered && (
               <div className="flex gap-6">
                 <div className="flex items-center gap-2">
@@ -1432,7 +1903,6 @@ export default function Inventory() {
               </div>
             )}
 
-            {/* METERED PRODUCT: Show meters input */}
             {isMeteredProduct && !editingItem && (
               <div className="p-4 border-2 border-primary/30 rounded-lg bg-primary/5 space-y-3">
                 <Label className="text-base font-medium">Quantity to Add ({meteredUnit}s)</Label>
@@ -1452,7 +1922,6 @@ export default function Inventory() {
               </div>
             )}
 
-            {/* DISCRETE PRODUCT: Show quantity and serial/mac inputs */}
             {!isMeteredProduct && !editingItem && (
               <div>
                 <Label>Quantity</Label>
@@ -1709,6 +2178,73 @@ export default function Inventory() {
               <Button onClick={handleSellItem} className="w-full" disabled={saving}>
                 {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Complete Sale
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Return Item Dialog */}
+      <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Return Item</DialogTitle>
+          </DialogHeader>
+          {returningItem && (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted rounded-lg space-y-1">
+                <p className="font-medium">{returningItem.products?.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {returningItem.serial_number && `Serial: ${returningItem.serial_number}`}
+                  {returningItem.mac_address && ` | MAC: ${returningItem.mac_address}`}
+                </p>
+                {(() => {
+                  const customer = getItemCustomer(returningItem.id);
+                  return customer ? (
+                    <p className="text-sm">Assigned to: <span className="font-medium">{customer.full_name}</span></p>
+                  ) : null;
+                })()}
+              </div>
+
+              <div>
+                <Label>Condition on Return *</Label>
+                <Select value={returnForm.condition} onValueChange={(v) => setReturnForm({ ...returnForm, condition: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">New</SelectItem>
+                    <SelectItem value="good">Good</SelectItem>
+                    <SelectItem value="fair">Fair</SelectItem>
+                    <SelectItem value="damaged">Damaged</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Return Notes</Label>
+                <Textarea
+                  value={returnForm.notes}
+                  onChange={(e) => setReturnForm({ ...returnForm, notes: e.target.value })}
+                  placeholder="Notes about the return..."
+                  rows={3}
+                />
+              </div>
+
+              <div className={cn(
+                "p-3 rounded-lg text-sm",
+                returnForm.condition === "damaged"
+                  ? "bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200"
+                  : "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200"
+              )}>
+                {returnForm.condition === "damaged"
+                  ? "⚠️ Item will be marked as DAMAGED and will NOT be re-stocked."
+                  : "✅ Item will be returned to stock and marked as IN STOCK."}
+              </div>
+
+              <Button onClick={handleReturnItem} className="w-full" disabled={saving}>
+                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Process Return
               </Button>
             </div>
           )}
