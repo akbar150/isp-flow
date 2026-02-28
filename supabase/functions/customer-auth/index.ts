@@ -1,18 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Allowed origins for CORS - production domains
-const allowedOrigins = [
-  "https://easylinkbd.lovable.app",
-  "https://id-preview--f3ea74ef-bbb2-4d36-9390-fa74e8d6e7df.lovable.app",
-];
-
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get("origin") || "";
-  const isAllowed = allowedOrigins.some(allowed => 
-    origin === allowed || origin.endsWith(".lovable.app")
-  );
+// CORS headers for web app requests (preview + published)
+function getCorsHeaders(_req: Request) {
   return {
-    "Access-Control-Allow-Origin": isAllowed ? origin : allowedOrigins[0],
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   };
