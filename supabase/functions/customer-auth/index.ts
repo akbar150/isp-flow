@@ -124,10 +124,12 @@ serve(async (req) => {
           throw new Error("Name contains invalid characters");
         }
 
-        // Validate phone (Bangladesh format: 01XXXXXXXXX - 11 digits starting with 01)
-        const cleanPhone = phone.replace(/[\s\-]/g, "");
-        if (!/^01[3-9]\d{8}$/.test(cleanPhone)) {
-          throw new Error("Invalid phone number format. Use: 01XXXXXXXXX");
+        // Validate phone (Bangladesh format: 880XXXXXXXXX - 13 digits)
+        let cleanPhone = phone.replace(/\D/g, "");
+        if (cleanPhone.startsWith("0") && cleanPhone.length === 11) cleanPhone = "88" + cleanPhone;
+        if (cleanPhone.startsWith("1") && cleanPhone.length === 10) cleanPhone = "880" + cleanPhone;
+        if (!/^880[13-9]\d{8}$/.test(cleanPhone)) {
+          throw new Error("Invalid phone number format. Use: 8801XXXXXXXXX");
         }
 
         // Validate address length if provided
@@ -147,7 +149,7 @@ serve(async (req) => {
         const { data: existing } = await supabaseAdmin
           .from("customers")
           .select("id")
-          .eq("phone", phone)
+          .eq("phone", cleanPhone)
           .single();
 
         if (existing) {
@@ -174,7 +176,7 @@ serve(async (req) => {
           .insert({
             user_id: newUserId,
             full_name,
-            phone,
+            phone: cleanPhone,
             password_hash: hashedPassword,
             address: address || "To be updated",
             expiry_date: new Date().toISOString().split("T")[0], // Set to today, admin will set proper date
@@ -283,12 +285,16 @@ serve(async (req) => {
           throw new Error("Authentication required");
         }
 
-        // Validate phone if provided
+        // Validate phone if provided (880 format)
+        let normalizedPhone: string | undefined;
         if (phone) {
-          const cleanPhone = phone.replace(/[\s\-]/g, "");
-          if (!/^01[3-9]\d{8}$/.test(cleanPhone)) {
-            throw new Error("Invalid phone number format. Use: 01XXXXXXXXX");
+          let cleanPh = phone.replace(/\D/g, "");
+          if (cleanPh.startsWith("0") && cleanPh.length === 11) cleanPh = "88" + cleanPh;
+          if (cleanPh.startsWith("1") && cleanPh.length === 10) cleanPh = "880" + cleanPh;
+          if (!/^880[13-9]\d{8}$/.test(cleanPh)) {
+            throw new Error("Invalid phone number format. Use: 8801XXXXXXXXX");
           }
+          normalizedPhone = cleanPh;
         }
 
         // Validate email format if provided
@@ -329,7 +335,7 @@ serve(async (req) => {
           updated_at: new Date().toISOString(),
         };
 
-        if (phone) updates.phone = phone.replace(/[\s\-]/g, "");
+        if (normalizedPhone) updates.phone = normalizedPhone;
         if (email) updates.email = email;
         if (address) updates.address = address;
 

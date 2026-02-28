@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, Download, FileText, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { normalizePhone, isValidBDPhone } from "@/lib/phoneUtils";
 import { format, addDays } from "date-fns";
 
 interface Package {
@@ -96,11 +97,9 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
       errors.push("Name required (min 3 chars)");
     }
 
-    // Phone validation
-    const phoneRegex = /^(\+?880)?[0-9]{10,11}$/;
-    const cleanPhone = (row.phone || "").replace(/[\s-]/g, "");
-    if (!phoneRegex.test(cleanPhone)) {
-      errors.push("Invalid phone");
+    // Phone validation (880 format)
+    if (!isValidBDPhone(row.phone || "")) {
+      errors.push("Invalid phone (use 8801XXXXXXXXX)");
     }
 
     // Address validation
@@ -278,7 +277,7 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
           .insert({
             user_id: userId,
             full_name: row.full_name.trim(),
-            phone: row.phone.replace(/[\s-]/g, ""),
+            phone: normalizePhone(row.phone),
             alt_phone: row.alt_phone?.trim() || null,
             address: row.address.trim(),
             area_id: area?.id || null,

@@ -22,6 +22,7 @@ import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { CalendarIcon, Loader2, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { normalizePhone, isValidBDPhone } from "@/lib/phoneUtils";
 
 interface Package {
   id: string;
@@ -127,12 +128,19 @@ export function CustomerEditDialog({
 
     setSaving(true);
     try {
+      if (!isValidBDPhone(formData.phone)) {
+        throw new Error('Phone must start with 880 (e.g., 8801701377315)');
+      }
+      if (formData.alt_phone && formData.alt_phone.trim() && !isValidBDPhone(formData.alt_phone)) {
+        throw new Error('Alternative phone must start with 880 (e.g., 8801701377315)');
+      }
+
       const { error } = await supabase
         .from("customers")
         .update({
           full_name: formData.full_name,
-          phone: formData.phone,
-          alt_phone: formData.alt_phone || null,
+          phone: normalizePhone(formData.phone),
+          alt_phone: formData.alt_phone ? normalizePhone(formData.alt_phone) : null,
           email: formData.email || null,
           address: formData.address,
           area_id: formData.area_id || null,
@@ -188,6 +196,7 @@ export function CustomerEditDialog({
               <Input
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="8801XXXXXXXXX"
                 required
               />
             </div>
