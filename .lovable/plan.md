@@ -1,41 +1,95 @@
 
 
-# Allow Customer Login with PPPoE Username or Email
+# Phase 2-4 Feature Implementation Roadmap
 
 ## Overview
-Currently, customers can only log in using their User ID (e.g., ISP00001). This update will allow them to also log in using their **PPPoE Username** or **Email address** -- whichever they have.
+You've selected 9 major features to build. Given the complexity, this plan proposes a phased approach, building each feature incrementally across multiple sessions. Here's the prioritized order and what each involves:
 
-## Changes
+---
 
-### 1. Update Edge Function: `customer-auth/index.ts` (Login action)
-Instead of only querying `customers` by `user_id`, the login logic will detect the input type and search accordingly:
+## Phase 2: Customer Self-Service (Build First)
 
-- **If input looks like an email** (contains `@`): Query `customers` table where `email = input`
-- **If input starts with `ISP`** (case-insensitive): Query `customers` table where `user_id = input` (existing behavior)
-- **Otherwise** (treat as PPPoE username): Query `mikrotik_users` table where `username = input`, then get the linked `customer_id` to fetch the customer record and verify the **customer portal password** (not the PPPoE password)
+### Feature 1: Online Payment Gateway (bKash/Nagad/SSLCommerz)
+- Integrate SSLCommerz (most popular BD gateway -- supports bKash, Nagad, cards)
+- Add a "Pay Now" button in the Customer Portal
+- Create a backend function to initiate payment sessions and verify callbacks
+- Auto-update customer dues and expiry on successful payment
+- **Requires**: SSLCommerz merchant credentials (Store ID + Store Password)
 
-The password verification remains against the customer's `password_hash` in all cases -- only the lookup method changes.
+### Feature 2: Speed Test Integration
+- Embed an open-source speed test (LibreSpeed or similar) in the Customer Portal
+- Show download/upload speed and ping results
+- Compare results against the customer's subscribed package speed
+- No external API needed -- runs entirely in the browser
 
-### 2. Update Frontend: `CustomerLogin.tsx`
-- Rename the "User ID" label to **"User ID / PPPoE Username / Email"**
-- Update placeholder from `ISP00001` to `ISP00001, PPPoE username, or email`
-- Update the Zod schema field name from `user_id` to `login_id` for clarity
-- Same changes on the Reset Password tab's User ID field
+### Feature 3: Package Upgrade/Downgrade Requests
+- Add a "Change Package" button in the Customer Portal
+- Create a `package_change_requests` database table (customer, current package, requested package, status, prorated amount)
+- Calculate prorated billing (credit remaining days, charge new rate)
+- Admin approval workflow with notification
+- Auto-apply changes on approval (update customer package, adjust billing)
 
-### Technical Details
+### Feature 4: Referral Program
+- Create `referrals` table (referrer customer, referred customer, status, credit amount)
+- Generate unique referral codes per customer
+- Show referral link/code in Customer Portal
+- Auto-apply bill credits when referred customer completes first payment
+- Referral dashboard showing earned credits and referred customers
 
-**Edge function login logic change:**
-```text
-1. Receive login_id (was user_id) + password
-2. Detect type:
-   - Contains "@" -> query customers.email
-   - Starts with "ISP" -> query customers.user_id (existing)
-   - Otherwise -> query mikrotik_users.username to get customer_id, then fetch customer
-3. Verify password against customer.password_hash (same for all paths)
-4. Return customer data + session token (unchanged)
-```
+---
 
-**Files to modify:**
-- `supabase/functions/customer-auth/index.ts` -- login action multi-lookup logic
-- `src/pages/CustomerLogin.tsx` -- UI label/placeholder updates
+## Phase 3: Operational Excellence
+
+### Feature 5: Contract & Agreement Management
+- Create `contracts` table (customer, start date, end date, terms, auto-renew, early termination fee)
+- Digital agreement templates with customer details auto-filled
+- E-signature capture (canvas-based signature pad)
+- Auto-renewal tracking and termination fee calculation
+- PDF export of signed contracts
+
+### Feature 6: Technician Mobile App / Field Service
+- Create `service_tasks` table (type, customer, technician, status, GPS coordinates, notes)
+- Task assignment interface for admins
+- PWA-based mobile view for technicians (installable web app)
+- Job completion with photo upload and customer signature
+- GPS tracking of task locations on map
+
+### Feature 7: Reseller/Sub-dealer Module
+- Create `resellers` table and `reseller_customers` mapping
+- Separate reseller login and dashboard
+- Commission tracking (percentage per customer payment)
+- Reseller can add/manage their own customers under the main ISP
+- Consolidated reporting for the main ISP admin
+
+---
+
+## Phase 4: Growth & Intelligence
+
+### Feature 8: AI-Powered Churn Prediction
+- Analyze payment patterns (late payments, missed cycles)
+- Track usage trends and ticket frequency
+- Generate risk scores per customer (High/Medium/Low churn risk)
+- Dashboard with at-risk customers and recommended retention actions
+- Uses Lovable AI (Gemini) for pattern analysis -- no external API key needed
+
+### Feature 9: Bandwidth Usage Monitoring (MikroTik)
+- Pull traffic data from MikroTik routers via API
+- Per-customer usage graphs (daily/weekly/monthly)
+- Heavy user detection and alerts
+- FUP (Fair Usage Policy) threshold configuration
+- **Requires**: Real MikroTik router connection (not dummy mode)
+
+---
+
+## Recommended Starting Point
+
+I suggest we begin with **Feature 2: Speed Test Integration** as it's self-contained, requires no external credentials, and provides immediate customer value. Then move to **Feature 3: Package Upgrade/Downgrade** and **Feature 4: Referral Program**.
+
+For the **Online Payment Gateway**, you'll need to obtain SSLCommerz merchant credentials first, so we can set that up in parallel.
+
+## Technical Notes
+- Each feature will require new database tables (created via migrations)
+- New pages/tabs in both admin dashboard and customer portal
+- Backend functions for payment processing, AI analysis, and MikroTik communication
+- All features will follow existing patterns: RLS policies, role-based access, real-time notifications
 
