@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.package-change]
 verify_jwt = false
+
+[functions.referral-program]
+verify_jwt = false

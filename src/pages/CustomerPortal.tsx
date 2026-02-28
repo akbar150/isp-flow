@@ -10,10 +10,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import {
   Wifi, LogOut, User, CreditCard, Calendar, Package, Phone, MapPin,
-  Clock, AlertTriangle, CheckCircle, Loader2, Lock, History, WifiOff, Gauge, ArrowUpDown
+  Clock, AlertTriangle, CheckCircle, Loader2, Lock, History, WifiOff, Gauge, ArrowUpDown, Gift
 } from "lucide-react";
 import SpeedTest from "@/components/portal/SpeedTest";
 import PackageChange from "@/components/portal/PackageChange";
+import ReferralProgram from "@/components/portal/ReferralProgram";
 import { useIspSettings } from "@/hooks/useIspSettings";
 
 interface CustomerData {
@@ -350,6 +351,10 @@ export default function CustomerPortal() {
               <ArrowUpDown className="h-4 w-4" />
               Change Package
             </TabsTrigger>
+            <TabsTrigger value="referrals" className="flex items-center gap-2">
+              <Gift className="h-4 w-4" />
+              Referrals
+            </TabsTrigger>
             <TabsTrigger value="speedtest" className="flex items-center gap-2">
               <Gauge className="h-4 w-4" />
               Speed Test
@@ -505,6 +510,13 @@ export default function CustomerPortal() {
               currentPackageSpeed={customer.package?.speed_mbps || null}
               currentPackagePrice={customer.package?.monthly_price || null}
               daysRemaining={daysLeft}
+            />
+          </TabsContent>
+
+          <TabsContent value="referrals">
+            <ReferralProgram
+              customerId={customer.id}
+              customerName={customer.full_name}
             />
           </TabsContent>
 
