@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TablePagination } from "@/components/TablePagination";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -112,6 +113,9 @@ export default function Tickets() {
   const [submitting, setSubmitting] = useState(false);
   const [customers, setCustomers] = useState<{ id: string; full_name: string | null; user_id: string | null }[]>([]);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 50;
 
   // New ticket form
   const [newTicket, setNewTicket] = useState({
@@ -125,6 +129,9 @@ export default function Tickets() {
 
   useEffect(() => {
     fetchTickets();
+  }, [currentPage]);
+
+  useEffect(() => {
     fetchCustomers();
     fetchStaff();
   }, []);
@@ -137,13 +144,18 @@ export default function Tickets() {
 
   const fetchTickets = async () => {
     try {
-      const { data, error } = await supabase
+      const from = (currentPage - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      const { data, error, count } = await supabase
         .from("support_tickets")
-        .select("*, customers_safe!support_tickets_customer_id_fkey(full_name, user_id, phone)")
-        .order("created_at", { ascending: false });
+        .select("*, customers_safe!support_tickets_customer_id_fkey(full_name, user_id, phone)", { count: 'exact' })
+        .order("created_at", { ascending: false })
+        .range(from, to);
 
       if (error) throw error;
       setTickets((data || []) as unknown as Ticket[]);
+      setTotalCount(count || 0);
     } catch (error) {
       console.error("Error fetching tickets:", error);
     } finally {
@@ -465,6 +477,12 @@ export default function Tickets() {
               </div>
             ))
           )}
+          <TablePagination
+            currentPage={currentPage}
+            totalCount={totalCount}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
         </div>
 
         {/* Detail Panel */}

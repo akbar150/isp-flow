@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TablePagination } from "@/components/TablePagination";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -102,6 +103,9 @@ export default function Invoices() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 50;
   
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -130,15 +134,19 @@ export default function Invoices() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentPage]);
 
   const fetchData = async () => {
     try {
+      const from = (currentPage - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
       const [invoicesRes, customersRes] = await Promise.all([
         supabase
           .from("invoices")
-          .select("*, customers:customers_safe(id, user_id, full_name, phone, address, packages(name, monthly_price)), invoice_items(*)")
-          .order("created_at", { ascending: false }),
+          .select("*, customers:customers_safe(id, user_id, full_name, phone, address, packages(name, monthly_price)), invoice_items(*)", { count: 'exact' })
+          .order("created_at", { ascending: false })
+          .range(from, to),
         supabase
           .from("customers_safe")
           .select("id, user_id, full_name, phone, address, packages(name, monthly_price)")
@@ -149,6 +157,7 @@ export default function Invoices() {
       if (customersRes.error) throw customersRes.error;
 
       setInvoices(invoicesRes.data || []);
+      setTotalCount(invoicesRes.count || 0);
       setCustomers(customersRes.data || []);
     } catch (error) {
       console.error("Error fetching invoices:", error);
@@ -753,6 +762,12 @@ export default function Invoices() {
             )}
           </tbody>
         </table>
+        <TablePagination
+          currentPage={currentPage}
+          totalCount={totalCount}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* View Invoice Dialog */}
