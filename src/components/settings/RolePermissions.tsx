@@ -37,6 +37,8 @@ import {
   Receipt, 
   FolderOpen, 
   Settings,
+  TicketCheck,
+  WifiOff,
   CheckCircle2,
   XCircle,
   ToggleLeft,
@@ -70,6 +72,8 @@ const RESOURCES = [
   { key: "expense_categories", label: "Expense Categories", icon: FolderOpen },
   { key: "settings", label: "Settings", icon: Settings },
   { key: "users", label: "User Management", icon: User },
+  { key: "tickets", label: "Support Tickets", icon: TicketCheck },
+  { key: "outages", label: "Network Outages", icon: WifiOff },
 ];
 
 const ACTIONS = [
