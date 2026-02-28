@@ -6,6 +6,7 @@ import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { CallCustomerButton } from "@/components/CallCustomerButton";
 import { RevenueAnalytics } from "@/components/dashboard/RevenueAnalytics";
+import { ChurnPredictionWidget } from "@/components/dashboard/ChurnPrediction";
 import { supabase } from "@/integrations/supabase/client";
 import { useIspSettings } from "@/hooks/useIspSettings";
 import { 
@@ -159,6 +160,9 @@ export default function Dashboard() {
           <TabsTrigger value="analytics" className="gap-1.5">
             <BarChart3 className="h-4 w-4" /> Analytics
           </TabsTrigger>
+          <TabsTrigger value="churn" className="gap-1.5">
+            <AlertTriangle className="h-4 w-4" /> Churn Risk
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-8">
@@ -250,6 +254,10 @@ export default function Dashboard() {
 
         <TabsContent value="analytics">
           <RevenueAnalytics />
+        </TabsContent>
+
+        <TabsContent value="churn">
+          <ChurnPredictionWidget />
         </TabsContent>
       </Tabs>
     </DashboardLayout>

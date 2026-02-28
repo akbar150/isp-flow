@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.reseller-auth]
 verify_jwt = false
+
+[functions.analyze-churn]
+verify_jwt = false
