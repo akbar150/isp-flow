@@ -340,6 +340,106 @@ export type Database = {
           },
         ]
       }
+      contract_templates: {
+        Row: {
+          body_template: string
+          created_at: string
+          id: string
+          is_default: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          body_template?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          body_template?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      contracts: {
+        Row: {
+          auto_renew: boolean
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          early_termination_fee: number
+          end_date: string
+          id: string
+          signature_data: string | null
+          signed_at: string | null
+          start_date: string
+          status: Database["public"]["Enums"]["contract_status"]
+          template_id: string | null
+          terms_text: string
+          updated_at: string
+        }
+        Insert: {
+          auto_renew?: boolean
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          early_termination_fee?: number
+          end_date: string
+          id?: string
+          signature_data?: string | null
+          signed_at?: string | null
+          start_date?: string
+          status?: Database["public"]["Enums"]["contract_status"]
+          template_id?: string | null
+          terms_text?: string
+          updated_at?: string
+        }
+        Update: {
+          auto_renew?: boolean
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          early_termination_fee?: number
+          end_date?: string
+          id?: string
+          signature_data?: string | null
+          signed_at?: string | null
+          start_date?: string
+          status?: Database["public"]["Enums"]["contract_status"]
+          template_id?: string | null
+          terms_text?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contracts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contracts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contracts_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "contract_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address: string
@@ -2309,6 +2409,12 @@ export type Database = {
       attendance_status: "present" | "absent" | "late" | "half_day" | "on_leave"
       billing_cycle_type: "monthly" | "quarterly" | "yearly"
       connection_type: "pppoe" | "static" | "dhcp"
+      contract_status:
+        | "draft"
+        | "pending_signature"
+        | "active"
+        | "expired"
+        | "terminated"
       customer_status: "active" | "expiring" | "expired" | "suspended"
       employee_status: "active" | "on_leave" | "terminated" | "resigned"
       invoice_status:
@@ -2489,6 +2595,13 @@ export const Constants = {
       attendance_status: ["present", "absent", "late", "half_day", "on_leave"],
       billing_cycle_type: ["monthly", "quarterly", "yearly"],
       connection_type: ["pppoe", "static", "dhcp"],
+      contract_status: [
+        "draft",
+        "pending_signature",
+        "active",
+        "expired",
+        "terminated",
+      ],
       customer_status: ["active", "expiring", "expired", "suspended"],
       employee_status: ["active", "on_leave", "terminated", "resigned"],
       invoice_status: [
