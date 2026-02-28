@@ -43,10 +43,12 @@ import {
   Trash2,
   Clock,
   CalendarCheck,
-  Download
+  Download,
+  CalendarDays
 } from "lucide-react";
 import { format } from "date-fns";
 import { exportToCSV } from "@/lib/exportUtils";
+import { LeaveRequests } from "@/components/hrm/LeaveRequests";
 
 interface Department {
   id: string;
@@ -458,6 +460,9 @@ export default function HRM() {
           </TabsTrigger>
           <TabsTrigger value="designations" className="gap-2">
             <Briefcase className="h-4 w-4" /> Designations
+          </TabsTrigger>
+          <TabsTrigger value="leave" className="gap-2">
+            <CalendarDays className="h-4 w-4" /> Leave
           </TabsTrigger>
         </TabsList>
 
@@ -1207,6 +1212,11 @@ export default function HRM() {
               </div>
             ))}
           </div>
+        </TabsContent>
+
+        {/* Leave Requests Tab */}
+        <TabsContent value="leave" className="space-y-4">
+          <LeaveRequests canManage={canManage} />
         </TabsContent>
       </Tabs>
     </DashboardLayout>

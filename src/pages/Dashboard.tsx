@@ -7,6 +7,7 @@ import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { CallCustomerButton } from "@/components/CallCustomerButton";
 import { RevenueAnalytics } from "@/components/dashboard/RevenueAnalytics";
 import { ChurnPredictionWidget } from "@/components/dashboard/ChurnPrediction";
+import { AreaBreakdownWidget } from "@/components/dashboard/AreaBreakdown";
 import { supabase } from "@/integrations/supabase/client";
 import { useIspSettings } from "@/hooks/useIspSettings";
 import { 
@@ -17,7 +18,8 @@ import {
   DollarSign,
   TrendingUp,
   ArrowRight,
-  BarChart3
+  BarChart3,
+  MapPin
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -160,6 +162,9 @@ export default function Dashboard() {
           <TabsTrigger value="analytics" className="gap-1.5">
             <BarChart3 className="h-4 w-4" /> Analytics
           </TabsTrigger>
+          <TabsTrigger value="areas" className="gap-1.5">
+            <MapPin className="h-4 w-4" /> By Area
+          </TabsTrigger>
           <TabsTrigger value="churn" className="gap-1.5">
             <AlertTriangle className="h-4 w-4" /> Churn Risk
           </TabsTrigger>
@@ -254,6 +259,10 @@ export default function Dashboard() {
 
         <TabsContent value="analytics">
           <RevenueAnalytics />
+        </TabsContent>
+
+        <TabsContent value="areas">
+          <AreaBreakdownWidget />
         </TabsContent>
 
         <TabsContent value="churn">
