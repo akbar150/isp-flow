@@ -10,9 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import {
   Wifi, LogOut, User, CreditCard, Calendar, Package, Phone, MapPin,
-  Clock, AlertTriangle, CheckCircle, Loader2, Lock, History, WifiOff, Gauge
+  Clock, AlertTriangle, CheckCircle, Loader2, Lock, History, WifiOff, Gauge, ArrowUpDown
 } from "lucide-react";
 import SpeedTest from "@/components/portal/SpeedTest";
+import PackageChange from "@/components/portal/PackageChange";
 import { useIspSettings } from "@/hooks/useIspSettings";
 
 interface CustomerData {
@@ -24,6 +25,7 @@ interface CustomerData {
   status: string;
   expiry_date: string;
   total_due: number;
+  package_id: string | null;
   package: {
     name: string;
     speed_mbps: number;
@@ -344,6 +346,10 @@ export default function CustomerPortal() {
               <Lock className="h-4 w-4" />
               Security
             </TabsTrigger>
+            <TabsTrigger value="package" className="flex items-center gap-2">
+              <ArrowUpDown className="h-4 w-4" />
+              Change Package
+            </TabsTrigger>
             <TabsTrigger value="speedtest" className="flex items-center gap-2">
               <Gauge className="h-4 w-4" />
               Speed Test
@@ -488,6 +494,18 @@ export default function CustomerPortal() {
                 </form>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="package">
+            <PackageChange
+              customerId={customer.id}
+              userId={customer.user_id}
+              currentPackageId={customer.package_id}
+              currentPackageName={customer.package?.name || null}
+              currentPackageSpeed={customer.package?.speed_mbps || null}
+              currentPackagePrice={customer.package?.monthly_price || null}
+              daysRemaining={daysLeft}
+            />
           </TabsContent>
 
           <TabsContent value="speedtest">

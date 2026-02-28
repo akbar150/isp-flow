@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.import-customers-bulk]
 verify_jwt = false
+
+[functions.package-change]
+verify_jwt = false
