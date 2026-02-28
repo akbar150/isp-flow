@@ -15,6 +15,7 @@ import {
 import SpeedTest from "@/components/portal/SpeedTest";
 import PackageChange from "@/components/portal/PackageChange";
 import ReferralProgram from "@/components/portal/ReferralProgram";
+import BkashPayment from "@/components/portal/BkashPayment";
 import { useIspSettings } from "@/hooks/useIspSettings";
 
 interface CustomerData {
@@ -335,6 +336,10 @@ export default function CustomerPortal() {
         {/* Tabs Section */}
         <Tabs defaultValue="profile" className="space-y-6">
           <TabsList>
+            <TabsTrigger value="pay" className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4" />
+              Pay Now
+            </TabsTrigger>
             <TabsTrigger value="profile" className="flex items-center gap-2">
               <User className="h-4 w-4" />
               Profile
@@ -360,6 +365,15 @@ export default function CustomerPortal() {
               Speed Test
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="pay">
+            <BkashPayment
+              customerId={customer.id}
+              userId={customer.user_id}
+              totalDue={customer.total_due}
+              monthlyPrice={customer.package?.monthly_price || 0}
+            />
+          </TabsContent>
 
           <TabsContent value="profile">
             <Card>

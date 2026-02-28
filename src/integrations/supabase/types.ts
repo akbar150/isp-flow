@@ -1081,6 +1081,60 @@ export type Database = {
         }
         Relationships: []
       }
+      online_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          customer_id: string
+          gateway: string
+          gateway_response: Json | null
+          id: string
+          payment_id: string | null
+          status: string
+          trx_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          customer_id: string
+          gateway?: string
+          gateway_response?: Json | null
+          id?: string
+          payment_id?: string | null
+          status?: string
+          trx_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          customer_id?: string
+          gateway?: string
+          gateway_response?: Json | null
+          id?: string
+          payment_id?: string | null
+          status?: string
+          trx_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "online_payments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "online_payments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       package_change_requests: {
         Row: {
           admin_notes: string | null

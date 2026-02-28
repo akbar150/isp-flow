@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.referral-program]
 verify_jwt = false
+
+[functions.bkash-payment]
+verify_jwt = false
