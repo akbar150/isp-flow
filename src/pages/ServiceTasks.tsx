@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TablePagination } from "@/components/TablePagination";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -60,6 +61,9 @@ export default function ServiceTasks() {
   const [createOpen, setCreateOpen] = useState(false);
   const [viewTask, setViewTask] = useState<ServiceTask | null>(null);
   const [saving, setSaving] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 50;
 
   const [formData, setFormData] = useState({
     customer_id: "",
@@ -73,21 +77,26 @@ export default function ServiceTasks() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentPage]);
 
   const fetchData = async () => {
     try {
+      const from = (currentPage - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
       const [tasksRes, employeesRes, customersRes] = await Promise.all([
         supabase
           .from("service_tasks")
-          .select("*, customers!service_tasks_customer_id_fkey(full_name, user_id, phone, address, latitude, longitude)")
-          .order("created_at", { ascending: false }),
+          .select("*, customers!service_tasks_customer_id_fkey(full_name, user_id, phone, address, latitude, longitude)", { count: 'exact' })
+          .order("created_at", { ascending: false })
+          .range(from, to),
         supabase.from("employees").select("id, full_name, user_id").eq("status", "active"),
         supabase.from("customers_safe").select("id, full_name, user_id, phone, address"),
       ]);
 
       if (tasksRes.error) throw tasksRes.error;
       setTasks((tasksRes.data as unknown as ServiceTask[]) || []);
+      setTotalCount(tasksRes.count || 0);
       setEmployees(employeesRes.data || []);
       setCustomers((customersRes.data as unknown as Customer[]) || []);
     } catch (error) {
@@ -266,6 +275,12 @@ export default function ServiceTasks() {
             )}
           </tbody>
         </table>
+        <TablePagination
+          currentPage={currentPage}
+          totalCount={totalCount}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* Create Dialog */}

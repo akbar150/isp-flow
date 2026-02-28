@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
@@ -41,7 +41,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Plus, Search, Eye, EyeOff, RefreshCw, MoreHorizontal, Edit, Trash2, UserCircle, ArrowUpDown, ArrowUp, ArrowDown, MapPin, Map } from "lucide-react";
+import { Plus, Search, Eye, EyeOff, RefreshCw, MoreHorizontal, Edit, Trash2, UserCircle, ArrowUpDown, ArrowUp, ArrowDown, MapPin, Map, Download } from "lucide-react";
+import { TablePagination } from "@/components/TablePagination";
+import { exportToCSV } from "@/lib/exportUtils";
 import { format, addDays } from "date-fns";
 import { calculateBillingInfo } from "@/lib/billingUtils";
 import { normalizePhone, isValidBDPhone } from "@/lib/phoneUtils";
@@ -110,6 +112,9 @@ export default function Customers() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [dateSortDirection, setDateSortDirection] = useState<SortDirection>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 50;
   
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -148,12 +153,15 @@ export default function Customers() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentPage]);
 
   const fetchData = async () => {
     try {
+      const from = (currentPage - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
       const [customersRes, packagesRes, areasRes, routersRes] = await Promise.all([
-        supabase.from('customers_safe').select('*, packages(*), areas(*), routers(*), mikrotik_users:mikrotik_users_safe(id, username, status)').order('created_at', { ascending: false }),
+        supabase.from('customers_safe').select('*, packages(*), areas(*), routers(*), mikrotik_users:mikrotik_users_safe(id, username, status)', { count: 'exact' }).order('created_at', { ascending: false }).range(from, to),
         supabase.from('packages').select('*').eq('is_active', true),
         supabase.from('areas').select('*'),
         supabase.from('routers').select('*').eq('is_active', true),
@@ -161,6 +169,7 @@ export default function Customers() {
 
       if (customersRes.error) throw customersRes.error;
       setCustomers(customersRes.data as unknown as Customer[] || []);
+      setTotalCount(customersRes.count || 0);
       setPackages(packagesRes.data || []);
       setAreas(areasRes.data || []);
       setRouters(routersRes.data || []);
@@ -397,6 +406,31 @@ export default function Customers() {
           <p className="page-description">Manage your ISP customers</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => {
+            const exportData = filteredCustomers.map(c => ({
+              user_id: c.user_id,
+              full_name: c.full_name,
+              phone: c.phone,
+              address: c.address,
+              package: c.packages?.name || 'N/A',
+              expiry_date: format(new Date(c.expiry_date), 'dd MMM yyyy'),
+              total_due: c.total_due,
+              status: c.status,
+            }));
+            exportToCSV(exportData, [
+              { key: 'user_id', label: 'Customer ID' },
+              { key: 'full_name', label: 'Name' },
+              { key: 'phone', label: 'Phone' },
+              { key: 'address', label: 'Address' },
+              { key: 'package', label: 'Package' },
+              { key: 'expiry_date', label: 'Expiry Date' },
+              { key: 'total_due', label: 'Due' },
+              { key: 'status', label: 'Status' },
+            ], `customers-${format(new Date(), 'yyyy-MM-dd')}`);
+          }}>
+            <Download className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline">Export</span>
+          </Button>
           <Button variant="outline" onClick={() => setMapViewOpen(true)}>
             <Map className="h-4 w-4 mr-2" />
             <span className="hidden sm:inline">Map View</span>
@@ -648,6 +682,12 @@ export default function Customers() {
             )}
           </tbody>
         </table>
+        <TablePagination
+          currentPage={currentPage}
+          totalCount={totalCount}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* View Customer Dialog */}

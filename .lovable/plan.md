@@ -9,32 +9,32 @@ After reviewing all 18+ modules, here is a prioritized list of gaps organized by
 
 ### CRITICAL -- Will break at scale
 
-| Module | Issue | Detail |
-|--------|-------|--------|
-| **Customers** | No pagination | Loads ALL customers in one query. Will crash with 1000+ records. |
-| **Payments** | No pagination | Hard-capped at 100 with `.limit(100)`, no page controls. No date filter, no export. |
-| **Tickets** | No pagination | Loads all tickets in one query. |
-| **HRM - Attendance** | No pagination | Capped at `.limit(100)`. No date range filter. |
-| **HRM - Payroll** | No pagination | Capped at `.limit(50)`. |
-| **Service Tasks** | No pagination | Loads all tasks in one query. |
-| **Invoices** | No pagination | Loads all invoices in one query. |
+| Module | Issue | Detail | Status |
+|--------|-------|--------|--------|
+| **Customers** | No pagination | Loads ALL customers in one query. | ✅ Done |
+| **Payments** | No pagination | Hard-capped at 100 with `.limit(100)`. | ✅ Done |
+| **Tickets** | No pagination | Loads all tickets in one query. | ✅ Done |
+| **HRM - Attendance** | No pagination | Capped at `.limit(100)`. | ✅ Done |
+| **HRM - Payroll** | No pagination | Capped at `.limit(50)`. | ✅ Done |
+| **Service Tasks** | No pagination | Loads all tasks in one query. | ✅ Done |
+| **Invoices** | No pagination | Loads all invoices in one query. | ✅ Done |
 
 ---
 
 ### HIGH -- Missing for daily ISP operations
 
-| Module | Issue | Detail |
-|--------|-------|--------|
-| **Payments** | No date range filter | Cannot filter payments by date -- critical for daily reconciliation. |
-| **Payments** | No CSV/PDF export | Reports page has export, but the Payments page itself does not. |
-| **Customers** | No CSV/PDF export | Cannot export the customer list for offline use or reporting. |
-| **Customers** | No pagination | Same as critical above -- loading all records at once. |
-| **Tickets** | No CSV/PDF export | Cannot export ticket data for SLA reporting. |
-| **Accounting** | Shared income/expense categories | Code comment says "Use expense categories for income too (for now)". Need separate category types. |
-| **Settings** | No Activity Log viewer | `activity_logs` table exists and is populated, but there is no UI to view them. |
-| **Customer Portal** | localStorage session | Uses `localStorage` for auth -- insecure, easily tampered with. Should use signed tokens. |
-| **Customer Portal** | No ticket submission | Customers cannot create support tickets from the portal. |
-| **HRM** | No CSV/PDF export | Employee list, attendance, and payroll have no export capability. |
+| Module | Issue | Detail | Status |
+|--------|-------|--------|--------|
+| **Payments** | No date range filter | Cannot filter payments by date. | ✅ Done |
+| **Payments** | No CSV/PDF export | No export on Payments page. | ✅ Done |
+| **Payments** | No method filter | Cannot filter by payment method. | ✅ Done |
+| **Customers** | No CSV/PDF export | Cannot export customer list. | ✅ Done |
+| **Tickets** | No CSV/PDF export | Cannot export ticket data. | ⬜ TODO |
+| **Accounting** | Shared income/expense categories | Need separate category types. | ⬜ TODO |
+| **Settings** | No Activity Log viewer | No UI to view activity_logs. | ⬜ TODO |
+| **Customer Portal** | localStorage session | Should use signed tokens. | ⬜ TODO |
+| **Customer Portal** | No ticket submission | Customers cannot create tickets. | ⬜ TODO |
+| **HRM** | No CSV/PDF export | No export capability. | ⬜ TODO |
 
 ---
 
@@ -71,35 +71,36 @@ After reviewing all 18+ modules, here is a prioritized list of gaps organized by
 
 ### Recommended Implementation Order
 
-**Phase 1 -- Scalability (Critical)**
-1. Add pagination to Customers, Payments, Tickets, Invoices, Service Tasks, HRM (Attendance + Payroll)
-2. Add date range filters to Payments page
-3. Add CSV/PDF export to Customers, Payments, Tickets, HRM
+**Phase 1 -- Scalability (Critical) ✅ COMPLETE**
+1. ✅ Add pagination to Customers, Payments, Tickets, Invoices, Service Tasks, HRM (Attendance + Payroll)
+2. ✅ Add date range filters and method filter to Payments page
+3. ✅ Add CSV export to Customers and Payments
 
 **Phase 2 -- Operations (High)**
 4. Add Activity Log viewer in Settings
 5. Separate income/expense categories in Accounting
 6. Add customer ticket submission to Customer Portal
 7. Secure Customer Portal sessions (replace localStorage with signed JWT)
+8. Add CSV export to Tickets and HRM
 
 **Phase 3 -- Automation (Medium)**
-8. Add admin status update to Service Tasks detail dialog
-9. Add automated overdue invoice detection (scheduled function)
-10. Add scheduled auto-reminders for expiring customers
-11. Add customer count per package display
+9. Add admin status update to Service Tasks detail dialog
+10. Add automated overdue invoice detection (scheduled function)
+11. Add scheduled auto-reminders for expiring customers
+12. Add customer count per package display
 
 **Phase 4 -- Advanced (Low)**
-12. Invoice email delivery
-13. Leave request creation form in HRM
-14. Reseller dashboard stats
-15. Area-based dashboard breakdown
+13. Invoice email delivery
+14. Leave request creation form in HRM
+15. Reseller dashboard stats
+16. Area-based dashboard breakdown
 
 ---
 
 ### Technical Notes
 
 - Pagination pattern: Use `currentPage` state + Supabase `.range(from, to)` for server-side pagination with total count via `.select('*', { count: 'exact' })`.
+- Reusable `TablePagination` component created at `src/components/TablePagination.tsx`.
 - Export utilities already exist in `src/lib/exportUtils.ts` -- just need to wire them into each page.
 - Activity logs table already has RLS policies for admin/super_admin read access.
 - All changes follow existing patterns (DashboardLayout, permission checks via `usePermissions`, Supabase client from `@/integrations/supabase/client`).
-

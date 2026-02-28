@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TablePagination } from "@/components/TablePagination";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -131,6 +132,11 @@ export default function HRM() {
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [attPage, setAttPage] = useState(1);
+  const [attTotal, setAttTotal] = useState(0);
+  const [payPage, setPayPage] = useState(1);
+  const [payTotal, setPayTotal] = useState(0);
+  const PAGE_SIZE = 50;
   
   // Dialog states
   const [deptDialogOpen, setDeptDialogOpen] = useState(false);
@@ -182,16 +188,21 @@ export default function HRM() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [attPage, payPage]);
 
   const fetchData = async () => {
     try {
+      const attFrom = (attPage - 1) * PAGE_SIZE;
+      const attTo = attFrom + PAGE_SIZE - 1;
+      const payFrom = (payPage - 1) * PAGE_SIZE;
+      const payTo = payFrom + PAGE_SIZE - 1;
+
       const [deptRes, desigRes, empRes, attRes, payRes] = await Promise.all([
         supabase.from("departments").select("*").order("name"),
         supabase.from("designations").select("*, departments(*)").order("name"),
         supabase.from("employees").select("*, departments(*), designations(*)").order("full_name"),
-        supabase.from("attendance").select("*, employees(*)").order("date", { ascending: false }).limit(100),
-        supabase.from("payroll").select("*, employees(*)").order("year", { ascending: false }).order("month", { ascending: false }).limit(50),
+        supabase.from("attendance").select("*, employees(*)", { count: 'exact' }).order("date", { ascending: false }).range(attFrom, attTo),
+        supabase.from("payroll").select("*, employees(*)", { count: 'exact' }).order("year", { ascending: false }).order("month", { ascending: false }).range(payFrom, payTo),
       ]);
 
       if (deptRes.error) throw deptRes.error;
@@ -204,7 +215,9 @@ export default function HRM() {
       setDesignations(desigRes.data || []);
       setEmployees(empRes.data || []);
       setAttendances(attRes.data || []);
+      setAttTotal(attRes.count || 0);
       setPayrolls(payRes.data || []);
+      setPayTotal(payRes.count || 0);
     } catch (error) {
       console.error("Error fetching HRM data:", error);
       toast({ title: "Error", description: "Failed to load HRM data", variant: "destructive" });
@@ -797,6 +810,12 @@ export default function HRM() {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            currentPage={attPage}
+            totalCount={attTotal}
+            pageSize={PAGE_SIZE}
+            onPageChange={setAttPage}
+          />
         </TabsContent>
 
         {/* Payroll Tab */}
@@ -966,6 +985,12 @@ export default function HRM() {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            currentPage={payPage}
+            totalCount={payTotal}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPayPage}
+          />
         </TabsContent>
 
         {/* Departments Tab */}
