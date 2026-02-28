@@ -12,7 +12,7 @@ import { z } from "zod";
 import { useIspSettings } from "@/hooks/useIspSettings";
 
 const loginSchema = z.object({
-  user_id: z.string().min(1, "User ID is required"),
+  login_id: z.string().min(1, "User ID / PPPoE Username / Email is required"),
   password: z.string().min(1, "Password is required"),
 });
 
@@ -28,7 +28,7 @@ const registerSchema = z.object({
 });
 
 const resetSchema = z.object({
-  user_id: z.string().min(1, "User ID is required"),
+  login_id: z.string().min(1, "User ID / PPPoE Username / Email is required"),
   phone: z.string().min(10, "Phone number is required"),
 });
 
@@ -58,7 +58,7 @@ export default function CustomerLogin() {
   // Show loading placeholder while settings load to prevent "Smart ISP" flash
   const displayName = settingsLoading ? "Loading..." : ispName;
   // Login state
-  const [loginData, setLoginData] = useState({ user_id: "", password: "" });
+  const [loginData, setLoginData] = useState({ login_id: "", password: "" });
 
   // Register state
   const [registerData, setRegisterData] = useState({
@@ -70,7 +70,7 @@ export default function CustomerLogin() {
   });
 
   // Reset state
-  const [resetData, setResetData] = useState({ user_id: "", phone: "" });
+  const [resetData, setResetData] = useState({ login_id: "", phone: "" });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,7 +90,7 @@ export default function CustomerLogin() {
 
     try {
       const { data, error } = await supabase.functions.invoke("customer-auth", {
-        body: { action: "login", ...loginData },
+        body: { action: "login", user_id: loginData.login_id, password: loginData.password },
       });
 
       if (error) throw error;
@@ -150,7 +150,7 @@ export default function CustomerLogin() {
 
       // Switch to login tab
       setActiveTab("login");
-      setLoginData({ user_id: data.customer.user_id, password: "" });
+      setLoginData({ login_id: data.customer.user_id, password: "" });
       setRegisterData({ full_name: "", phone: "", password: "", confirm_password: "", address: "" });
     } catch (error) {
       toast({
@@ -181,7 +181,7 @@ export default function CustomerLogin() {
 
     try {
       const { data, error } = await supabase.functions.invoke("customer-auth", {
-        body: { action: "reset_password", ...resetData },
+        body: { action: "reset_password", user_id: resetData.login_id, phone: resetData.phone },
       });
 
       if (error) throw error;
@@ -243,15 +243,15 @@ export default function CustomerLogin() {
             <TabsContent value="login" className="mt-4">
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="login-user-id">User ID</Label>
+                  <Label htmlFor="login-user-id">User ID / PPPoE Username / Email</Label>
                   <Input
                     id="login-user-id"
-                    placeholder="ISP00001"
-                    value={loginData.user_id}
-                    onChange={(e) => setLoginData({ ...loginData, user_id: e.target.value })}
+                    placeholder="ISP00001, PPPoE username, or email"
+                    value={loginData.login_id}
+                    onChange={(e) => setLoginData({ ...loginData, login_id: e.target.value })}
                     required
                   />
-                  {errors.user_id && <p className="text-sm text-destructive">{errors.user_id}</p>}
+                  {errors.login_id && <p className="text-sm text-destructive">{errors.login_id}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="login-password">Password</Label>
@@ -339,15 +339,15 @@ export default function CustomerLogin() {
             <TabsContent value="reset" className="mt-4">
               <form onSubmit={handleResetPassword} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="reset-user-id">User ID</Label>
+                  <Label htmlFor="reset-user-id">User ID / PPPoE Username / Email</Label>
                   <Input
                     id="reset-user-id"
-                    placeholder="ISP00001"
-                    value={resetData.user_id}
-                    onChange={(e) => setResetData({ ...resetData, user_id: e.target.value })}
+                    placeholder="ISP00001, PPPoE username, or email"
+                    value={resetData.login_id}
+                    onChange={(e) => setResetData({ ...resetData, login_id: e.target.value })}
                     required
                   />
-                  {errors.user_id && <p className="text-sm text-destructive">{errors.user_id}</p>}
+                  {errors.login_id && <p className="text-sm text-destructive">{errors.login_id}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="reset-phone">Registered Phone</Label>

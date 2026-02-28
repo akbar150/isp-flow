@@ -49,20 +49,56 @@ serve(async (req) => {
 
     switch (action) {
       case "login": {
-        const { user_id, password } = body;
-        if (!user_id || !password) {
-          throw new Error("Missing user_id or password");
+        const login_id = body.user_id; // supports user_id, email, or PPPoE username
+        const { password } = body;
+        if (!login_id || !password) {
+          throw new Error("Missing login credentials");
         }
 
-        // Find customer by user_id
-        const { data: customer, error: customerError } = await supabaseAdmin
-          .from("customers")
-          .select("id, user_id, full_name, password_hash, phone, address, status, package_id, expiry_date, total_due")
-          .eq("user_id", user_id.toUpperCase())
-          .single();
+        let customer: any = null;
+        let customerError: any = null;
+
+        if (login_id.includes("@")) {
+          // Email lookup
+          const result = await supabaseAdmin
+            .from("customers")
+            .select("id, user_id, full_name, password_hash, phone, address, status, package_id, expiry_date, total_due")
+            .eq("email", login_id.toLowerCase())
+            .single();
+          customer = result.data;
+          customerError = result.error;
+        } else if (login_id.toUpperCase().startsWith("ISP")) {
+          // User ID lookup (existing behavior)
+          const result = await supabaseAdmin
+            .from("customers")
+            .select("id, user_id, full_name, password_hash, phone, address, status, package_id, expiry_date, total_due")
+            .eq("user_id", login_id.toUpperCase())
+            .single();
+          customer = result.data;
+          customerError = result.error;
+        } else {
+          // PPPoE username lookup via mikrotik_users
+          const { data: mikrotikUser, error: mkError } = await supabaseAdmin
+            .from("mikrotik_users")
+            .select("customer_id")
+            .eq("username", login_id)
+            .single();
+
+          if (mkError || !mikrotikUser) {
+            throw new Error("Invalid credentials");
+          }
+
+          const result = await supabaseAdmin
+            .from("customers")
+            .select("id, user_id, full_name, password_hash, phone, address, status, package_id, expiry_date, total_due")
+            .eq("id", mikrotikUser.customer_id)
+            .single();
+          customer = result.data;
+          customerError = result.error;
+        }
 
         if (customerError || !customer) {
-          throw new Error("Invalid user ID or password");
+          throw new Error("Invalid credentials");
         }
 
         // Verify password using the database function
@@ -205,20 +241,57 @@ serve(async (req) => {
       }
 
       case "reset_password": {
-        const { user_id, phone } = body;
-        if (!user_id || !phone) {
-          throw new Error("Please provide your User ID and registered phone number");
+        const reset_login_id = body.user_id;
+        const { phone } = body;
+        if (!reset_login_id || !phone) {
+          throw new Error("Please provide your User ID/PPPoE Username/Email and registered phone number");
         }
 
-        // Find customer
-        const { data: customer, error: customerError } = await supabaseAdmin
-          .from("customers")
-          .select("id, user_id, phone, full_name")
-          .eq("user_id", user_id.toUpperCase())
-          .eq("phone", phone)
-          .single();
+        // Find customer using multi-lookup
+        let resetCustomer: any = null;
+        let resetError: any = null;
 
-        if (customerError || !customer) {
+        if (reset_login_id.includes("@")) {
+          const result = await supabaseAdmin
+            .from("customers")
+            .select("id, user_id, phone, full_name")
+            .eq("email", reset_login_id.toLowerCase())
+            .eq("phone", phone)
+            .single();
+          resetCustomer = result.data;
+          resetError = result.error;
+        } else if (reset_login_id.toUpperCase().startsWith("ISP")) {
+          const result = await supabaseAdmin
+            .from("customers")
+            .select("id, user_id, phone, full_name")
+            .eq("user_id", reset_login_id.toUpperCase())
+            .eq("phone", phone)
+            .single();
+          resetCustomer = result.data;
+          resetError = result.error;
+        } else {
+          // PPPoE username lookup
+          const { data: mkUser } = await supabaseAdmin
+            .from("mikrotik_users")
+            .select("customer_id")
+            .eq("username", reset_login_id)
+            .single();
+          if (mkUser) {
+            const result = await supabaseAdmin
+              .from("customers")
+              .select("id, user_id, phone, full_name")
+              .eq("id", mkUser.customer_id)
+              .eq("phone", phone)
+              .single();
+            resetCustomer = result.data;
+            resetError = result.error;
+          } else {
+            resetError = true;
+          }
+        }
+
+        const customer = resetCustomer;
+        if (resetError || !customer) {
           // Don't reveal if user exists
           return new Response(
             JSON.stringify({
