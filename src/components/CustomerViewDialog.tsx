@@ -28,6 +28,7 @@ import { CustomerCallRecords } from "./CustomerCallRecords";
 import { CustomerBillingHistory } from "./CustomerBillingHistory";
 import { CustomerAssets } from "./CustomerAssets";
 import { StatusBadge } from "./StatusBadge";
+import ContractManager from "./admin/ContractManager";
 
 interface Package {
   id: string;
@@ -282,10 +283,11 @@ export function CustomerViewDialog({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="mt-4">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="assets">Assets</TabsTrigger>
             <TabsTrigger value="billing">Billing</TabsTrigger>
+            <TabsTrigger value="contracts">Contracts</TabsTrigger>
             <TabsTrigger value="credentials">Credentials</TabsTrigger>
             <TabsTrigger value="calls">Calls</TabsTrigger>
           </TabsList>
@@ -722,6 +724,18 @@ export function CustomerViewDialog({
             <CustomerBillingHistory 
               customerId={customer.id} 
               customerName={customer.full_name} 
+            />
+          </TabsContent>
+
+          <TabsContent value="contracts" className="mt-4">
+            <ContractManager
+              customer={{
+                id: customer.id,
+                user_id: customer.user_id,
+                full_name: customer.full_name,
+                package_id: customer.package_id,
+                packages: customer.packages ? { name: customer.packages.name, monthly_price: customer.packages.monthly_price } : null,
+              }}
             />
           </TabsContent>
 

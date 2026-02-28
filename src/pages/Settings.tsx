@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map, Trash2, Zap, CreditCard } from "lucide-react";
+import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map, Trash2, Zap, CreditCard, FileText } from "lucide-react";
 import { UserManagement } from "@/components/settings/UserManagement";
 import { RolePermissions } from "@/components/settings/RolePermissions";
 import { ExpenseCategories } from "@/components/settings/ExpenseCategories";
@@ -18,6 +18,7 @@ import { EmailTemplates } from "@/components/settings/EmailTemplates";
 import { DataResetPanel } from "@/components/settings/DataResetPanel";
 import { BillingSettings } from "@/components/settings/BillingSettings";
 import BkashSettings from "@/components/settings/BkashSettings";
+import { ContractTemplates } from "@/components/settings/ContractTemplates";
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { decodeSettingValue, normalizeTemplateVars } from "@/lib/settingsValue";
@@ -177,13 +178,16 @@ Please pay to avoid disconnection.
               <Shield className="h-4 w-4" />
               <span className="hidden sm:inline">Permissions</span>
             </TabsTrigger>
+            <TabsTrigger value="contracts" className="flex items-center gap-1.5 px-3 py-2">
+              <FileText className="h-4 w-4" />
+              <span className="hidden sm:inline">Contracts</span>
+            </TabsTrigger>
             {isSuperAdmin && (
               <TabsTrigger value="bkash" className="flex items-center gap-1.5 px-3 py-2">
                 <CreditCard className="h-4 w-4" />
                 <span className="hidden sm:inline">bKash</span>
               </TabsTrigger>
             )}
-            {/* Reset is shown inside General tab for Super Admins */}
           </TabsList>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
@@ -336,6 +340,10 @@ Please pay to avoid disconnection.
 
         <TabsContent value="permissions">
           <RolePermissions />
+        </TabsContent>
+
+        <TabsContent value="contracts">
+          <ContractTemplates />
         </TabsContent>
 
         {isSuperAdmin && (
