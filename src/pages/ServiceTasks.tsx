@@ -367,6 +367,41 @@ export default function ServiceTasks() {
                 <Badge className={priorityColors[viewTask.priority]}>{viewTask.priority}</Badge>
                 <Badge variant="outline">{viewTask.task_type}</Badge>
               </div>
+
+              {/* Admin Status Update */}
+              <div className="border rounded-lg p-3 space-y-2 bg-muted/30">
+                <Label className="text-xs font-semibold uppercase text-muted-foreground">Update Status</Label>
+                <div className="flex gap-2 flex-wrap">
+                  {["pending", "in_progress", "completed", "cancelled"].map((s) => (
+                    <Button
+                      key={s}
+                      size="sm"
+                      variant={viewTask.status === s ? "default" : "outline"}
+                      disabled={viewTask.status === s}
+                      onClick={async () => {
+                        try {
+                          const updateData: Record<string, unknown> = { status: s };
+                          if (s === "completed") updateData.completed_at = new Date().toISOString();
+                          if (s !== "completed") updateData.completed_at = null;
+                          const { error } = await supabase
+                            .from("service_tasks")
+                            .update(updateData as any)
+                            .eq("id", viewTask.id);
+                          if (error) throw error;
+                          toast({ title: `Task marked as ${s.replace("_", " ")}` });
+                          setViewTask({ ...viewTask, status: s, completed_at: s === "completed" ? new Date().toISOString() : null });
+                          fetchData();
+                        } catch {
+                          toast({ title: "Error", description: "Failed to update status", variant: "destructive" });
+                        }
+                      }}
+                    >
+                      {s.replace("_", " ")}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
               <div>
                 <h3 className="font-semibold text-lg">{viewTask.title}</h3>
                 {viewTask.description && <p className="text-sm text-muted-foreground mt-1">{viewTask.description}</p>}

@@ -40,18 +40,18 @@ After reviewing all 18+ modules, here is a prioritized list of gaps organized by
 
 ### MEDIUM -- Functional gaps
 
-| Module | Issue | Detail |
-|--------|-------|--------|
-| **Routers** | No health monitoring | No connected user count, uptime, or traffic stats displayed. |
-| **Routers** | Real MikroTik adapter is a stub | `RealMikrotikAdapter` returns "not_implemented" for all methods. |
-| **Outages** | No pagination for history | Resolved outages capped at `.slice(0, 20)` in UI. |
-| **Outages** | WhatsApp broadcast is manual | Opens WhatsApp for the first customer only; no real bulk broadcast. |
-| **Service Tasks** | No status update from admin UI | View-only task detail dialog; admin cannot update status without going to technician portal. |
-| **Invoices** | No automated overdue detection | Invoice status must be updated manually; no scheduled check for overdue invoices. |
-| **Dashboard** | No area-based breakdown | Stats are aggregated across all areas; no per-area view. |
-| **Reminders** | No scheduled/auto reminders | All reminders are manual; no cron-based auto-reminder for expiring customers. |
-| **Resellers** | Thin wrapper page | Just renders `ResellerManagement` component; no dashboard stats or commission overview on the page. |
-| **Packages** | No customer count per package | Cannot see how many customers are on each package. |
+| Module | Issue | Detail | Status |
+|--------|-------|--------|--------|
+| **Routers** | No health monitoring | No connected user count, uptime, or traffic stats displayed. | ⬜ TODO |
+| **Routers** | Real MikroTik adapter is a stub | `RealMikrotikAdapter` returns "not_implemented" for all methods. | ⬜ TODO |
+| **Outages** | No pagination for history | Resolved outages capped at `.slice(0, 20)` in UI. | ⬜ TODO |
+| **Outages** | WhatsApp broadcast is manual | Opens WhatsApp for the first customer only; no real bulk broadcast. | ⬜ TODO |
+| **Service Tasks** | No status update from admin UI | View-only task detail dialog; admin cannot update status without going to technician portal. | ✅ Done |
+| **Invoices** | No automated overdue detection | Invoice status must be updated manually; no scheduled check for overdue invoices. | ✅ Done |
+| **Dashboard** | No area-based breakdown | Stats are aggregated across all areas; no per-area view. | ⬜ TODO |
+| **Reminders** | No scheduled/auto reminders | All reminders are manual; no cron-based auto-reminder for expiring customers. | ✅ Done |
+| **Resellers** | Thin wrapper page | Just renders `ResellerManagement` component; no dashboard stats or commission overview on the page. | ⬜ TODO |
+| **Packages** | No customer count per package | Cannot see how many customers are on each package. | ✅ Done |
 
 ---
 
@@ -76,18 +76,18 @@ After reviewing all 18+ modules, here is a prioritized list of gaps organized by
 2. ✅ Add date range filters and method filter to Payments page
 3. ✅ Add CSV export to Customers and Payments
 
-**Phase 2 -- Operations (High)**
-4. Add Activity Log viewer in Settings
-5. Separate income/expense categories in Accounting
-6. Add customer ticket submission to Customer Portal
-7. Secure Customer Portal sessions (replace localStorage with signed JWT)
-8. Add CSV export to Tickets and HRM
+**Phase 2 -- Operations (High) ✅ COMPLETE**
+4. ✅ Add Activity Log viewer in Settings
+5. ✅ Separate income/expense categories in Accounting
+6. ✅ Add customer ticket submission to Customer Portal
+7. ⬜ Secure Customer Portal sessions (replace localStorage with signed JWT) -- deferred, needs backend infra
+8. ✅ Add CSV export to Tickets and HRM
 
-**Phase 3 -- Automation (Medium)**
-9. Add admin status update to Service Tasks detail dialog
-10. Add automated overdue invoice detection (scheduled function)
-11. Add scheduled auto-reminders for expiring customers
-12. Add customer count per package display
+**Phase 3 -- Automation (Medium) ✅ COMPLETE**
+9. ✅ Add admin status update to Service Tasks detail dialog
+10. ✅ Add automated overdue invoice detection (scheduled function -- runs daily at 2 AM)
+11. ✅ Add scheduled auto-reminders for expiring customers (runs daily at 8 AM)
+12. ✅ Add customer count per package display
 
 **Phase 4 -- Advanced (Low)**
 13. Invoice email delivery
