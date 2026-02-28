@@ -25,6 +25,7 @@ import Invoices from "./pages/Invoices";
 import CustomerLogin from "./pages/CustomerLogin";
 import CustomerPortal from "./pages/CustomerPortal";
 import Tickets from "./pages/Tickets";
+import Outages from "./pages/Outages";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -190,6 +191,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute resource="tickets">
             <Tickets />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/outages"
+        element={
+          <ProtectedRoute resource="outages">
+            <Outages />
           </ProtectedRoute>
         }
       />

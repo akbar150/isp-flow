@@ -13,6 +13,7 @@ import {
   ChevronRight,
   ChevronDown,
   Wifi,
+  WifiOff,
   Phone,
   FileBarChart,
   Calculator,
@@ -66,6 +67,7 @@ const navItems: NavItem[] = [
     ]
   },
   { path: "/tickets", label: "Support Tickets", icon: TicketCheck, resource: "tickets" },
+  { path: "/outages", label: "Network Outages", icon: WifiOff, resource: "outages" },
   { path: "/inventory", label: "Inventory", icon: Boxes, resource: "inventory" },
   { path: "/hrm", label: "HRM", icon: UserCog, resource: "hrm" },
   { path: "/reports", label: "Reports", icon: FileBarChart, resource: "reports" },

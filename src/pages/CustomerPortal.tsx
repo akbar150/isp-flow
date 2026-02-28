@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import {
   Wifi, LogOut, User, CreditCard, Calendar, Package, Phone, MapPin,
-  Clock, AlertTriangle, CheckCircle, Loader2, Lock, History
+  Clock, AlertTriangle, CheckCircle, Loader2, Lock, History, WifiOff
 } from "lucide-react";
 import { useIspSettings } from "@/hooks/useIspSettings";
 
@@ -45,6 +45,7 @@ export default function CustomerPortal() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [activeOutages, setActiveOutages] = useState<{ id: string; title: string; description: string | null; estimated_restore: string | null }[]>([]);
   
   // Show loading placeholder while settings load to prevent "Smart ISP" flash
   const displayName = settingsLoading ? "Loading..." : ispName;
@@ -74,6 +75,7 @@ export default function CustomerPortal() {
         address: customerData.address,
       });
       fetchPayments(customerData.id);
+      fetchActiveOutages();
     } catch {
       navigate("/customer-login");
     }
@@ -94,6 +96,18 @@ export default function CustomerPortal() {
       console.error("Error fetching payments:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchActiveOutages = async () => {
+    try {
+      const { data } = await supabase
+        .from("network_outages")
+        .select("id, title, description, estimated_restore")
+        .eq("status", "active");
+      setActiveOutages((data || []) as any[]);
+    } catch (error) {
+      console.error("Error fetching outages:", error);
     }
   };
 
@@ -220,6 +234,26 @@ export default function CustomerPortal() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
+        {/* Active Outage Banners */}
+        {activeOutages.length > 0 && (
+          <div className="mb-6 space-y-3">
+            {activeOutages.map(outage => (
+              <div key={outage.id} className="p-4 bg-[hsl(var(--status-expiring)/0.1)] border border-[hsl(var(--status-expiring)/0.3)] rounded-lg flex items-start gap-3">
+                <WifiOff className="h-5 w-5 text-[hsl(var(--status-expiring))] shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-sm">{outage.title}</p>
+                  {outage.description && <p className="text-xs text-muted-foreground mt-0.5">{outage.description}</p>}
+                  {outage.estimated_restore && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Estimated restore: {new Date(outage.estimated_restore).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Status Banner */}
         {customer.status !== "active" && (
           <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-3">
