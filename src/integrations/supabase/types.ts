@@ -361,6 +361,7 @@ export type Database = {
           package_id: string | null
           password_hash: string
           phone: string
+          referral_credit: number
           router_id: string | null
           status: Database["public"]["Enums"]["customer_status"]
           total_due: number
@@ -389,6 +390,7 @@ export type Database = {
           package_id?: string | null
           password_hash: string
           phone: string
+          referral_credit?: number
           router_id?: string | null
           status?: Database["public"]["Enums"]["customer_status"]
           total_due?: number
@@ -417,6 +419,7 @@ export type Database = {
           package_id?: string | null
           password_hash?: string
           phone?: string
+          referral_credit?: number
           router_id?: string | null
           status?: Database["public"]["Enums"]["customer_status"]
           total_due?: number
@@ -1463,6 +1466,107 @@ export type Database = {
         }
         Relationships: []
       }
+      referral_codes: {
+        Row: {
+          code: string
+          created_at: string
+          customer_id: string
+          id: string
+          is_active: boolean
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          customer_id: string
+          id?: string
+          is_active?: boolean
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          customer_id?: string
+          id?: string
+          is_active?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_codes_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: true
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_codes_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: true
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referrals: {
+        Row: {
+          created_at: string
+          credit_amount: number
+          credited_at: string | null
+          id: string
+          referred_customer_id: string | null
+          referred_phone: string | null
+          referrer_id: string
+          status: Database["public"]["Enums"]["referral_status"]
+        }
+        Insert: {
+          created_at?: string
+          credit_amount?: number
+          credited_at?: string | null
+          id?: string
+          referred_customer_id?: string | null
+          referred_phone?: string | null
+          referrer_id: string
+          status?: Database["public"]["Enums"]["referral_status"]
+        }
+        Update: {
+          created_at?: string
+          credit_amount?: number
+          credited_at?: string | null
+          id?: string
+          referred_customer_id?: string | null
+          referred_phone?: string | null
+          referrer_id?: string
+          status?: Database["public"]["Enums"]["referral_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referrals_referred_customer_id_fkey"
+            columns: ["referred_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referrals_referred_customer_id_fkey"
+            columns: ["referred_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referrals_referrer_id_fkey"
+            columns: ["referrer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referrals_referrer_id_fkey"
+            columns: ["referrer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reminder_logs: {
         Row: {
           channel: string
@@ -2177,6 +2281,7 @@ export type Database = {
       package_change_status: "pending" | "approved" | "rejected"
       payment_method: "bkash" | "cash" | "bank_transfer" | "due"
       payroll_status: "draft" | "approved" | "paid"
+      referral_status: "pending" | "credited" | "expired"
       reminder_type:
         | "3_days_before"
         | "1_day_before"
@@ -2358,6 +2463,7 @@ export const Constants = {
       package_change_status: ["pending", "approved", "rejected"],
       payment_method: ["bkash", "cash", "bank_transfer", "due"],
       payroll_status: ["draft", "approved", "paid"],
+      referral_status: ["pending", "credited", "expired"],
       reminder_type: [
         "3_days_before",
         "1_day_before",
