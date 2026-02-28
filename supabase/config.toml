@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.send-sms-routemobile]
 verify_jwt = false
+
+[functions.import-customers-bulk]
+verify_jwt = false
