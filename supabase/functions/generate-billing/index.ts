@@ -38,7 +38,6 @@ interface Customer {
 const handler = async (req: Request): Promise<Response> => {
   const corsHeaders = getCorsHeaders(req);
   
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -51,14 +50,12 @@ const handler = async (req: Request): Promise<Response> => {
     // ============= AUTHENTICATION CHECK =============
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      console.log('Missing or invalid authorization header');
       return new Response(
         JSON.stringify({ success: false, error: 'Unauthorized - Missing authentication token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Verify the user's JWT token
     const token = authHeader.replace('Bearer ', '');
     const authClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } }
@@ -67,7 +64,6 @@ const handler = async (req: Request): Promise<Response> => {
     const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
     
     if (claimsError || !claimsData?.claims?.sub) {
-      console.log('Invalid token:', claimsError?.message);
       return new Response(
         JSON.stringify({ success: false, error: 'Unauthorized - Invalid token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -76,7 +72,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     const userId = claimsData.claims.sub;
 
-    // ============= AUTHORIZATION CHECK - Admin/Super Admin only =============
+    // ============= AUTHORIZATION CHECK =============
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     
     const { data: roleData, error: roleError } = await supabaseAdmin
@@ -85,16 +81,7 @@ const handler = async (req: Request): Promise<Response> => {
       .eq('user_id', userId)
       .single();
 
-    if (roleError || !roleData) {
-      console.log('User role not found:', roleError?.message);
-      return new Response(
-        JSON.stringify({ success: false, error: 'Forbidden - User role not found' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!['admin', 'super_admin'].includes(roleData.role)) {
-      console.log('User does not have admin privileges:', roleData.role);
+    if (roleError || !roleData || !['admin', 'super_admin'].includes(roleData.role)) {
       return new Response(
         JSON.stringify({ success: false, error: 'Forbidden - Admin access required' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -103,6 +90,22 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Billing generation triggered by admin user: ${userId}`);
 
+    // ============= LOAD SETTINGS =============
+    const { data: settingsData } = await supabaseAdmin
+      .from('system_settings')
+      .select('key, value')
+      .in('key', ['grace_period_days', 'auto_suspend_enabled']);
+
+    const settingsMap: Record<string, unknown> = {};
+    (settingsData || []).forEach((s: { key: string; value: unknown }) => {
+      settingsMap[s.key] = s.value;
+    });
+
+    const gracePeriodDays = Number(settingsMap.grace_period_days) || 3;
+    const autoSuspendEnabled = settingsMap.auto_suspend_enabled !== false;
+
+    console.log(`Settings: grace_period=${gracePeriodDays} days, auto_suspend=${autoSuspendEnabled}`);
+
     // ============= BILLING GENERATION LOGIC =============
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -110,7 +113,6 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Running billing generation for date: ${todayStr}`);
 
-    // Get all customers whose expiry date is today or has passed
     const { data: customers, error: customersError } = await supabaseAdmin
       .from('customers')
       .select('*, packages(*)')
@@ -128,6 +130,7 @@ const handler = async (req: Request): Promise<Response> => {
       billsGenerated: 0,
       billingRecordsCreated: 0,
       duesUpdated: 0,
+      suspended: 0,
       errors: [] as string[],
       triggered_by: userId,
     };
@@ -137,10 +140,7 @@ const handler = async (req: Request): Promise<Response> => {
         const expiryDate = new Date(customer.expiry_date);
         expiryDate.setHours(0, 0, 0, 0);
         
-        // Skip if expiry date is in the future
-        if (expiryDate > today) {
-          continue;
-        }
+        if (expiryDate > today) continue;
 
         const pkg = customer.packages;
         if (!pkg) {
@@ -148,10 +148,9 @@ const handler = async (req: Request): Promise<Response> => {
           continue;
         }
 
-        // Calculate how many days overdue
         const daysOverdue = Math.floor((today.getTime() - expiryDate.getTime()) / (1000 * 60 * 60 * 24));
         
-        // Check if a billing record already exists for this billing period (expiry_date)
+        // Check if a billing record already exists for this billing period
         const { data: existingBill } = await supabaseAdmin
           .from('billing_records')
           .select('id')
@@ -159,7 +158,6 @@ const handler = async (req: Request): Promise<Response> => {
           .eq('billing_date', customer.expiry_date)
           .single();
 
-        // Only generate bill and update due if billing record doesn't exist yet
         if (!existingBill && daysOverdue >= 0) {
           // Create billing record
           const { error: billingError } = await supabaseAdmin
@@ -178,10 +176,8 @@ const handler = async (req: Request): Promise<Response> => {
             console.error(`Failed to create billing record for ${customer.user_id}:`, billingError.message);
           } else {
             results.billingRecordsCreated++;
-            console.log(`Created billing record for ${customer.user_id}: ৳${pkg.monthly_price}`);
           }
 
-          // Always add monthly price to total_due when creating new billing record
           const newTotalDue = customer.total_due + pkg.monthly_price;
           
           const { error: updateError } = await supabaseAdmin
@@ -200,13 +196,25 @@ const handler = async (req: Request): Promise<Response> => {
           results.billsGenerated++;
           results.duesUpdated++;
         } else if (existingBill) {
-          // Billing record exists - just ensure status is expired if overdue
+          // Billing record exists - ensure status is expired if overdue
           if (daysOverdue > 0 && customer.status !== 'expired') {
             await supabaseAdmin
               .from('customers')
               .update({ status: 'expired' })
               .eq('id', customer.id);
-            console.log(`Updated status to expired for ${customer.user_id}`);
+          }
+        }
+
+        // ============= AUTO-SUSPEND after grace period =============
+        if (autoSuspendEnabled && daysOverdue > gracePeriodDays && customer.status !== 'suspended') {
+          const { error: suspendError } = await supabaseAdmin
+            .from('customers')
+            .update({ status: 'suspended' })
+            .eq('id', customer.id);
+
+          if (!suspendError) {
+            results.suspended++;
+            console.log(`Auto-suspended ${customer.user_id} (${daysOverdue} days overdue, grace: ${gracePeriodDays})`);
           }
         }
 
@@ -223,7 +231,7 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Processed ${results.processed} customers, generated ${results.billsGenerated} bills, created ${results.billingRecordsCreated} billing records, updated ${results.duesUpdated} customer dues`,
+        message: `Processed ${results.processed} customers, generated ${results.billsGenerated} bills, suspended ${results.suspended} customers`,
         details: results,
       }),
       {
