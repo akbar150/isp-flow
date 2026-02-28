@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map, Trash2 } from "lucide-react";
+import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map, Trash2, Zap } from "lucide-react";
 import { UserManagement } from "@/components/settings/UserManagement";
 import { RolePermissions } from "@/components/settings/RolePermissions";
 import { ExpenseCategories } from "@/components/settings/ExpenseCategories";
@@ -16,6 +16,7 @@ import { SmsSettings } from "@/components/settings/SmsSettings";
 import { FirebaseOtpSettings } from "@/components/settings/FirebaseOtpSettings";
 import { EmailTemplates } from "@/components/settings/EmailTemplates";
 import { DataResetPanel } from "@/components/settings/DataResetPanel";
+import { BillingSettings } from "@/components/settings/BillingSettings";
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { decodeSettingValue, normalizeTemplateVars } from "@/lib/settingsValue";
@@ -154,6 +155,10 @@ Please pay to avoid disconnection.
             <TabsTrigger value="otp" className="flex items-center gap-1.5 px-3 py-2">
               <Smartphone className="h-4 w-4" />
               <span className="hidden sm:inline">OTP</span>
+            </TabsTrigger>
+            <TabsTrigger value="billing" className="flex items-center gap-1.5 px-3 py-2">
+              <Zap className="h-4 w-4" />
+              <span className="hidden sm:inline">Billing</span>
             </TabsTrigger>
             <TabsTrigger value="areas" className="flex items-center gap-1.5 px-3 py-2">
               <MapPin className="h-4 w-4" />
@@ -304,6 +309,10 @@ Please pay to avoid disconnection.
 
         <TabsContent value="otp">
           <FirebaseOtpSettings />
+        </TabsContent>
+
+        <TabsContent value="billing">
+          <BillingSettings />
         </TabsContent>
 
         <TabsContent value="areas">
