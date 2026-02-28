@@ -1766,6 +1766,159 @@ export type Database = {
           },
         ]
       }
+      reseller_commissions: {
+        Row: {
+          amount: number
+          created_at: string
+          customer_id: string | null
+          id: string
+          notes: string | null
+          payment_id: string | null
+          reseller_id: string
+          status: Database["public"]["Enums"]["commission_status"]
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          notes?: string | null
+          payment_id?: string | null
+          reseller_id: string
+          status?: Database["public"]["Enums"]["commission_status"]
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          notes?: string | null
+          payment_id?: string | null
+          reseller_id?: string
+          status?: Database["public"]["Enums"]["commission_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reseller_commissions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reseller_commissions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reseller_commissions_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reseller_commissions_reseller_id_fkey"
+            columns: ["reseller_id"]
+            isOneToOne: false
+            referencedRelation: "resellers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reseller_customers: {
+        Row: {
+          created_at: string
+          customer_id: string
+          id: string
+          reseller_id: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          id?: string
+          reseller_id: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          id?: string
+          reseller_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reseller_customers_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reseller_customers_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reseller_customers_reseller_id_fkey"
+            columns: ["reseller_id"]
+            isOneToOne: false
+            referencedRelation: "resellers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      resellers: {
+        Row: {
+          address: string | null
+          commission_rate: number
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          password_hash: string
+          phone: string
+          reseller_code: string
+          status: Database["public"]["Enums"]["reseller_status"]
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          address?: string | null
+          commission_rate?: number
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          password_hash: string
+          phone: string
+          reseller_code: string
+          status?: Database["public"]["Enums"]["reseller_status"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          address?: string | null
+          commission_rate?: number
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          password_hash?: string
+          phone?: string
+          reseller_code?: string
+          status?: Database["public"]["Enums"]["reseller_status"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       routers: {
         Row: {
           created_at: string
@@ -2455,6 +2608,7 @@ export type Database = {
       }
       generate_customer_user_id: { Args: never; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }
+      generate_reseller_code: { Args: never; Returns: string }
       generate_ticket_number: { Args: never; Returns: string }
       get_public_system_settings: {
         Args: never
@@ -2486,6 +2640,7 @@ export type Database = {
       asset_status: "in_stock" | "assigned" | "returned" | "damaged" | "sold"
       attendance_status: "present" | "absent" | "late" | "half_day" | "on_leave"
       billing_cycle_type: "monthly" | "quarterly" | "yearly"
+      commission_status: "pending" | "paid" | "cancelled"
       connection_type: "pppoe" | "static" | "dhcp"
       contract_status:
         | "draft"
@@ -2525,6 +2680,7 @@ export type Database = {
         | "1_day_before"
         | "expiry_day"
         | "3_days_overdue"
+      reseller_status: "active" | "inactive" | "suspended"
       router_mode: "dummy" | "real"
       service_task_priority: "low" | "medium" | "high" | "urgent"
       service_task_status: "pending" | "in_progress" | "completed" | "cancelled"
@@ -2679,6 +2835,7 @@ export const Constants = {
       asset_status: ["in_stock", "assigned", "returned", "damaged", "sold"],
       attendance_status: ["present", "absent", "late", "half_day", "on_leave"],
       billing_cycle_type: ["monthly", "quarterly", "yearly"],
+      commission_status: ["pending", "paid", "cancelled"],
       connection_type: ["pppoe", "static", "dhcp"],
       contract_status: [
         "draft",
@@ -2722,6 +2879,7 @@ export const Constants = {
         "expiry_day",
         "3_days_overdue",
       ],
+      reseller_status: ["active", "inactive", "suspended"],
       router_mode: ["dummy", "real"],
       service_task_priority: ["low", "medium", "high", "urgent"],
       service_task_status: ["pending", "in_progress", "completed", "cancelled"],
