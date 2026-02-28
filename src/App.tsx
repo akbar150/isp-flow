@@ -24,6 +24,7 @@ import HRM from "./pages/HRM";
 import Invoices from "./pages/Invoices";
 import CustomerLogin from "./pages/CustomerLogin";
 import CustomerPortal from "./pages/CustomerPortal";
+import Tickets from "./pages/Tickets";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -181,6 +182,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute resource="invoices">
             <Invoices />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tickets"
+        element={
+          <ProtectedRoute resource="tickets">
+            <Tickets />
           </ProtectedRoute>
         }
       />

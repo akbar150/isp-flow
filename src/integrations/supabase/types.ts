@@ -1470,6 +1470,72 @@ export type Database = {
         }
         Relationships: []
       }
+      support_tickets: {
+        Row: {
+          assigned_to: string | null
+          category: Database["public"]["Enums"]["ticket_category"]
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          description: string
+          id: string
+          priority: Database["public"]["Enums"]["ticket_priority"]
+          resolved_at: string | null
+          sla_deadline: string | null
+          status: Database["public"]["Enums"]["ticket_status"]
+          subject: string
+          ticket_number: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          category?: Database["public"]["Enums"]["ticket_category"]
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          description: string
+          id?: string
+          priority?: Database["public"]["Enums"]["ticket_priority"]
+          resolved_at?: string | null
+          sla_deadline?: string | null
+          status?: Database["public"]["Enums"]["ticket_status"]
+          subject: string
+          ticket_number: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          category?: Database["public"]["Enums"]["ticket_category"]
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          description?: string
+          id?: string
+          priority?: Database["public"]["Enums"]["ticket_priority"]
+          resolved_at?: string | null
+          sla_deadline?: string | null
+          status?: Database["public"]["Enums"]["ticket_status"]
+          subject?: string
+          ticket_number?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_tickets_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_tickets_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_settings: {
         Row: {
           id: string
@@ -1490,6 +1556,41 @@ export type Database = {
           value?: Json
         }
         Relationships: []
+      }
+      ticket_comments: {
+        Row: {
+          comment: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_internal: boolean
+          ticket_id: string
+        }
+        Insert: {
+          comment: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_internal?: boolean
+          ticket_id: string
+        }
+        Update: {
+          comment?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_internal?: boolean
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_comments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transactions: {
         Row: {
@@ -1905,6 +2006,7 @@ export type Database = {
       }
       generate_customer_user_id: { Args: never; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }
+      generate_ticket_number: { Args: never; Returns: string }
       get_public_system_settings: {
         Args: never
         Returns: {
@@ -1966,6 +2068,21 @@ export type Database = {
         | "expiry_day"
         | "3_days_overdue"
       router_mode: "dummy" | "real"
+      ticket_category:
+        | "connection_issue"
+        | "billing_dispute"
+        | "slow_speed"
+        | "disconnection"
+        | "new_connection"
+        | "package_change"
+        | "other"
+      ticket_priority: "low" | "medium" | "high" | "critical"
+      ticket_status:
+        | "open"
+        | "in_progress"
+        | "waiting_on_customer"
+        | "resolved"
+        | "closed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2131,6 +2248,23 @@ export const Constants = {
         "3_days_overdue",
       ],
       router_mode: ["dummy", "real"],
+      ticket_category: [
+        "connection_issue",
+        "billing_dispute",
+        "slow_speed",
+        "disconnection",
+        "new_connection",
+        "package_change",
+        "other",
+      ],
+      ticket_priority: ["low", "medium", "high", "critical"],
+      ticket_status: [
+        "open",
+        "in_progress",
+        "waiting_on_customer",
+        "resolved",
+        "closed",
+      ],
     },
   },
 } as const
