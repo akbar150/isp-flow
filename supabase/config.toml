@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.bkash-payment]
 verify_jwt = false
+
+[functions.reseller-auth]
+verify_jwt = false

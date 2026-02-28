@@ -28,6 +28,8 @@ import Tickets from "./pages/Tickets";
 import Outages from "./pages/Outages";
 import ServiceTasks from "./pages/ServiceTasks";
 import TechnicianPortal from "./pages/TechnicianPortal";
+import ResellerLogin from "./pages/ResellerLogin";
+import ResellerPortal from "./pages/ResellerPortal";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -216,6 +218,8 @@ function AppRoutes() {
       <Route path="/customer-login" element={<CustomerLogin />} />
       <Route path="/customer-portal" element={<CustomerPortal />} />
       <Route path="/technician" element={<TechnicianPortal />} />
+      <Route path="/reseller-login" element={<ResellerLogin />} />
+      <Route path="/reseller-portal" element={<ResellerPortal />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
