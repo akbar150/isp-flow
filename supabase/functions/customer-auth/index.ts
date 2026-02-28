@@ -1,5 +1,4 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 // Allowed origins for CORS - production domains
 const allowedOrigins = [
@@ -30,7 +29,7 @@ interface CustomerAuthRequest {
   new_password?: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   
   if (req.method === "OPTIONS") {
