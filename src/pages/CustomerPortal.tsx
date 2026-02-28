@@ -10,8 +10,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import {
   Wifi, LogOut, User, CreditCard, Calendar, Package, Phone, MapPin,
-  Clock, AlertTriangle, CheckCircle, Loader2, Lock, History, WifiOff
+  Clock, AlertTriangle, CheckCircle, Loader2, Lock, History, WifiOff, Gauge
 } from "lucide-react";
+import SpeedTest from "@/components/portal/SpeedTest";
 import { useIspSettings } from "@/hooks/useIspSettings";
 
 interface CustomerData {
@@ -343,6 +344,10 @@ export default function CustomerPortal() {
               <Lock className="h-4 w-4" />
               Security
             </TabsTrigger>
+            <TabsTrigger value="speedtest" className="flex items-center gap-2">
+              <Gauge className="h-4 w-4" />
+              Speed Test
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile">
@@ -483,6 +488,10 @@ export default function CustomerPortal() {
                 </form>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="speedtest">
+            <SpeedTest packageSpeedMbps={customer.package?.speed_mbps} />
           </TabsContent>
         </Tabs>
       </main>
