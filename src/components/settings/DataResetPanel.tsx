@@ -77,6 +77,12 @@ export function DataResetPanel() {
   const [resetting, setResetting] = useState(false);
   const [affectedCounts, setAffectedCounts] = useState<Record<string, number>>({});
   const [confirmText, setConfirmText] = useState("");
+  const [productResetStock, setProductResetStock] = useState(false);
+  const [productResetPrices, setProductResetPrices] = useState(false);
+  const [showProductConfirm, setShowProductConfirm] = useState(false);
+  const [productConfirmText, setProductConfirmText] = useState("");
+  const [productResetting, setProductResetting] = useState(false);
+  const [productCount, setProductCount] = useState(0);
 
   if (!isSuperAdmin) {
     return (
@@ -201,6 +207,47 @@ export function DataResetPanel() {
 
   const totalAffected = Object.values(affectedCounts).reduce((sum, count) => sum + count, 0);
 
+
+  const handleProductPreview = async () => {
+    if (!productResetStock && !productResetPrices) {
+      toast({ title: "Selection Required", description: "Select at least one option to reset", variant: "destructive" });
+      return;
+    }
+    const { count, error } = await supabase.from("products" as any).select("id", { count: "exact", head: true });
+    if (!error) setProductCount(count || 0);
+    setShowProductConfirm(true);
+  };
+
+  const handleProductReset = async () => {
+    if (productConfirmText !== "RESET") {
+      toast({ title: "Confirmation Required", description: "Please type RESET to confirm", variant: "destructive" });
+      return;
+    }
+    setProductResetting(true);
+    const errors: string[] = [];
+
+    if (productResetStock) {
+      const { error } = await supabase.from("products" as any).update({ stock_quantity: 0, metered_quantity: 0 }).gte("id", "00000000-0000-0000-0000-000000000000");
+      if (error) errors.push(`Stock: ${error.message}`);
+    }
+    if (productResetPrices) {
+      const { error } = await supabase.from("products" as any).update({ purchase_price: 0, selling_price: 0 }).gte("id", "00000000-0000-0000-0000-000000000000");
+      if (error) errors.push(`Prices: ${error.message}`);
+    }
+
+    setProductResetting(false);
+    setShowProductConfirm(false);
+    setProductConfirmText("");
+    setProductResetStock(false);
+    setProductResetPrices(false);
+
+    if (errors.length > 0) {
+      toast({ title: "Partial Reset", description: errors.join(", "), variant: "destructive" });
+    } else {
+      toast({ title: "Product Data Reset Complete", description: `Successfully reset data for ${productCount} products` });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg">
@@ -282,6 +329,59 @@ export function DataResetPanel() {
         </Button>
       </div>
 
+      {/* Product Data Reset Section */}
+      <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg mt-8">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
+          <div>
+            <h4 className="font-medium text-destructive">Reset Product Data</h4>
+            <p className="text-sm text-muted-foreground">
+              Reset stock quantities and/or prices for all products to zero. Products themselves will not be deleted.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div
+            className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+              productResetStock ? "border-destructive bg-destructive/5" : "border-border hover:border-muted-foreground"
+            }`}
+            onClick={() => setProductResetStock(!productResetStock)}
+          >
+            <Checkbox checked={productResetStock} onCheckedChange={() => setProductResetStock(!productResetStock)} className="mt-0.5" />
+            <div className="flex-1">
+              <div className="font-medium text-sm">Reset Stock Quantities</div>
+              <div className="text-xs text-muted-foreground">Sets stock_quantity and metered_quantity to 0 for all products</div>
+            </div>
+          </div>
+          <div
+            className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+              productResetPrices ? "border-destructive bg-destructive/5" : "border-border hover:border-muted-foreground"
+            }`}
+            onClick={() => setProductResetPrices(!productResetPrices)}
+          >
+            <Checkbox checked={productResetPrices} onCheckedChange={() => setProductResetPrices(!productResetPrices)} className="mt-0.5" />
+            <div className="flex-1">
+              <div className="font-medium text-sm">Reset Prices</div>
+              <div className="text-xs text-muted-foreground">Sets purchase_price and selling_price to 0 for all products</div>
+            </div>
+          </div>
+        </div>
+
+        <Button
+          variant="destructive"
+          onClick={handleProductPreview}
+          disabled={!productResetStock && !productResetPrices}
+          className="w-full sm:w-auto"
+        >
+          <Trash2 className="h-4 w-4 mr-2" />
+          Preview Product Reset
+        </Button>
+      </div>
+
+      {/* Date-range confirm dialog */}
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -296,14 +396,12 @@ export function DataResetPanel() {
               </p>
               
               <div className="bg-muted p-3 rounded-lg space-y-1">
-                {getOrderedSelectedTypes(selectedTypes).map((dataType) => {
-                  return (
-                    <div key={dataType.key} className="flex justify-between text-sm">
-                      <span>{dataType.label}</span>
-                      <span className="font-mono">{affectedCounts[dataType.key] || 0} records</span>
-                    </div>
-                  );
-                })}
+                {getOrderedSelectedTypes(selectedTypes).map((dataType) => (
+                  <div key={dataType.key} className="flex justify-between text-sm">
+                    <span>{dataType.label}</span>
+                    <span className="font-mono">{affectedCounts[dataType.key] || 0} records</span>
+                  </div>
+                ))}
               </div>
 
               <div className="space-y-2">
@@ -326,6 +424,49 @@ export function DataResetPanel() {
               className="bg-destructive hover:bg-destructive/90"
             >
               {resetting ? "Resetting..." : "Delete Data"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Product reset confirm dialog */}
+      <AlertDialog open={showProductConfirm} onOpenChange={setShowProductConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Confirm Product Data Reset
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-4">
+              <p>You are about to reset data for <strong>{productCount} products</strong>:</p>
+              <div className="bg-muted p-3 rounded-lg space-y-1">
+                {productResetStock && (
+                  <div className="text-sm">• Stock quantities → 0</div>
+                )}
+                {productResetPrices && (
+                  <div className="text-sm">• Purchase & selling prices → 0</div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="product-confirm-text">Type <strong>RESET</strong> to confirm</Label>
+                <Input
+                  id="product-confirm-text"
+                  value={productConfirmText}
+                  onChange={(e) => setProductConfirmText(e.target.value.toUpperCase())}
+                  placeholder="Type RESET"
+                  className="font-mono"
+                />
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setProductConfirmText("")}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleProductReset}
+              disabled={productConfirmText !== "RESET" || productResetting}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {productResetting ? "Resetting..." : "Reset Product Data"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
