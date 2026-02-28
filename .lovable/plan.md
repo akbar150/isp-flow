@@ -29,12 +29,12 @@ After reviewing all 18+ modules, here is a prioritized list of gaps organized by
 | **Payments** | No CSV/PDF export | No export on Payments page. | ✅ Done |
 | **Payments** | No method filter | Cannot filter by payment method. | ✅ Done |
 | **Customers** | No CSV/PDF export | Cannot export customer list. | ✅ Done |
-| **Tickets** | No CSV/PDF export | Cannot export ticket data. | ⬜ TODO |
-| **Accounting** | Shared income/expense categories | Need separate category types. | ⬜ TODO |
-| **Settings** | No Activity Log viewer | No UI to view activity_logs. | ⬜ TODO |
+| **Tickets** | No CSV/PDF export | Cannot export ticket data. | ✅ Done |
+| **Accounting** | Shared income/expense categories | Need separate category types. | ✅ Done |
+| **Settings** | No Activity Log viewer | No UI to view activity_logs. | ✅ Done |
 | **Customer Portal** | localStorage session | Should use signed tokens. | ⬜ TODO |
-| **Customer Portal** | No ticket submission | Customers cannot create tickets. | ⬜ TODO |
-| **HRM** | No CSV/PDF export | No export capability. | ⬜ TODO |
+| **Customer Portal** | No ticket submission | Customers cannot create tickets. | ✅ Done |
+| **HRM** | No CSV/PDF export | No export capability. | ✅ Done |
 
 ---
 

@@ -42,9 +42,11 @@ import {
   Pencil,
   Trash2,
   Clock,
-  CalendarCheck
+  CalendarCheck,
+  Download
 } from "lucide-react";
 import { format } from "date-fns";
+import { exportToCSV } from "@/lib/exportUtils";
 
 interface Department {
   id: string;
@@ -471,6 +473,30 @@ export default function HRM() {
                 className="pl-10"
               />
             </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => {
+                const data = employees.map(e => ({
+                  code: e.employee_code,
+                  name: e.full_name,
+                  department: e.departments?.name || "-",
+                  designation: e.designations?.name || "-",
+                  joining: e.joining_date,
+                  salary: e.basic_salary,
+                  status: e.status,
+                }));
+                exportToCSV(data, [
+                  { key: "code", label: "Code" },
+                  { key: "name", label: "Name" },
+                  { key: "department", label: "Department" },
+                  { key: "designation", label: "Designation" },
+                  { key: "joining", label: "Joining Date" },
+                  { key: "salary", label: "Basic Salary" },
+                  { key: "status", label: "Status" },
+                ], `employees-${format(new Date(), "yyyy-MM-dd")}`);
+              }}>
+                <Download className="h-4 w-4 mr-1" />
+                CSV
+              </Button>
             {canManage && (
               <Dialog open={empDialogOpen} onOpenChange={setEmpDialogOpen}>
                 <DialogTrigger asChild>
@@ -596,6 +622,7 @@ export default function HRM() {
                 </DialogContent>
               </Dialog>
             )}
+            </div>
           </div>
 
           <div className="overflow-x-auto">

@@ -20,9 +20,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Search, MessageSquare, Clock, CheckCircle, AlertTriangle,
-  User, Loader2, Send, Filter
+  User, Loader2, Send, Filter, Download
 } from "lucide-react";
 import { format } from "date-fns";
+import { exportToCSV } from "@/lib/exportUtils";
 
 type TicketCategory = 'connection_issue' | 'billing_dispute' | 'slow_speed' | 'disconnection' | 'new_connection' | 'package_change' | 'other';
 type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
@@ -436,6 +437,31 @@ export default function Tickets() {
             {STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Button variant="outline" size="sm" onClick={() => {
+          const data = filteredTickets.map(t => ({
+            ticket_number: t.ticket_number,
+            customer: t.customers_safe?.full_name || "-",
+            customer_id: t.customers_safe?.user_id || "-",
+            subject: t.subject,
+            category: t.category,
+            priority: t.priority,
+            status: t.status,
+            created: format(new Date(t.created_at), "yyyy-MM-dd"),
+          }));
+          exportToCSV(data, [
+            { key: "ticket_number", label: "Ticket #" },
+            { key: "customer", label: "Customer" },
+            { key: "customer_id", label: "Customer ID" },
+            { key: "subject", label: "Subject" },
+            { key: "category", label: "Category" },
+            { key: "priority", label: "Priority" },
+            { key: "status", label: "Status" },
+            { key: "created", label: "Created" },
+          ], `tickets-export-${format(new Date(), "yyyy-MM-dd")}`);
+        }}>
+          <Download className="h-4 w-4 mr-1" />
+          CSV
+        </Button>
       </div>
 
       {/* Ticket List & Detail */}
