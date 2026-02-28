@@ -1,32 +1,31 @@
 
 
-# Update Data Reset Panel: Single Date to Date Range
+# Add "Reset Product Stock & Prices" to Data Reset Panel
 
-## What Changes
-Replace the single "Select Date to Reset" input with a **From Date** and **To Date** range picker. All queries (both count preview and actual deletion) will use `>=` from-date and `<=` to-date instead of a single date equality check.
+## What You Want
+Keep the product items (names, categories, etc.) but be able to reset their stock quantities and price values back to zero from the Settings page.
 
 ## Changes
 
 ### File: `src/components/settings/DataResetPanel.tsx`
 
-1. **State**: Replace `selectedDate` (string) with `dateFrom` and `dateTo` (both strings).
+Add a separate section below the existing date-range reset tool called **"Reset Product Data"** with checkboxes for:
 
-2. **UI**: Replace the single date input with two side-by-side date inputs labeled "From Date" and "To Date". The "To Date" will have a `min` constraint set to `dateFrom` and both will have `max` set to today.
+1. **Reset Stock Quantities** -- Sets `stock_quantity` and `metered_quantity` to 0 on all products
+2. **Reset Prices** -- Sets `purchase_price` and `selling_price` to 0 on all products
 
-3. **Query logic (preview counts)**: For both timestamp and date columns, use `.gte(column, startValue).lte(column, endValue)` where:
-   - Timestamp columns: `startValue = dateFrom + "T00:00:00"`, `endValue = dateTo + "T23:59:59"`
-   - Date columns: `startValue = dateFrom`, `endValue = dateTo`
+This will use SQL UPDATE (not DELETE), so the products themselves remain intact. It will have its own confirmation dialog requiring "RESET" to be typed, separate from the date-range deletion tool.
 
-4. **Delete logic**: Same range-based filtering as the preview.
+### How It Works
+- A new card/section appears below the existing Data Reset date-range tool
+- SuperAdmin selects which fields to reset (stock, prices, or both)
+- Clicks "Preview Reset" to see how many products will be affected
+- Confirms by typing "RESET"
+- Runs an UPDATE query on the `products` table setting selected fields to 0
 
-5. **Validation**: Button disabled unless both `dateFrom` and `dateTo` are set and at least one data type is selected.
+### Technical Details
+- Uses `supabase.from('products').update({ stock_quantity: 0, metered_quantity: 0 })` for stock reset
+- Uses `supabase.from('products').update({ purchase_price: 0, selling_price: 0 })` for price reset
+- No date filtering needed -- applies to all products
+- No database migration required -- purely a frontend update to one file
 
-6. **Confirmation dialog text**: Show the date range (e.g., "01 Jan 2025 - 31 Jan 2025") instead of a single date.
-
-7. **Success toast**: Show the date range in the success message.
-
-## Technical Details
-
-- No database changes needed -- this is a purely frontend update to a single component file.
-- The existing `isTimestampColumn()` helper and `getOrderedSelectedTypes()` remain unchanged.
-- The `gte/lte` pattern already exists for timestamp columns; it will now also apply to date columns with the range values.
