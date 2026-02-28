@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
             user_id: userId,
             full_name: c.name,
             phone,
-            address: c.zone || "N/A",
+            address: (c.zone || "N/A") + ", Bangladesh",
             password_hash: defaultPasswordHash,
             package_id: packageId,
             area_id: areaId,
