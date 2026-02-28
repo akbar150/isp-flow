@@ -1,95 +1,149 @@
 
 
-# Phase 2-4 Feature Implementation Roadmap
+# Implementation Plan: 7 Major Features
 
-## Overview
-You've selected 9 major features to build. Given the complexity, this plan proposes a phased approach, building each feature incrementally across multiple sessions. Here's the prioritized order and what each involves:
-
----
-
-## Phase 2: Customer Self-Service (Build First)
-
-### Feature 1: Online Payment Gateway (bKash/Nagad/SSLCommerz)
-- Integrate SSLCommerz (most popular BD gateway -- supports bKash, Nagad, cards)
-- Add a "Pay Now" button in the Customer Portal
-- Create a backend function to initiate payment sessions and verify callbacks
-- Auto-update customer dues and expiry on successful payment
-- **Requires**: SSLCommerz merchant credentials (Store ID + Store Password)
-
-### Feature 2: Speed Test Integration
-- Embed an open-source speed test (LibreSpeed or similar) in the Customer Portal
-- Show download/upload speed and ping results
-- Compare results against the customer's subscribed package speed
-- No external API needed -- runs entirely in the browser
-
-### Feature 3: Package Upgrade/Downgrade Requests
-- Add a "Change Package" button in the Customer Portal
-- Create a `package_change_requests` database table (customer, current package, requested package, status, prorated amount)
-- Calculate prorated billing (credit remaining days, charge new rate)
-- Admin approval workflow with notification
-- Auto-apply changes on approval (update customer package, adjust billing)
-
-### Feature 4: Referral Program
-- Create `referrals` table (referrer customer, referred customer, status, credit amount)
-- Generate unique referral codes per customer
-- Show referral link/code in Customer Portal
-- Auto-apply bill credits when referred customer completes first payment
-- Referral dashboard showing earned credits and referred customers
+Given the scale (7 complex features), this plan breaks them into manageable phases that can be built incrementally across multiple sessions.
 
 ---
 
-## Phase 3: Operational Excellence
+## Build Order (by dependency and complexity)
 
-### Feature 5: Contract & Agreement Management
-- Create `contracts` table (customer, start date, end date, terms, auto-renew, early termination fee)
-- Digital agreement templates with customer details auto-filled
-- E-signature capture (canvas-based signature pad)
-- Auto-renewal tracking and termination fee calculation
+### Session 1: Package Upgrade/Downgrade Requests
+
+**Database:**
+- Create `package_change_requests` table (id, customer_id, current_package_id, requested_package_id, status [pending/approved/rejected], prorated_credit, prorated_charge, admin_notes, created_at, updated_at)
+
+**Customer Portal:**
+- Add "Change Package" tab showing available packages
+- Show prorated billing calculation (credit for remaining days on current plan, charge for new plan)
+- Submit request with confirmation dialog
+
+**Admin Dashboard:**
+- Add "Package Requests" section in Customers or Settings page
+- Approve/reject workflow with notes
+- On approval: auto-update customer package, adjust billing, extend/recalculate expiry
+
+---
+
+### Session 2: Referral Program
+
+**Database:**
+- Create `referral_codes` table (id, customer_id, code, is_active, created_at)
+- Create `referrals` table (id, referrer_id, referred_customer_id, status [pending/credited/expired], credit_amount, credited_at, created_at)
+- Add `referral_credit` column to customers table
+
+**Customer Portal:**
+- "Referrals" tab showing unique referral code/link
+- List of referred friends with status
+- Total earned credits display
+
+**Admin Dashboard:**
+- Referral overview in Reports or Settings
+- Auto-credit trigger when referred customer makes first payment
+
+---
+
+### Session 3: Online Payment Gateway (SSLCommerz)
+
+**Requires:** SSLCommerz Store ID and Store Password from user
+
+**Database:**
+- Create `online_payments` table (id, customer_id, amount, gateway, session_id, status, transaction_id, gateway_response, created_at)
+
+**Backend:**
+- Edge function `initiate-payment` -- creates SSLCommerz session
+- Edge function `payment-callback` -- verifies payment, updates customer dues/expiry
+- IPN (Instant Payment Notification) handler for reliability
+
+**Customer Portal:**
+- "Pay Now" button showing due amount
+- Redirects to SSLCommerz hosted checkout (bKash, Nagad, cards)
+- Success/failure callback pages
+
+---
+
+### Session 4: Contract & Agreement Management
+
+**Database:**
+- Create `contracts` table (id, customer_id, start_date, end_date, terms_text, auto_renew, early_termination_fee, signature_data, signed_at, status, created_at)
+- Create `contract_templates` table (id, name, body_template, is_default, created_at)
+
+**Admin Dashboard:**
+- Contract templates editor (Settings page)
+- Generate contract per customer with auto-filled details
+- Canvas-based e-signature capture
 - PDF export of signed contracts
+- Track renewal dates and termination fees
 
-### Feature 6: Technician Mobile App / Field Service
-- Create `service_tasks` table (type, customer, technician, status, GPS coordinates, notes)
-- Task assignment interface for admins
-- PWA-based mobile view for technicians (installable web app)
-- Job completion with photo upload and customer signature
-- GPS tracking of task locations on map
-
-### Feature 7: Reseller/Sub-dealer Module
-- Create `resellers` table and `reseller_customers` mapping
-- Separate reseller login and dashboard
-- Commission tracking (percentage per customer payment)
-- Reseller can add/manage their own customers under the main ISP
-- Consolidated reporting for the main ISP admin
+**Customer Portal:**
+- View active contract
+- Sign pending contracts digitally
 
 ---
 
-## Phase 4: Growth & Intelligence
+### Session 5: Technician Field Service (PWA)
 
-### Feature 8: AI-Powered Churn Prediction
-- Analyze payment patterns (late payments, missed cycles)
-- Track usage trends and ticket frequency
-- Generate risk scores per customer (High/Medium/Low churn risk)
-- Dashboard with at-risk customers and recommended retention actions
-- Uses Lovable AI (Gemini) for pattern analysis -- no external API key needed
+**Database:**
+- Create `service_tasks` table (id, customer_id, assigned_to, task_type [installation/repair/maintenance], status [pending/in_progress/completed], priority, scheduled_date, completed_at, gps_lat, gps_lng, notes, photos, customer_signature, created_by, created_at)
 
-### Feature 9: Bandwidth Usage Monitoring (MikroTik)
-- Pull traffic data from MikroTik routers via API
-- Per-customer usage graphs (daily/weekly/monthly)
-- Heavy user detection and alerts
-- FUP (Fair Usage Policy) threshold configuration
-- **Requires**: Real MikroTik router connection (not dummy mode)
+**Admin Dashboard:**
+- Task assignment interface (assign to employees)
+- Task status tracking with map view
+- Completion reports
+
+**Technician View:**
+- Mobile-optimized PWA page at `/technician`
+- View assigned tasks, navigate to customer location
+- Mark complete with photo upload and signature capture
+- GPS auto-capture on completion
 
 ---
 
-## Recommended Starting Point
+### Session 6: Reseller/Sub-dealer Module
 
-I suggest we begin with **Feature 2: Speed Test Integration** as it's self-contained, requires no external credentials, and provides immediate customer value. Then move to **Feature 3: Package Upgrade/Downgrade** and **Feature 4: Referral Program**.
+**Database:**
+- Create `resellers` table (id, user_id, name, phone, email, commission_rate, status, created_at)
+- Create `reseller_customers` table (id, reseller_id, customer_id, created_at)
+- Create `reseller_commissions` table (id, reseller_id, payment_id, amount, status, created_at)
 
-For the **Online Payment Gateway**, you'll need to obtain SSLCommerz merchant credentials first, so we can set that up in parallel.
+**New Pages:**
+- `/reseller-login` -- separate login for resellers
+- `/reseller-portal` -- dashboard showing their customers, commissions, earnings
+- Reseller can add customers under the main ISP
+
+**Admin Dashboard:**
+- Reseller management in Settings
+- Commission tracking and payout reports
+- Consolidated view across all resellers
+
+---
+
+### Session 7: AI-Powered Churn Prediction
+
+**Backend:**
+- Edge function `analyze-churn` using Lovable AI (Gemini) to analyze:
+  - Payment patterns (late payments, missed cycles)
+  - Ticket frequency and resolution
+  - Package downgrade requests
+  - Days overdue trends
+
+**Admin Dashboard:**
+- "Churn Risk" widget on Dashboard page
+- Customer list with risk scores (High/Medium/Low)
+- Recommended retention actions per customer
+- No external API key needed (uses built-in Lovable AI)
+
+---
 
 ## Technical Notes
-- Each feature will require new database tables (created via migrations)
-- New pages/tabs in both admin dashboard and customer portal
-- Backend functions for payment processing, AI analysis, and MikroTik communication
-- All features will follow existing patterns: RLS policies, role-based access, real-time notifications
+
+- Each session creates its own database migration, RLS policies, and UI components
+- All new tables follow existing patterns: UUID primary keys, timestamps, RLS with role-based access
+- Customer portal features use the existing session token auth (no Supabase Auth needed for customers)
+- The SSLCommerz integration requires merchant credentials -- will prompt before building
+- Total estimated: 7 implementation sessions
+
+## Recommended Start
+
+Begin with **Package Upgrade/Downgrade** (Session 1) as it's self-contained and high-value for customers.
 
