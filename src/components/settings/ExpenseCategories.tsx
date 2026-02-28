@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
   Card,
@@ -35,6 +38,7 @@ interface ExpenseCategory {
   name: string;
   description: string | null;
   is_active: boolean;
+  category_type: string;
   created_at: string;
 }
 
@@ -47,6 +51,7 @@ export function ExpenseCategories() {
     name: "",
     description: "",
     is_active: true,
+    category_type: "expense",
   });
   const { toast } = useToast();
 
@@ -95,7 +100,8 @@ export function ExpenseCategories() {
             name: formData.name.trim(),
             description: formData.description.trim() || null,
             is_active: formData.is_active,
-          })
+            category_type: formData.category_type,
+          } as any)
           .eq("id", editingCategory.id);
 
         if (error) throw error;
@@ -105,7 +111,8 @@ export function ExpenseCategories() {
           name: formData.name.trim(),
           description: formData.description.trim() || null,
           is_active: formData.is_active,
-        });
+          category_type: formData.category_type,
+        } as any);
 
         if (error) throw error;
         toast({ title: "Success", description: "Category added" });
@@ -172,6 +179,7 @@ export function ExpenseCategories() {
       name: "",
       description: "",
       is_active: true,
+      category_type: "expense",
     });
   };
 
@@ -181,6 +189,7 @@ export function ExpenseCategories() {
       name: category.name,
       description: category.description || "",
       is_active: category.is_active,
+      category_type: category.category_type || "expense",
     });
     setDialogOpen(true);
   };
@@ -247,6 +256,23 @@ export function ExpenseCategories() {
                   }
                   placeholder="Optional description..."
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="category_type">Type</Label>
+                <Select
+                  value={formData.category_type}
+                  onValueChange={(value) =>
+                    setFormData((prev) => ({ ...prev, category_type: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="expense">Expense</SelectItem>
+                    <SelectItem value="income">Income</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex items-center justify-between">
                 <Label htmlFor="is_active">Active</Label>

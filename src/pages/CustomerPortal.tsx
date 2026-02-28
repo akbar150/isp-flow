@@ -11,13 +11,14 @@ import { toast } from "@/hooks/use-toast";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Wifi, LogOut, User, CreditCard, Calendar, Package, Phone, MapPin,
-  Clock, AlertTriangle, CheckCircle, Loader2, Lock, History, WifiOff, Gauge, ArrowUpDown, Gift, FileText
+  Clock, AlertTriangle, CheckCircle, Loader2, Lock, History, WifiOff, Gauge, ArrowUpDown, Gift, FileText, MessageSquare
 } from "lucide-react";
 import SpeedTest from "@/components/portal/SpeedTest";
 import PackageChange from "@/components/portal/PackageChange";
 import ReferralProgram from "@/components/portal/ReferralProgram";
 import BkashPayment from "@/components/portal/BkashPayment";
 import ContractView from "@/components/portal/ContractView";
+import CustomerTicketSubmit from "@/components/portal/CustomerTicketSubmit";
 import { useIspSettings } from "@/hooks/useIspSettings";
 
 interface CustomerData {
@@ -367,6 +368,10 @@ export default function CustomerPortal() {
                 <FileText className="h-4 w-4" />
                 <span className="hidden sm:inline">Contracts</span>
               </TabsTrigger>
+              <TabsTrigger value="support" className="flex items-center gap-1.5 px-3 py-2">
+                <MessageSquare className="h-4 w-4" />
+                <span className="hidden sm:inline">Support</span>
+              </TabsTrigger>
               <TabsTrigger value="speedtest" className="flex items-center gap-1.5 px-3 py-2">
                 <Gauge className="h-4 w-4" />
                 <span className="hidden sm:inline">Speed Test</span>
@@ -549,6 +554,10 @@ export default function CustomerPortal() {
 
           <TabsContent value="speedtest">
             <SpeedTest packageSpeedMbps={customer.package?.speed_mbps} />
+          </TabsContent>
+
+          <TabsContent value="support">
+            <CustomerTicketSubmit customerId={customer.id} customerName={customer.full_name} />
           </TabsContent>
         </Tabs>
       </main>

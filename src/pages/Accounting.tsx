@@ -179,11 +179,10 @@ export default function Accounting() {
       }));
 
       setTransactions(typedTransactions);
-      setExpenseCategories(expenseCategoriesRes.data || []);
       
-      // Use expense categories for income too (for now) or filter by category purpose
-      // In future, could add a "category_type" field to distinguish
-      setIncomeCategories(expenseCategoriesRes.data || []);
+      const allCategories = expenseCategoriesRes.data || [];
+      setExpenseCategories(allCategories.filter((c: any) => !c.category_type || c.category_type === 'expense'));
+      setIncomeCategories(allCategories.filter((c: any) => c.category_type === 'income'));
       
       setPayments(paymentsRes.data as Payment[] || []);
     } catch (error) {

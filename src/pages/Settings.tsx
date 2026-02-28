@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map, Trash2, Zap, CreditCard, FileText, Lock, ChevronDown } from "lucide-react";
+import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map, Trash2, Zap, CreditCard, FileText, Lock, ChevronDown, Activity } from "lucide-react";
 import { UserManagement } from "@/components/settings/UserManagement";
 import { RolePermissions } from "@/components/settings/RolePermissions";
 import { ExpenseCategories } from "@/components/settings/ExpenseCategories";
@@ -19,6 +19,7 @@ import { DataResetPanel } from "@/components/settings/DataResetPanel";
 import { BillingSettings } from "@/components/settings/BillingSettings";
 import BkashSettings from "@/components/settings/BkashSettings";
 import { ContractTemplates } from "@/components/settings/ContractTemplates";
+import { ActivityLogViewer } from "@/components/settings/ActivityLogViewer";
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -177,6 +178,10 @@ Please pay to avoid disconnection.
             <TabsTrigger value="contracts" className="flex items-center gap-1.5 px-3 py-2">
               <FileText className="h-4 w-4" />
               <span className="hidden sm:inline">Contracts</span>
+            </TabsTrigger>
+            <TabsTrigger value="activity-logs" className="flex items-center gap-1.5 px-3 py-2">
+              <Activity className="h-4 w-4" />
+              <span className="hidden sm:inline">Activity Logs</span>
             </TabsTrigger>
             {isSuperAdmin && (
               <TabsTrigger value="bkash" className="flex items-center gap-1.5 px-3 py-2">
@@ -407,6 +412,10 @@ Please pay to avoid disconnection.
 
         <TabsContent value="contracts">
           <ContractTemplates />
+        </TabsContent>
+
+        <TabsContent value="activity-logs">
+          <ActivityLogViewer />
         </TabsContent>
 
         {isSuperAdmin && (
