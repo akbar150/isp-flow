@@ -1078,6 +1078,80 @@ export type Database = {
         }
         Relationships: []
       }
+      package_change_requests: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          current_package_id: string
+          customer_id: string
+          id: string
+          processed_at: string | null
+          processed_by: string | null
+          prorated_charge: number
+          prorated_credit: number
+          requested_package_id: string
+          status: Database["public"]["Enums"]["package_change_status"]
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          current_package_id: string
+          customer_id: string
+          id?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          prorated_charge?: number
+          prorated_credit?: number
+          requested_package_id: string
+          status?: Database["public"]["Enums"]["package_change_status"]
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          current_package_id?: string
+          customer_id?: string
+          id?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          prorated_charge?: number
+          prorated_credit?: number
+          requested_package_id?: string
+          status?: Database["public"]["Enums"]["package_change_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "package_change_requests_current_package_id_fkey"
+            columns: ["current_package_id"]
+            isOneToOne: false
+            referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_change_requests_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_change_requests_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_change_requests_requested_package_id_fkey"
+            columns: ["requested_package_id"]
+            isOneToOne: false
+            referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       packages: {
         Row: {
           created_at: string
@@ -2100,6 +2174,7 @@ export type Database = {
         | "hrm_update"
         | "accounting_update"
       outage_status: "active" | "resolved"
+      package_change_status: "pending" | "approved" | "rejected"
       payment_method: "bkash" | "cash" | "bank_transfer" | "due"
       payroll_status: "draft" | "approved" | "paid"
       reminder_type:
@@ -2280,6 +2355,7 @@ export const Constants = {
         "accounting_update",
       ],
       outage_status: ["active", "resolved"],
+      package_change_status: ["pending", "approved", "rejected"],
       payment_method: ["bkash", "cash", "bank_transfer", "due"],
       payroll_status: ["draft", "approved", "paid"],
       reminder_type: [

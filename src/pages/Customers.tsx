@@ -12,6 +12,7 @@ import { CallCustomerButton } from "@/components/CallCustomerButton";
 import { BulkCustomerUpload } from "@/components/BulkCustomerUpload";
 import { AddCustomerDialog } from "@/components/AddCustomerDialog";
 import { CustomerMapView } from "@/components/CustomerMapView";
+import PackageRequests from "@/components/admin/PackageRequests";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -694,6 +695,11 @@ export default function Customers() {
         onOpenChange={setMapViewOpen}
         customers={customers}
       />
+
+      {/* Package Change Requests Section */}
+      <div className="mt-8">
+        <PackageRequests />
+      </div>
     </DashboardLayout>
   );
 }
