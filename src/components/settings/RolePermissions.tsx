@@ -39,6 +39,8 @@ import {
   Settings,
   TicketCheck,
   WifiOff,
+  Wrench,
+  Store,
   CheckCircle2,
   XCircle,
   ToggleLeft,
@@ -74,6 +76,9 @@ const RESOURCES = [
   { key: "users", label: "User Management", icon: User },
   { key: "tickets", label: "Support Tickets", icon: TicketCheck },
   { key: "outages", label: "Network Outages", icon: WifiOff },
+  { key: "service_tasks", label: "Service Tasks", icon: Wrench },
+  { key: "resellers", label: "Resellers", icon: Store },
+  { key: "contracts", label: "Contracts", icon: FileText },
 ];
 
 const ACTIONS = [

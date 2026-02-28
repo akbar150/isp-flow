@@ -22,6 +22,7 @@ import {
   FileText,
   TicketCheck,
   Wrench,
+  Store,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,7 @@ const navItems: NavItem[] = [
   { path: "/service-tasks", label: "Service Tasks", icon: Wrench, resource: "service_tasks" },
   { path: "/reports", label: "Reports", icon: FileBarChart, resource: "reports" },
   { path: "/routers", label: "Routers", icon: Router, resource: "routers" },
+  { path: "/resellers", label: "Resellers", icon: Store, resource: "resellers" },
   { path: "/settings", label: "Settings", icon: Settings, resource: "settings" },
 ];
 
