@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format, addDays } from "date-fns";
 import { Plus, Trash2, Eye, EyeOff, RefreshCw, Loader2 } from "lucide-react";
+import { normalizePhone, isValidBDPhone } from "@/lib/phoneUtils";
 
 interface Package {
   id: string;
@@ -192,10 +193,12 @@ export function AddCustomerDialog({
         throw new Error('Full name must be at least 3 characters');
       }
 
-      const phoneRegex = /^(\+?880)?[0-9]{10,11}$/;
-      const cleanPhone = formData.phone.replace(/[\s-]/g, '');
-      if (!phoneRegex.test(cleanPhone)) {
-        throw new Error('Invalid phone number format');
+      if (!isValidBDPhone(formData.phone)) {
+        throw new Error('Phone must start with 880 (e.g., 8801701377315)');
+      }
+
+      if (formData.alt_phone && formData.alt_phone.trim() && !isValidBDPhone(formData.alt_phone)) {
+        throw new Error('Alternative phone must start with 880 (e.g., 8801701377315)');
       }
 
       if (!formData.address || formData.address.trim().length < 10) {
@@ -237,8 +240,8 @@ export function AddCustomerDialog({
       const { data: newCustomer, error: customerError } = await supabase.from('customers').insert({
         user_id: userId,
         full_name: formData.full_name,
-        phone: formData.phone,
-        alt_phone: formData.alt_phone || null,
+        phone: normalizePhone(formData.phone),
+        alt_phone: formData.alt_phone ? normalizePhone(formData.alt_phone) : null,
         address: formData.address,
         area_id: formData.area_id || null,
         router_id: formData.router_id || null,
@@ -387,7 +390,7 @@ export function AddCustomerDialog({
                 <Input
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="+8801XXXXXXXXX"
+                  placeholder="8801XXXXXXXXX"
                 />
               </div>
               <div className="space-y-2">

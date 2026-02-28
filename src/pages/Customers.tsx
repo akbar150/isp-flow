@@ -43,6 +43,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Plus, Search, Eye, EyeOff, RefreshCw, MoreHorizontal, Edit, Trash2, UserCircle, ArrowUpDown, ArrowUp, ArrowDown, MapPin, Map } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { calculateBillingInfo } from "@/lib/billingUtils";
+import { normalizePhone, isValidBDPhone } from "@/lib/phoneUtils";
 
 interface Package {
   id: string;
@@ -204,17 +205,12 @@ export default function Customers() {
         throw new Error('Full name too long (max 100 characters)');
       }
 
-      const phoneRegex = /^(\+?880)?[0-9]{10,11}$/;
-      const cleanPhone = formData.phone.replace(/[\s-]/g, '');
-      if (!phoneRegex.test(cleanPhone)) {
-        throw new Error('Invalid phone number format');
+      if (!isValidBDPhone(formData.phone)) {
+        throw new Error('Phone must start with 880 (e.g., 8801701377315)');
       }
 
-      if (formData.alt_phone && formData.alt_phone.trim()) {
-        const cleanAltPhone = formData.alt_phone.replace(/[\s-]/g, '');
-        if (!phoneRegex.test(cleanAltPhone)) {
-          throw new Error('Invalid alternative phone number format');
-        }
+      if (formData.alt_phone && formData.alt_phone.trim() && !isValidBDPhone(formData.alt_phone)) {
+        throw new Error('Alternative phone must start with 880 (e.g., 8801701377315)');
       }
 
       if (!formData.address || formData.address.trim().length < 10) {
@@ -261,8 +257,8 @@ export default function Customers() {
       const { data: newCustomer, error } = await supabase.from('customers').insert({
         user_id: userId,
         full_name: formData.full_name,
-        phone: formData.phone,
-        alt_phone: formData.alt_phone || null,
+        phone: normalizePhone(formData.phone),
+        alt_phone: formData.alt_phone ? normalizePhone(formData.alt_phone) : null,
         address: formData.address,
         area_id: formData.area_id || null,
         router_id: formData.router_id || null,

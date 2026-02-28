@@ -127,10 +127,10 @@ Deno.serve(async (req) => {
         // Generate user ID
         const { data: userId } = await supabase.rpc("generate_customer_user_id");
 
-        // Normalize phone
+        // Normalize phone to 880 format
         let phone = String(c.phone).replace(/\D/g, "");
-        if (phone.startsWith("880")) phone = "0" + phone.slice(3);
-        if (!phone.startsWith("0")) phone = "0" + phone;
+        if (phone.startsWith("0") && phone.length === 11) phone = "88" + phone;
+        if (phone.startsWith("1") && phone.length === 10) phone = "880" + phone;
 
         // Map status
         const status = c.status === "expire" || c.status === "expired" ? "expired" : "active";
