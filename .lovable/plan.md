@@ -89,11 +89,11 @@ After reviewing all 18+ modules, here is a prioritized list of gaps organized by
 11. ✅ Add scheduled auto-reminders for expiring customers (runs daily at 8 AM)
 12. ✅ Add customer count per package display
 
-**Phase 4 -- Advanced (Low)**
-13. Invoice email delivery
-14. Leave request creation form in HRM
-15. Reseller dashboard stats
-16. Area-based dashboard breakdown
+**Phase 4 -- Advanced (Low) ✅ COMPLETE**
+13. ⬜ Invoice email delivery -- deferred, requires email domain setup
+14. ✅ Leave request creation form in HRM
+15. ✅ Reseller dashboard stats
+16. ✅ Area-based dashboard breakdown
 
 ---
 
