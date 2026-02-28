@@ -5,6 +5,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { QuickCallRecord } from "@/components/QuickCallRecord";
 import { CallCustomerButton } from "@/components/CallCustomerButton";
+import { RevenueAnalytics } from "@/components/dashboard/RevenueAnalytics";
 import { supabase } from "@/integrations/supabase/client";
 import { useIspSettings } from "@/hooks/useIspSettings";
 import { 
@@ -14,11 +15,13 @@ import {
   UserX, 
   DollarSign,
   TrendingUp,
-  ArrowRight
+  ArrowRight,
+  BarChart3
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { format, startOfDay, isBefore } from "date-fns";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface DashboardStats {
   totalUsers: number;
@@ -150,120 +153,105 @@ export default function Dashboard() {
         <p className="page-description">Welcome back! Here's your {ispName} overview.</p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        <StatCard
-          title="Total Customers"
-          value={stats.totalUsers}
-          icon={Users}
-          variant="primary"
-        />
-        <StatCard
-          title="Active Users"
-          value={stats.activeUsers}
-          icon={UserCheck}
-          variant="success"
-        />
-        <StatCard
-          title="Expiring in 3 Days"
-          value={stats.expiringUsers}
-          icon={AlertTriangle}
-          variant="warning"
-        />
-        <StatCard
-          title="Expired Users"
-          value={stats.expiredUsers}
-          icon={UserX}
-          variant="danger"
-        />
-        <StatCard
-          title="Total Due Amount"
-          value={`৳${stats.totalDue.toLocaleString()}`}
-          icon={DollarSign}
-          variant="warning"
-        />
-        <StatCard
-          title="Today's Collections"
-          value={`৳${stats.todayCollections.toLocaleString()}`}
-          icon={TrendingUp}
-          variant="success"
-        />
-      </div>
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="analytics" className="gap-1.5">
+            <BarChart3 className="h-4 w-4" /> Analytics
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Expiring Soon Table */}
-      <div className="form-section">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="form-section-title border-0 mb-0 pb-0">Expiring Soon</h2>
-          <Link to="/customers?filter=expiring">
-            <Button variant="ghost" size="sm">
-              View All <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
-
-        {expiringCustomers.length === 0 ? (
-          <p className="text-muted-foreground text-center py-8">
-            No customers expiring in the next 3 days 🎉
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>PPPoE Username</th>
-                  <th>Name</th>
-                  <th>Package</th>
-                  <th>Expiry</th>
-                  <th>Due</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {expiringCustomers.map((customer) => {
-                  const pppoeUsername = customer.mikrotik_users?.[0]?.username || '';
-                  return (
-                    <tr key={customer.id}>
-                      <td className="font-mono text-sm">{pppoeUsername || <span className="text-muted-foreground">Not set</span>}</td>
-                      <td className="font-medium">{customer.full_name}</td>
-                      <td>{customer.packages?.name || 'N/A'}</td>
-                      <td>{format(new Date(customer.expiry_date), 'dd MMM yyyy')}</td>
-                      <td className="amount-due">৳{customer.total_due}</td>
-                      <td>
-                        <StatusBadge status={customer.status} />
-                      </td>
-                      <td>
-                        <div className="flex items-center gap-1">
-                          <CallCustomerButton
-                            customerName={customer.full_name}
-                            primaryPhone={customer.phone}
-                            alternativePhone={customer.alt_phone}
-                            variant="icon"
-                          />
-                          <QuickCallRecord
-                            customerId={customer.id}
-                            customerName={customer.full_name}
-                          />
-                          <WhatsAppButton
-                            phone={customer.phone}
-                            customerName={customer.full_name}
-                            userId={customer.user_id}
-                            packageName={customer.packages?.name || 'Internet'}
-                            expiryDate={new Date(customer.expiry_date)}
-                            amount={customer.packages?.monthly_price || customer.total_due}
-                            variant="icon"
-                            pppoeUsername={pppoeUsername}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        <TabsContent value="overview" className="space-y-8">
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <StatCard title="Total Customers" value={stats.totalUsers} icon={Users} variant="primary" />
+            <StatCard title="Active Users" value={stats.activeUsers} icon={UserCheck} variant="success" />
+            <StatCard title="Expiring in 3 Days" value={stats.expiringUsers} icon={AlertTriangle} variant="warning" />
+            <StatCard title="Expired Users" value={stats.expiredUsers} icon={UserX} variant="danger" />
+            <StatCard title="Total Due Amount" value={`৳${stats.totalDue.toLocaleString()}`} icon={DollarSign} variant="warning" />
+            <StatCard title="Today's Collections" value={`৳${stats.todayCollections.toLocaleString()}`} icon={TrendingUp} variant="success" />
           </div>
-        )}
-      </div>
+
+          {/* Expiring Soon Table */}
+          <div className="form-section">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="form-section-title border-0 mb-0 pb-0">Expiring Soon</h2>
+              <Link to="/customers?filter=expiring">
+                <Button variant="ghost" size="sm">
+                  View All <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+
+            {expiringCustomers.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">
+                No customers expiring in the next 3 days 🎉
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>PPPoE Username</th>
+                      <th>Name</th>
+                      <th>Package</th>
+                      <th>Expiry</th>
+                      <th>Due</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expiringCustomers.map((customer) => {
+                      const pppoeUsername = customer.mikrotik_users?.[0]?.username || '';
+                      return (
+                        <tr key={customer.id}>
+                          <td className="font-mono text-sm">{pppoeUsername || <span className="text-muted-foreground">Not set</span>}</td>
+                          <td className="font-medium">{customer.full_name}</td>
+                          <td>{customer.packages?.name || 'N/A'}</td>
+                          <td>{format(new Date(customer.expiry_date), 'dd MMM yyyy')}</td>
+                          <td className="amount-due">৳{customer.total_due}</td>
+                          <td>
+                            <StatusBadge status={customer.status} />
+                          </td>
+                          <td>
+                            <div className="flex items-center gap-1">
+                              <CallCustomerButton
+                                customerName={customer.full_name}
+                                primaryPhone={customer.phone}
+                                alternativePhone={customer.alt_phone}
+                                variant="icon"
+                              />
+                              <QuickCallRecord
+                                customerId={customer.id}
+                                customerName={customer.full_name}
+                              />
+                              <WhatsAppButton
+                                phone={customer.phone}
+                                customerName={customer.full_name}
+                                userId={customer.user_id}
+                                packageName={customer.packages?.name || 'Internet'}
+                                expiryDate={new Date(customer.expiry_date)}
+                                amount={customer.packages?.monthly_price || customer.total_due}
+                                variant="icon"
+                                pppoeUsername={pppoeUsername}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="analytics">
+          <RevenueAnalytics />
+        </TabsContent>
+      </Tabs>
     </DashboardLayout>
   );
 }
