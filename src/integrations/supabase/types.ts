@@ -2036,6 +2036,50 @@ export type Database = {
           },
         ]
       }
+      stock_movements: {
+        Row: {
+          created_at: string
+          from_status: string | null
+          id: string
+          inventory_item_id: string | null
+          movement_type: string
+          notes: string | null
+          performed_by: string | null
+          quantity: number
+          to_status: string
+        }
+        Insert: {
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          inventory_item_id?: string | null
+          movement_type?: string
+          notes?: string | null
+          performed_by?: string | null
+          quantity?: number
+          to_status: string
+        }
+        Update: {
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          inventory_item_id?: string | null
+          movement_type?: string
+          notes?: string | null
+          performed_by?: string | null
+          quantity?: number
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_movements_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suppliers: {
         Row: {
           address: string | null
