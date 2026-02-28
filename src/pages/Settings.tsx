@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map, Trash2 } from "lucide-react";
+import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map, Trash2, Upload } from "lucide-react";
 import { UserManagement } from "@/components/settings/UserManagement";
 import { RolePermissions } from "@/components/settings/RolePermissions";
 import { ExpenseCategories } from "@/components/settings/ExpenseCategories";
@@ -16,6 +16,7 @@ import { SmsSettings } from "@/components/settings/SmsSettings";
 import { FirebaseOtpSettings } from "@/components/settings/FirebaseOtpSettings";
 import { EmailTemplates } from "@/components/settings/EmailTemplates";
 import { DataResetPanel } from "@/components/settings/DataResetPanel";
+import { CustomerDataImport } from "@/components/settings/CustomerDataImport";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { decodeSettingValue, normalizeTemplateVars } from "@/lib/settingsValue";
 import { useAuth } from "@/hooks/useAuth";
@@ -225,6 +226,16 @@ Please pay to avoid disconnection.
                 </Button>
               </div>
             </div>
+
+            {isSuperAdmin && (
+              <div className="form-section max-w-2xl">
+                <h3 className="form-section-title flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  Excel Data Import (One-Time)
+                </h3>
+                <CustomerDataImport />
+              </div>
+            )}
 
             {isSuperAdmin && (
               <div className="form-section max-w-2xl">
