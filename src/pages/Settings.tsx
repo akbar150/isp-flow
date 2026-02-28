@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map, Trash2, Zap, CreditCard, FileText, Store } from "lucide-react";
+import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map, Trash2, Zap, CreditCard, FileText, Lock, ChevronDown } from "lucide-react";
 import { UserManagement } from "@/components/settings/UserManagement";
 import { RolePermissions } from "@/components/settings/RolePermissions";
 import { ExpenseCategories } from "@/components/settings/ExpenseCategories";
@@ -19,16 +19,24 @@ import { DataResetPanel } from "@/components/settings/DataResetPanel";
 import { BillingSettings } from "@/components/settings/BillingSettings";
 import BkashSettings from "@/components/settings/BkashSettings";
 import { ContractTemplates } from "@/components/settings/ContractTemplates";
-import { ResellerManagement } from "@/components/settings/ResellerManagement";
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { decodeSettingValue, normalizeTemplateVars } from "@/lib/settingsValue";
 import { useAuth } from "@/hooks/useAuth";
+import { cn } from "@/lib/utils";
 
 export default function Settings() {
   const { isSuperAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [openSections, setOpenSections] = useState<string[]>(["whatsapp"]);
+
+  const toggleSection = (section: string) => {
+    setOpenSections(prev =>
+      prev.includes(section) ? prev.filter(s => s !== section) : [...prev, section]
+    );
+  };
 
   const [settings, setSettings] = useState({
     isp_name: "Smart ISP",
@@ -104,7 +112,6 @@ Please pay to avoid disconnection.
         }, { onConflict: 'key' }),
       ]);
 
-      // Update local state so the textarea matches what will be sent.
       setSettings((prev) => ({ ...prev, whatsapp_template: normalizedWhatsapp }));
 
       toast({ title: "Settings saved successfully" });
@@ -143,21 +150,9 @@ Please pay to avoid disconnection.
               <Wifi className="h-4 w-4" />
               <span className="hidden sm:inline">General</span>
             </TabsTrigger>
-            <TabsTrigger value="whatsapp" className="flex items-center gap-1.5 px-3 py-2">
+            <TabsTrigger value="communications" className="flex items-center gap-1.5 px-3 py-2">
               <MessageSquare className="h-4 w-4" />
-              <span className="hidden sm:inline">WhatsApp</span>
-            </TabsTrigger>
-            <TabsTrigger value="email" className="flex items-center gap-1.5 px-3 py-2">
-              <Mail className="h-4 w-4" />
-              <span className="hidden sm:inline">Email</span>
-            </TabsTrigger>
-            <TabsTrigger value="sms" className="flex items-center gap-1.5 px-3 py-2">
-              <MessageSquare className="h-4 w-4" />
-              <span className="hidden sm:inline">SMS</span>
-            </TabsTrigger>
-            <TabsTrigger value="otp" className="flex items-center gap-1.5 px-3 py-2">
-              <Smartphone className="h-4 w-4" />
-              <span className="hidden sm:inline">OTP</span>
+              <span className="hidden sm:inline">Communications</span>
             </TabsTrigger>
             <TabsTrigger value="billing" className="flex items-center gap-1.5 px-3 py-2">
               <Zap className="h-4 w-4" />
@@ -189,10 +184,6 @@ Please pay to avoid disconnection.
                 <span className="hidden sm:inline">bKash</span>
               </TabsTrigger>
             )}
-            <TabsTrigger value="resellers" className="flex items-center gap-1.5 px-3 py-2">
-              <Store className="h-4 w-4" />
-              <span className="hidden sm:inline">Resellers</span>
-            </TabsTrigger>
           </TabsList>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
@@ -260,71 +251,138 @@ Please pay to avoid disconnection.
           </div>
         </TabsContent>
 
-        <TabsContent value="whatsapp">
-          <div className="form-section max-w-2xl">
-            <h3 className="form-section-title flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              WhatsApp Message Template
-            </h3>
-            <div className="space-y-4">
-              <div className="p-4 border rounded-lg bg-primary/5">
-                <p className="text-sm font-medium mb-2">💡 WhatsApp Formatting Tips:</p>
-                <div className="text-sm text-muted-foreground space-y-1">
-                  <p>• Use <code className="bg-muted px-1 rounded">*text*</code> for <strong>bold</strong></p>
-                  <p>• Use <code className="bg-muted px-1 rounded">_text_</code> for <em>italic</em></p>
-                  <p>• Use <code className="bg-muted px-1 rounded">~text~</code> for <s>strikethrough</s></p>
-                  <p>• Use <code className="bg-muted px-1 rounded">`text`</code> for <code>monospace</code></p>
-                  <p>• Emojis are fully supported! 🎉</p>
-                </div>
+        {/* Communications - Merged Tab */}
+        <TabsContent value="communications">
+          <div className="space-y-4">
+            {/* WhatsApp Settings */}
+            <Collapsible
+              open={openSections.includes("whatsapp")}
+              onOpenChange={() => toggleSection("whatsapp")}
+            >
+              <div className="form-section">
+                <CollapsibleTrigger className="w-full">
+                  <div className="flex items-center justify-between cursor-pointer">
+                    <h3 className="flex items-center gap-2 text-base md:text-lg font-semibold">
+                      <MessageSquare className="h-5 w-5 text-[hsl(var(--status-active))]" />
+                      WhatsApp Message Template
+                    </h3>
+                    <ChevronDown className={cn("h-5 w-5 text-muted-foreground transition-transform", openSections.includes("whatsapp") && "rotate-180")} />
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-4">
+                  <div className="space-y-4">
+                    <div className="p-4 border rounded-lg bg-primary/5">
+                      <p className="text-sm font-medium mb-2">💡 WhatsApp Formatting Tips:</p>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <p>• Use <code className="bg-muted px-1 rounded">*text*</code> for <strong>bold</strong></p>
+                        <p>• Use <code className="bg-muted px-1 rounded">_text_</code> for <em>italic</em></p>
+                        <p>• Use <code className="bg-muted px-1 rounded">~text~</code> for <s>strikethrough</s></p>
+                        <p>• Use <code className="bg-muted px-1 rounded">`text`</code> for <code>monospace</code></p>
+                        <p>• Emojis are fully supported! 🎉</p>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label>Template Message</Label>
+                      <Textarea
+                        value={settings.whatsapp_template}
+                        onChange={(e) => setSettings({ ...settings, whatsapp_template: e.target.value })}
+                        className="min-h-[300px] font-mono text-sm"
+                      />
+                    </div>
+                    <div className="p-4 bg-muted rounded-lg">
+                      <p className="text-sm font-medium mb-2">Available Variables:</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
+                        <code className="bg-background px-2 py-1 rounded">{'{CustomerName}'}</code>
+                        <span>Customer's full name</span>
+                        <code className="bg-background px-2 py-1 rounded">{'{CustomerID}'}</code>
+                        <span>Customer's User ID</span>
+                        <code className="bg-background px-2 py-1 rounded">{'{PPPoEUsername}'}</code>
+                        <span>PPPoE Username</span>
+                        <code className="bg-background px-2 py-1 rounded">{'{PPPoEPassword}'}</code>
+                        <span>PPPoE Password</span>
+                        <code className="bg-background px-2 py-1 rounded">{'{PackageName}'}</code>
+                        <span>Internet package name</span>
+                        <code className="bg-background px-2 py-1 rounded">{'{ExpiryDate}'}</code>
+                        <span>Subscription expiry date</span>
+                        <code className="bg-background px-2 py-1 rounded">{'{Amount}'}</code>
+                        <span>Due amount</span>
+                        <code className="bg-background px-2 py-1 rounded">{'{ISPName}'}</code>
+                        <span>Your ISP name</span>
+                      </div>
+                    </div>
+                    <Button onClick={saveSettings} disabled={saving}>
+                      <Save className="h-4 w-4 mr-2" />
+                      {saving ? "Saving..." : "Save Template"}
+                    </Button>
+                  </div>
+                </CollapsibleContent>
               </div>
-              
-              <div className="space-y-2">
-                <Label>Template Message</Label>
-                <Textarea
-                  value={settings.whatsapp_template}
-                  onChange={(e) => setSettings({ ...settings, whatsapp_template: e.target.value })}
-                  className="min-h-[300px] font-mono text-sm"
-                />
+            </Collapsible>
+
+            {/* Email / SMTP Settings */}
+            <Collapsible
+              open={openSections.includes("email")}
+              onOpenChange={() => toggleSection("email")}
+            >
+              <div className="form-section">
+                <CollapsibleTrigger className="w-full">
+                  <div className="flex items-center justify-between cursor-pointer">
+                    <h3 className="flex items-center gap-2 text-base md:text-lg font-semibold">
+                      <Mail className="h-5 w-5 text-primary" />
+                      Email / SMTP Settings
+                    </h3>
+                    <ChevronDown className={cn("h-5 w-5 text-muted-foreground transition-transform", openSections.includes("email") && "rotate-180")} />
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-4">
+                  <EmailTemplates />
+                </CollapsibleContent>
               </div>
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm font-medium mb-2">Available Variables:</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
-                  <code className="bg-background px-2 py-1 rounded">{'{CustomerName}'}</code>
-                  <span>Customer's full name</span>
-                  <code className="bg-background px-2 py-1 rounded">{'{CustomerID}'}</code>
-                  <span>Customer's User ID</span>
-                  <code className="bg-background px-2 py-1 rounded">{'{PPPoEUsername}'}</code>
-                  <span>PPPoE Username</span>
-                  <code className="bg-background px-2 py-1 rounded">{'{PPPoEPassword}'}</code>
-                  <span>PPPoE Password</span>
-                  <code className="bg-background px-2 py-1 rounded">{'{PackageName}'}</code>
-                  <span>Internet package name</span>
-                  <code className="bg-background px-2 py-1 rounded">{'{ExpiryDate}'}</code>
-                  <span>Subscription expiry date</span>
-                  <code className="bg-background px-2 py-1 rounded">{'{Amount}'}</code>
-                  <span>Due amount</span>
-                  <code className="bg-background px-2 py-1 rounded">{'{ISPName}'}</code>
-                  <span>Your ISP name</span>
-                </div>
+            </Collapsible>
+
+            {/* SMS Settings */}
+            <Collapsible
+              open={openSections.includes("sms")}
+              onOpenChange={() => toggleSection("sms")}
+            >
+              <div className="form-section">
+                <CollapsibleTrigger className="w-full">
+                  <div className="flex items-center justify-between cursor-pointer">
+                    <h3 className="flex items-center gap-2 text-base md:text-lg font-semibold">
+                      <Smartphone className="h-5 w-5 text-[hsl(var(--chart-3))]" />
+                      SMS Settings
+                    </h3>
+                    <ChevronDown className={cn("h-5 w-5 text-muted-foreground transition-transform", openSections.includes("sms") && "rotate-180")} />
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-4">
+                  <SmsSettings />
+                </CollapsibleContent>
               </div>
-              <Button onClick={saveSettings} disabled={saving}>
-                <Save className="h-4 w-4 mr-2" />
-                {saving ? "Saving..." : "Save Template"}
-              </Button>
-            </div>
+            </Collapsible>
+
+            {/* OTP / Firebase Settings */}
+            <Collapsible
+              open={openSections.includes("otp")}
+              onOpenChange={() => toggleSection("otp")}
+            >
+              <div className="form-section">
+                <CollapsibleTrigger className="w-full">
+                  <div className="flex items-center justify-between cursor-pointer">
+                    <h3 className="flex items-center gap-2 text-base md:text-lg font-semibold">
+                      <Lock className="h-5 w-5 text-[hsl(var(--status-suspended))]" />
+                      OTP / Firebase Settings
+                    </h3>
+                    <ChevronDown className={cn("h-5 w-5 text-muted-foreground transition-transform", openSections.includes("otp") && "rotate-180")} />
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-4">
+                  <FirebaseOtpSettings />
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
           </div>
-        </TabsContent>
-
-        <TabsContent value="email">
-          <EmailTemplates />
-        </TabsContent>
-
-        <TabsContent value="sms">
-          <SmsSettings />
-        </TabsContent>
-
-        <TabsContent value="otp">
-          <FirebaseOtpSettings />
         </TabsContent>
 
         <TabsContent value="billing">
@@ -356,11 +414,6 @@ Please pay to avoid disconnection.
             <BkashSettings />
           </TabsContent>
         )}
-
-        <TabsContent value="resellers">
-          <ResellerManagement />
-        </TabsContent>
-
       </Tabs>
     </DashboardLayout>
   );

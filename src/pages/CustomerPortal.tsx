@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Wifi, LogOut, User, CreditCard, Calendar, Package, Phone, MapPin,
   Clock, AlertTriangle, CheckCircle, Loader2, Lock, History, WifiOff, Gauge, ArrowUpDown, Gift, FileText
@@ -239,7 +240,7 @@ export default function CustomerPortal() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
         {/* Active Outage Banners */}
         {activeOutages.length > 0 && (
           <div className="mb-6 space-y-3">
@@ -336,40 +337,43 @@ export default function CustomerPortal() {
 
         {/* Tabs Section */}
         <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="pay" className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4" />
-              Pay Now
-            </TabsTrigger>
-            <TabsTrigger value="profile" className="flex items-center gap-2">
-              <User className="h-4 w-4" />
-              Profile
-            </TabsTrigger>
-            <TabsTrigger value="payments" className="flex items-center gap-2">
-              <History className="h-4 w-4" />
-              Payment History
-            </TabsTrigger>
-            <TabsTrigger value="security" className="flex items-center gap-2">
-              <Lock className="h-4 w-4" />
-              Security
-            </TabsTrigger>
-            <TabsTrigger value="package" className="flex items-center gap-2">
-              <ArrowUpDown className="h-4 w-4" />
-              Change Package
-            </TabsTrigger>
-            <TabsTrigger value="referrals" className="flex items-center gap-2">
-              <Gift className="h-4 w-4" />
-              Referrals
-            </TabsTrigger>
-            <TabsTrigger value="contracts" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Contracts
-            </TabsTrigger>
-            <TabsTrigger value="speedtest" className="flex items-center gap-2">
-              <Gauge className="h-4 w-4" />
-              Speed Test
-            </TabsTrigger>
-          </TabsList>
+          <ScrollArea className="w-full">
+            <TabsList className="inline-flex h-auto p-1 gap-1">
+              <TabsTrigger value="pay" className="flex items-center gap-1.5 px-3 py-2">
+                <CreditCard className="h-4 w-4" />
+                <span className="hidden sm:inline">Pay Now</span>
+              </TabsTrigger>
+              <TabsTrigger value="profile" className="flex items-center gap-1.5 px-3 py-2">
+                <User className="h-4 w-4" />
+                <span className="hidden sm:inline">Profile</span>
+              </TabsTrigger>
+              <TabsTrigger value="payments" className="flex items-center gap-1.5 px-3 py-2">
+                <History className="h-4 w-4" />
+                <span className="hidden sm:inline">History</span>
+              </TabsTrigger>
+              <TabsTrigger value="security" className="flex items-center gap-1.5 px-3 py-2">
+                <Lock className="h-4 w-4" />
+                <span className="hidden sm:inline">Security</span>
+              </TabsTrigger>
+              <TabsTrigger value="package" className="flex items-center gap-1.5 px-3 py-2">
+                <ArrowUpDown className="h-4 w-4" />
+                <span className="hidden sm:inline">Package</span>
+              </TabsTrigger>
+              <TabsTrigger value="referrals" className="flex items-center gap-1.5 px-3 py-2">
+                <Gift className="h-4 w-4" />
+                <span className="hidden sm:inline">Referrals</span>
+              </TabsTrigger>
+              <TabsTrigger value="contracts" className="flex items-center gap-1.5 px-3 py-2">
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Contracts</span>
+              </TabsTrigger>
+              <TabsTrigger value="speedtest" className="flex items-center gap-1.5 px-3 py-2">
+                <Gauge className="h-4 w-4" />
+                <span className="hidden sm:inline">Speed Test</span>
+              </TabsTrigger>
+            </TabsList>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
 
           <TabsContent value="pay">
             <BkashPayment

@@ -321,4 +321,9 @@
       display: none !important;
     }
   }
+
+  /* Responsive table wrapper */
+  .table-responsive {
+    @apply w-full overflow-x-auto -mx-4 px-4;
+  }
 }

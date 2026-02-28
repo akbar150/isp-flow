@@ -30,6 +30,7 @@ import ServiceTasks from "./pages/ServiceTasks";
 import TechnicianPortal from "./pages/TechnicianPortal";
 import ResellerLogin from "./pages/ResellerLogin";
 import ResellerPortal from "./pages/ResellerPortal";
+import Resellers from "./pages/Resellers";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -211,6 +212,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute resource="service_tasks">
             <ServiceTasks />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/resellers"
+        element={
+          <ProtectedRoute resource="resellers">
+            <Resellers />
           </ProtectedRoute>
         }
       />
