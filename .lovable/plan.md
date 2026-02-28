@@ -1,113 +1,157 @@
 
 
-## Settings Page Redesign & Mobile Responsiveness
+## Inventory Module Enhancement Plan
 
-### 1. Merge Communication Settings into Single Tab
+### Overview
+Implement all 6 missing features for the Inventory module: pagination with status filters, stock movement audit trail, warranty expiry tracking, CSV/PDF export, return workflow, and bulk status updates.
 
-Combine the WhatsApp, Email, SMS, and OTP tabs into one **"Communications"** tab. Each section will be a collapsible card (using Radix Collapsible) within that tab:
+---
 
-- **WhatsApp Settings** (collapsible card with MessageSquare icon)
-- **Email / SMTP Settings** (collapsible card with Mail icon)  
-- **SMS Settings** (collapsible card with Smartphone icon)
-- **OTP / Firebase Settings** (collapsible card with Lock icon)
+### 1. Database: Stock Movement Audit Trail Table
 
-This reduces the tab count from 13 to 10, making the settings page much cleaner.
+Create a new `stock_movements` table to track every status change for inventory items.
 
-**File**: `src/pages/Settings.tsx`
-- Remove individual WhatsApp, Email, SMS, OTP tab triggers and tab content
-- Add single "Communications" tab trigger
-- Create a new tab content section with 4 collapsible cards
-- Move the WhatsApp template form inline into the first collapsible card
-- EmailTemplates, SmsSettings, FirebaseOtpSettings components go inside their respective collapsible cards
+```text
+stock_movements
++----------------+------------------+
+| id             | uuid (PK)        |
+| inventory_item_id | uuid (FK)     |
+| from_status    | text (nullable)  |
+| to_status      | text             |
+| movement_type  | text             |
+| quantity        | numeric (1)     |
+| performed_by   | uuid (nullable) |
+| notes          | text (nullable)  |
+| created_at     | timestamptz      |
++----------------+------------------+
+```
 
-### 2. Move Resellers to Main Sidebar Navigation
+Movement types: `stock_in`, `assigned`, `returned`, `sold`, `damaged`, `status_change`
 
-Remove the "Resellers" tab from Settings and add it as a top-level sidebar navigation item with its own route.
+RLS: Admins/super_admins full access, staff can view and insert.
 
-**Files to modify**:
-- `src/components/AppSidebar.tsx` -- Add `{ path: "/resellers", label: "Resellers", icon: Store, resource: "resellers" }` to navItems (above Settings)
-- `src/App.tsx` -- Add a new `<ProtectedRoute resource="resellers">` route for `/resellers`
-- Create `src/pages/Resellers.tsx` -- A standalone page wrapping `ResellerManagement` inside `DashboardLayout`
-- `src/pages/Settings.tsx` -- Remove the Resellers tab and its import
+A database trigger `trg_log_stock_movement` on `inventory_items` will automatically log every status change into this table.
 
-### 3. Add Missing Resources to Permissions CRUD List
+---
 
-The `RolePermissions.tsx` RESOURCES array is missing several resources that exist as routes or features. Add:
+### 2. Status Filter + Pagination for Stock Items Tab
 
-- `{ key: "service_tasks", label: "Service Tasks", icon: Wrench }`
-- `{ key: "resellers", label: "Resellers", icon: Store }`
-- `{ key: "contracts", label: "Contracts", icon: FileText }`
+**Current problem**: Hard-capped at 100 items, no status filter.
 
-Also need to create corresponding permission rows in the database for these new resources (for admin and staff roles, all 4 CRUD actions each).
+Changes to `src/pages/Inventory.tsx`:
+- Add a status dropdown filter (All, In Stock, Assigned, Returned, Damaged, Sold) next to the existing search bar
+- Add pagination controls (Previous / Next / page numbers) below the stock items table
+- Page size: 25 items per page
+- Track `currentPage` and `statusFilter` in state
+- Apply both filters before slicing for display
 
-**Files to modify**:
-- `src/components/settings/RolePermissions.tsx` -- Add 3 new entries to RESOURCES array, import Wrench and Store icons
-- Database migration -- Insert permission rows for `service_tasks`, `resellers`, `contracts` resources with all CRUD actions for `admin` and `staff` roles
+---
 
-### 4. Mobile Responsiveness Improvements
+### 3. Warranty Expiry Tracking
 
-#### Customer Portal (`src/pages/CustomerPortal.tsx`):
-- Wrap `TabsList` in a horizontal `ScrollArea` so tabs don't overflow on mobile
-- Make overview cards stack properly on small screens (already uses grid, but ensure gap/padding is mobile-friendly)
-- Reduce padding on mobile for the main container
+Add a new **"Warranty"** sub-section in the Stock Items tab header area:
+- Show a warning banner when items have warranties expiring within 30 days
+- Add "Warranty" column to the stock items table showing expiry date with color coding:
+  - Green: > 90 days remaining
+  - Yellow: 30-90 days remaining  
+  - Red: < 30 days or expired
+- Add a filter option "Expiring Soon" to the status filter dropdown
 
-#### Settings Page (`src/pages/Settings.tsx`):
-- The TabsList already uses ScrollArea -- verify it works with the new consolidated tabs
+---
 
-#### Dashboard Layout (`src/components/DashboardLayout.tsx`):
-- Already has mobile sidebar -- no changes needed
+### 4. CSV/PDF Export
 
-#### General CSS (`src/index.css`):
-- Add responsive utilities for collapsible cards
-- Ensure tables scroll horizontally on mobile
+Add export buttons to each tab using the existing `exportToCSV` and `exportToPDF` utilities from `src/lib/exportUtils.ts`.
+
+- **Products tab**: Export product name, category, brand, model, purchase price, selling price, stock count
+- **Stock Items tab**: Export product name, serial, MAC, supplier, status, purchase price, warranty end date
+- **Suppliers tab**: Export name, contact, phone, email, address
+
+Two buttons (CSV, PDF) placed next to each tab's action buttons.
+
+---
+
+### 5. Return Workflow for Assigned Assets
+
+Add a "Return" action in the Stock Items dropdown menu for items with status `assigned`:
+- Opens a Return Dialog with:
+  - Item details (product name, serial, currently assigned customer)
+  - Condition on return dropdown: New, Good, Fair, Damaged
+  - Return notes textarea
+- On submit:
+  - Update `asset_assignments` table: set `returned_date` and `condition_on_return`
+  - Update `inventory_items` status based on condition:
+    - New/Good/Fair -> `in_stock` (re-stock)
+    - Damaged -> `damaged`
+  - Update product `stock_quantity` accordingly (increment if re-stocked)
+  - Log a `stock_movements` record with type `returned`
+  - Show success toast with return summary
+
+---
+
+### 6. Bulk Status Updates
+
+Add bulk selection capability to the Stock Items tab:
+- Checkbox column in the table for selecting multiple items
+- "Select All" checkbox in the header
+- When items are selected, show a floating action bar at the bottom:
+  - "Change Status" button with dropdown (In Stock, Damaged, Returned)
+  - "Delete Selected" button (requires confirmation)
+  - Selected count display
+- On bulk status change:
+  - Update all selected items' status
+  - Log stock movements for each item
+  - Update product stock quantities
+  - Show summary toast
 
 ---
 
 ### Technical Summary
 
-| Change | Files |
-|--------|-------|
-| Merge 4 communication tabs into 1 collapsible tab | `src/pages/Settings.tsx` |
-| Move Resellers to main nav | `src/components/AppSidebar.tsx`, `src/App.tsx`, new `src/pages/Resellers.tsx`, `src/pages/Settings.tsx` |
-| Add missing permission resources | `src/components/settings/RolePermissions.tsx`, new DB migration |
-| Mobile responsiveness | `src/pages/CustomerPortal.tsx`, `src/pages/Settings.tsx` |
+| Feature | Files Modified/Created |
+|---------|----------------------|
+| Stock movements table + trigger | New DB migration |
+| Status filter + pagination | `src/pages/Inventory.tsx` |
+| Warranty tracking | `src/pages/Inventory.tsx` |
+| CSV/PDF export | `src/pages/Inventory.tsx` |
+| Return workflow | `src/pages/Inventory.tsx` |
+| Bulk status updates | `src/pages/Inventory.tsx` |
 
-### Database Migration
+### Migration SQL (Key Parts)
 
 ```sql
--- Add permission rows for missing resources
-INSERT INTO public.permissions (role, resource, action, allowed)
-SELECT r.role, r.resource, r.action, false
-FROM (
-  VALUES 
-    ('admin'::app_role, 'service_tasks', 'create'),
-    ('admin'::app_role, 'service_tasks', 'read'),
-    ('admin'::app_role, 'service_tasks', 'update'),
-    ('admin'::app_role, 'service_tasks', 'delete'),
-    ('admin'::app_role, 'resellers', 'create'),
-    ('admin'::app_role, 'resellers', 'read'),
-    ('admin'::app_role, 'resellers', 'update'),
-    ('admin'::app_role, 'resellers', 'delete'),
-    ('admin'::app_role, 'contracts', 'create'),
-    ('admin'::app_role, 'contracts', 'read'),
-    ('admin'::app_role, 'contracts', 'update'),
-    ('admin'::app_role, 'contracts', 'delete'),
-    ('staff'::app_role, 'service_tasks', 'create'),
-    ('staff'::app_role, 'service_tasks', 'read'),
-    ('staff'::app_role, 'service_tasks', 'update'),
-    ('staff'::app_role, 'service_tasks', 'delete'),
-    ('staff'::app_role, 'resellers', 'create'),
-    ('staff'::app_role, 'resellers', 'read'),
-    ('staff'::app_role, 'resellers', 'update'),
-    ('staff'::app_role, 'resellers', 'delete'),
-    ('staff'::app_role, 'contracts', 'create'),
-    ('staff'::app_role, 'contracts', 'read'),
-    ('staff'::app_role, 'contracts', 'update'),
-    ('staff'::app_role, 'contracts', 'delete')
-) AS r(role, resource, action)
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.permissions p 
-  WHERE p.role = r.role AND p.resource = r.resource AND p.action = r.action
+-- stock_movements table
+CREATE TABLE public.stock_movements (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  inventory_item_id uuid REFERENCES public.inventory_items(id) ON DELETE CASCADE,
+  from_status text,
+  to_status text NOT NULL,
+  movement_type text NOT NULL DEFAULT 'status_change',
+  quantity numeric NOT NULL DEFAULT 1,
+  performed_by uuid,
+  notes text,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Auto-log trigger on inventory_items status change
+CREATE OR REPLACE FUNCTION public.log_stock_movement()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'public' AS $$
+BEGIN
+  IF OLD.status IS DISTINCT FROM NEW.status THEN
+    INSERT INTO public.stock_movements 
+      (inventory_item_id, from_status, to_status, movement_type)
+    VALUES 
+      (NEW.id, OLD.status::text, NEW.status::text, 'status_change');
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_log_stock_movement
+  AFTER UPDATE ON public.inventory_items
+  FOR EACH ROW EXECUTE FUNCTION public.log_stock_movement();
 ```
+
+All changes stay within the existing architecture patterns -- using the same Supabase client, permission checks, and UI component library already in use.
 
