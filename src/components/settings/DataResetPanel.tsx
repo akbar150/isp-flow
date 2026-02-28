@@ -70,7 +70,8 @@ function getOrderedSelectedTypes(selectedTypes: string[]) {
 export function DataResetPanel() {
   const { isSuperAdmin } = useAuth();
   const { toast } = useToast();
-  const [selectedDate, setSelectedDate] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -97,10 +98,10 @@ export function DataResetPanel() {
   };
 
   const handlePreviewReset = async () => {
-    if (!selectedDate || selectedTypes.length === 0) {
+    if (!dateFrom || !dateTo || selectedTypes.length === 0) {
       toast({ 
         title: "Selection Required", 
-        description: "Please select a date and at least one data type",
+        description: "Please select a date range and at least one data type",
         variant: "destructive" 
       });
       return;
@@ -117,14 +118,10 @@ export function DataResetPanel() {
         // Build appropriate query based on column type
         let query = supabase.from(dataType.table as any).select('id', { count: 'exact', head: true });
         
-          if (isTimestampColumn(dataType.dateColumn)) {
-          // Timestamp columns - use range
-          const startOfDay = `${selectedDate}T00:00:00`;
-          const endOfDay = `${selectedDate}T23:59:59`;
-          query = query.gte(dataType.dateColumn, startOfDay).lte(dataType.dateColumn, endOfDay);
+        if (isTimestampColumn(dataType.dateColumn)) {
+          query = query.gte(dataType.dateColumn, `${dateFrom}T00:00:00`).lte(dataType.dateColumn, `${dateTo}T23:59:59`);
         } else {
-          // Date columns - direct equality
-          query = query.eq(dataType.dateColumn, selectedDate);
+          query = query.gte(dataType.dateColumn, dateFrom).lte(dataType.dateColumn, dateTo);
         }
 
         const { count, error } = await query;
@@ -164,11 +161,9 @@ export function DataResetPanel() {
         let query = supabase.from(dataType.table as any).delete();
         
         if (isTimestampColumn(dataType.dateColumn)) {
-          const startOfDay = `${selectedDate}T00:00:00`;
-          const endOfDay = `${selectedDate}T23:59:59`;
-          query = query.gte(dataType.dateColumn, startOfDay).lte(dataType.dateColumn, endOfDay);
+          query = query.gte(dataType.dateColumn, `${dateFrom}T00:00:00`).lte(dataType.dateColumn, `${dateTo}T23:59:59`);
         } else {
-          query = query.eq(dataType.dateColumn, selectedDate);
+          query = query.gte(dataType.dateColumn, dateFrom).lte(dataType.dateColumn, dateTo);
         }
 
         const { error } = await query;
@@ -187,7 +182,8 @@ export function DataResetPanel() {
     setShowConfirmDialog(false);
     setConfirmText("");
     setSelectedTypes([]);
-    setSelectedDate("");
+    setDateFrom("");
+    setDateTo("");
 
     if (errors.length > 0) {
       toast({ 
@@ -198,7 +194,7 @@ export function DataResetPanel() {
     } else {
       toast({ 
         title: "Data Reset Complete", 
-        description: `Successfully deleted ${deletedTotal} records for ${format(new Date(selectedDate), 'dd MMM yyyy')}`
+        description: `Successfully deleted ${deletedTotal} records for ${format(new Date(dateFrom), 'dd MMM yyyy')} - ${format(new Date(dateTo), 'dd MMM yyyy')}`
       });
     }
   };
@@ -221,15 +217,30 @@ export function DataResetPanel() {
 
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label>Select Date to Reset</Label>
-          <Input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            max={format(new Date(), 'yyyy-MM-dd')}
-          />
+          <Label>Select Date Range to Reset</Label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">From Date</Label>
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                max={format(new Date(), 'yyyy-MM-dd')}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">To Date</Label>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                min={dateFrom || undefined}
+                max={format(new Date(), 'yyyy-MM-dd')}
+              />
+            </div>
+          </div>
           <p className="text-xs text-muted-foreground">
-            All selected data types for this specific date will be deleted
+            All selected data types within this date range will be deleted
           </p>
         </div>
 
@@ -263,7 +274,7 @@ export function DataResetPanel() {
         <Button 
           variant="destructive" 
           onClick={handlePreviewReset}
-          disabled={!selectedDate || selectedTypes.length === 0}
+          disabled={!dateFrom || !dateTo || selectedTypes.length === 0}
           className="w-full sm:w-auto"
         >
           <Trash2 className="h-4 w-4 mr-2" />
@@ -281,7 +292,7 @@ export function DataResetPanel() {
             <AlertDialogDescription className="space-y-4">
               <p>
                 You are about to permanently delete <strong>{totalAffected} records</strong> for{" "}
-                <strong>{selectedDate && format(new Date(selectedDate), 'dd MMM yyyy')}</strong>
+                <strong>{dateFrom && format(new Date(dateFrom), 'dd MMM yyyy')} - {dateTo && format(new Date(dateTo), 'dd MMM yyyy')}</strong>
               </p>
               
               <div className="bg-muted p-3 rounded-lg space-y-1">
