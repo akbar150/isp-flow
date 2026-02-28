@@ -33,6 +33,7 @@ interface Package {
   validity_days: number;
   description: string | null;
   is_active: boolean;
+  customer_count?: number;
 }
 
 export default function Packages() {
@@ -63,13 +64,25 @@ export default function Packages() {
 
   const fetchPackages = async () => {
     try {
-      const { data, error } = await supabase
-        .from('packages')
-        .select('*')
-        .order('monthly_price', { ascending: true });
+      const [pkgRes, countRes] = await Promise.all([
+        supabase.from('packages').select('*').order('monthly_price', { ascending: true }),
+        supabase.from('customers').select('package_id'),
+      ]);
 
-      if (error) throw error;
-      setPackages(data || []);
+      if (pkgRes.error) throw pkgRes.error;
+
+      // Count customers per package
+      const countMap: Record<string, number> = {};
+      (countRes.data || []).forEach((c: { package_id: string | null }) => {
+        if (c.package_id) countMap[c.package_id] = (countMap[c.package_id] || 0) + 1;
+      });
+
+      const packagesWithCount = (pkgRes.data || []).map(p => ({
+        ...p,
+        customer_count: countMap[p.id] || 0,
+      }));
+
+      setPackages(packagesWithCount);
     } catch (error) {
       console.error('Error fetching packages:', error);
     } finally {
@@ -365,6 +378,7 @@ export default function Packages() {
               <div className="space-y-2 text-sm text-muted-foreground mb-4">
                 <p>🚀 Speed: {pkg.speed_mbps} Mbps</p>
                 <p>📅 Validity: {pkg.validity_days} days</p>
+                <p>👥 Customers: <span className="font-semibold text-foreground">{pkg.customer_count || 0}</span></p>
                 {pkg.description && <p>📋 {pkg.description}</p>}
               </div>
             </div>
