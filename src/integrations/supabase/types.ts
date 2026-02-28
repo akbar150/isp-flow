@@ -1039,6 +1039,45 @@ export type Database = {
           },
         ]
       }
+      network_outages: {
+        Row: {
+          actual_restore: string | null
+          area_ids: string[]
+          created_at: string
+          created_by: string | null
+          description: string | null
+          estimated_restore: string | null
+          id: string
+          status: Database["public"]["Enums"]["outage_status"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          actual_restore?: string | null
+          area_ids?: string[]
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          estimated_restore?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["outage_status"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          actual_restore?: string | null
+          area_ids?: string[]
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          estimated_restore?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["outage_status"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       packages: {
         Row: {
           created_at: string
@@ -2060,6 +2099,7 @@ export type Database = {
         | "asset_assigned"
         | "hrm_update"
         | "accounting_update"
+      outage_status: "active" | "resolved"
       payment_method: "bkash" | "cash" | "bank_transfer" | "due"
       payroll_status: "draft" | "approved" | "paid"
       reminder_type:
@@ -2239,6 +2279,7 @@ export const Constants = {
         "hrm_update",
         "accounting_update",
       ],
+      outage_status: ["active", "resolved"],
       payment_method: ["bkash", "cash", "bank_transfer", "due"],
       payroll_status: ["draft", "approved", "paid"],
       reminder_type: [
