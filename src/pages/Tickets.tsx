@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,7 +96,10 @@ const SLA_HOURS: Record<TicketPriority, number> = {
 };
 
 export default function Tickets() {
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
+  const { canCreate, canUpdate } = usePermissions();
+  const canCreateTicket = isSuperAdmin || canCreate("tickets");
+  const canEditTicket = isSuperAdmin || canUpdate("tickets");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -311,75 +315,77 @@ export default function Tickets() {
           <h1 className="page-title">Support Tickets</h1>
           <p className="page-description">Manage customer complaints and support requests</p>
         </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-2" /> New Ticket</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Create Support Ticket</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Customer *</Label>
-                <Select value={newTicket.customer_id} onValueChange={v => setNewTicket({ ...newTicket, customer_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
-                  <SelectContent>
-                    {customers.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.full_name} ({c.user_id})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Subject *</Label>
-                <Input value={newTicket.subject} onChange={e => setNewTicket({ ...newTicket, subject: e.target.value })} placeholder="Brief description" maxLength={200} />
-              </div>
-              <div>
-                <Label>Description *</Label>
-                <Textarea value={newTicket.description} onChange={e => setNewTicket({ ...newTicket, description: e.target.value })} placeholder="Detailed description of the issue" rows={3} maxLength={2000} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+        {canCreateTicket && (
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button><Plus className="h-4 w-4 mr-2" /> New Ticket</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Create Support Ticket</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
                 <div>
-                  <Label>Category</Label>
-                  <Select value={newTicket.category} onValueChange={v => setNewTicket({ ...newTicket, category: v as TicketCategory })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Label>Customer *</Label>
+                  <Select value={newTicket.customer_id} onValueChange={v => setNewTicket({ ...newTicket, customer_id: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
                     <SelectContent>
-                      {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                      {customers.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.full_name} ({c.user_id})</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Priority</Label>
-                  <Select value={newTicket.priority} onValueChange={v => setNewTicket({ ...newTicket, priority: v as TicketPriority })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Label>Subject *</Label>
+                  <Input value={newTicket.subject} onChange={e => setNewTicket({ ...newTicket, subject: e.target.value })} placeholder="Brief description" maxLength={200} />
+                </div>
+                <div>
+                  <Label>Description *</Label>
+                  <Textarea value={newTicket.description} onChange={e => setNewTicket({ ...newTicket, description: e.target.value })} placeholder="Detailed description of the issue" rows={3} maxLength={2000} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Category</Label>
+                    <Select value={newTicket.category} onValueChange={v => setNewTicket({ ...newTicket, category: v as TicketCategory })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Priority</Label>
+                    <Select value={newTicket.priority} onValueChange={v => setNewTicket({ ...newTicket, priority: v as TicketPriority })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PRIORITIES.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <Label>Assign To</Label>
+                  <Select value={newTicket.assigned_to} onValueChange={v => setNewTicket({ ...newTicket, assigned_to: v })}>
+                    <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                     <SelectContent>
-                      {PRIORITIES.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                      {staffMembers.map(s => (
+                        <SelectItem key={s.user_id} value={s.user_id}>{s.full_name || "Unnamed"}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              <div>
-                <Label>Assign To</Label>
-                <Select value={newTicket.assigned_to} onValueChange={v => setNewTicket({ ...newTicket, assigned_to: v })}>
-                  <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                  <SelectContent>
-                    {staffMembers.map(s => (
-                      <SelectItem key={s.user_id} value={s.user_id}>{s.full_name || "Unnamed"}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-              <Button onClick={handleCreateTicket} disabled={submitting}>
-                {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Create Ticket
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+                <Button onClick={handleCreateTicket} disabled={submitting}>
+                  {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Create Ticket
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {/* Stats */}
@@ -477,6 +483,7 @@ export default function Tickets() {
                 <p className="text-sm whitespace-pre-wrap">{selectedTicket.description}</p>
 
                 {/* Actions */}
+                {canEditTicket && (
                 <div className="space-y-3 border-t pt-3">
                   <div>
                     <Label className="text-xs">Status</Label>
@@ -531,6 +538,7 @@ export default function Tickets() {
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Comments */}
                 <div className="border-t pt-3">
