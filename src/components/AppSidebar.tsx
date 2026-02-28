@@ -21,6 +21,7 @@ import {
   UserCog,
   FileText,
   TicketCheck,
+  Wrench,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,7 @@ const navItems: NavItem[] = [
   { path: "/outages", label: "Network Outages", icon: WifiOff, resource: "outages" },
   { path: "/inventory", label: "Inventory", icon: Boxes, resource: "inventory" },
   { path: "/hrm", label: "HRM", icon: UserCog, resource: "hrm" },
+  { path: "/service-tasks", label: "Service Tasks", icon: Wrench, resource: "service_tasks" },
   { path: "/reports", label: "Reports", icon: FileBarChart, resource: "reports" },
   { path: "/routers", label: "Routers", icon: Router, resource: "routers" },
   { path: "/settings", label: "Settings", icon: Settings, resource: "settings" },
