@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,7 +44,10 @@ interface Outage {
 }
 
 export default function Outages() {
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
+  const { canCreate, canUpdate } = usePermissions();
+  const canCreateOutage = isSuperAdmin || canCreate("outages");
+  const canEditOutage = isSuperAdmin || canUpdate("outages");
   const [outages, setOutages] = useState<Outage[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [loading, setLoading] = useState(true);
@@ -203,75 +207,77 @@ export default function Outages() {
           <h1 className="page-title">Network Outages</h1>
           <p className="page-description">Report and track network outages by area</p>
         </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-2" /> Report Outage</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Report Network Outage</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Title *</Label>
-                <Input
-                  value={newOutage.title}
-                  onChange={e => setNewOutage({ ...newOutage, title: e.target.value })}
-                  placeholder="e.g. Fiber cut in Mirpur area"
-                  maxLength={200}
-                />
-              </div>
-              <div>
-                <Label>Description</Label>
-                <Textarea
-                  value={newOutage.description}
-                  onChange={e => setNewOutage({ ...newOutage, description: e.target.value })}
-                  placeholder="Details about the outage..."
-                  rows={3}
-                  maxLength={1000}
-                />
-              </div>
-              <div>
-                <Label>Affected Areas *</Label>
-                <div className="grid grid-cols-2 gap-2 mt-2 max-h-40 overflow-y-auto border rounded-lg p-3">
-                  {areas.length === 0 ? (
-                    <p className="text-sm text-muted-foreground col-span-2">No areas configured. Add areas in Settings.</p>
-                  ) : (
-                    areas.map(area => (
-                      <label key={area.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={newOutage.area_ids.includes(area.id)}
-                          onChange={() => toggleAreaSelection(area.id)}
-                          className="rounded"
-                        />
-                        {area.name}
-                      </label>
-                    ))
+        {canCreateOutage && (
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button><Plus className="h-4 w-4 mr-2" /> Report Outage</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Report Network Outage</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Title *</Label>
+                  <Input
+                    value={newOutage.title}
+                    onChange={e => setNewOutage({ ...newOutage, title: e.target.value })}
+                    placeholder="e.g. Fiber cut in Mirpur area"
+                    maxLength={200}
+                  />
+                </div>
+                <div>
+                  <Label>Description</Label>
+                  <Textarea
+                    value={newOutage.description}
+                    onChange={e => setNewOutage({ ...newOutage, description: e.target.value })}
+                    placeholder="Details about the outage..."
+                    rows={3}
+                    maxLength={1000}
+                  />
+                </div>
+                <div>
+                  <Label>Affected Areas *</Label>
+                  <div className="grid grid-cols-2 gap-2 mt-2 max-h-40 overflow-y-auto border rounded-lg p-3">
+                    {areas.length === 0 ? (
+                      <p className="text-sm text-muted-foreground col-span-2">No areas configured. Add areas in Settings.</p>
+                    ) : (
+                      areas.map(area => (
+                        <label key={area.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={newOutage.area_ids.includes(area.id)}
+                            onChange={() => toggleAreaSelection(area.id)}
+                            className="rounded"
+                          />
+                          {area.name}
+                        </label>
+                      ))
+                    )}
+                  </div>
+                  {newOutage.area_ids.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">{newOutage.area_ids.length} area(s) selected</p>
                   )}
                 </div>
-                {newOutage.area_ids.length > 0 && (
-                  <p className="text-xs text-muted-foreground mt-1">{newOutage.area_ids.length} area(s) selected</p>
-                )}
+                <div>
+                  <Label>Estimated Restore Time</Label>
+                  <Input
+                    type="datetime-local"
+                    value={newOutage.estimated_restore}
+                    onChange={e => setNewOutage({ ...newOutage, estimated_restore: e.target.value })}
+                  />
+                </div>
               </div>
-              <div>
-                <Label>Estimated Restore Time</Label>
-                <Input
-                  type="datetime-local"
-                  value={newOutage.estimated_restore}
-                  onChange={e => setNewOutage({ ...newOutage, estimated_restore: e.target.value })}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-              <Button onClick={handleCreate} disabled={submitting}>
-                {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Report Outage
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+                <Button onClick={handleCreate} disabled={submitting}>
+                  {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Report Outage
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {/* Stats */}
@@ -343,6 +349,7 @@ export default function Outages() {
                         )}
                       </div>
                     </div>
+                    {canEditOutage && (
                     <div className="flex items-center gap-2 shrink-0">
                       <Button
                         variant="outline"
@@ -377,6 +384,7 @@ export default function Outages() {
                         </AlertDialogContent>
                       </AlertDialog>
                     </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
