@@ -26,6 +26,8 @@ import CustomerLogin from "./pages/CustomerLogin";
 import CustomerPortal from "./pages/CustomerPortal";
 import Tickets from "./pages/Tickets";
 import Outages from "./pages/Outages";
+import ServiceTasks from "./pages/ServiceTasks";
+import TechnicianPortal from "./pages/TechnicianPortal";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -202,9 +204,18 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/service-tasks"
+        element={
+          <ProtectedRoute resource="service_tasks">
+            <ServiceTasks />
+          </ProtectedRoute>
+        }
+      />
       {/* Customer Routes */}
       <Route path="/customer-login" element={<CustomerLogin />} />
       <Route path="/customer-portal" element={<CustomerPortal />} />
+      <Route path="/technician" element={<TechnicianPortal />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

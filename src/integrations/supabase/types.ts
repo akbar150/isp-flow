@@ -1805,6 +1805,84 @@ export type Database = {
         }
         Relationships: []
       }
+      service_tasks: {
+        Row: {
+          assigned_to: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          customer_signature: string | null
+          description: string | null
+          gps_lat: number | null
+          gps_lng: number | null
+          id: string
+          notes: string | null
+          photos: string[] | null
+          priority: Database["public"]["Enums"]["service_task_priority"]
+          scheduled_date: string | null
+          status: Database["public"]["Enums"]["service_task_status"]
+          task_type: Database["public"]["Enums"]["service_task_type"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          customer_signature?: string | null
+          description?: string | null
+          gps_lat?: number | null
+          gps_lng?: number | null
+          id?: string
+          notes?: string | null
+          photos?: string[] | null
+          priority?: Database["public"]["Enums"]["service_task_priority"]
+          scheduled_date?: string | null
+          status?: Database["public"]["Enums"]["service_task_status"]
+          task_type?: Database["public"]["Enums"]["service_task_type"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          customer_signature?: string | null
+          description?: string | null
+          gps_lat?: number | null
+          gps_lng?: number | null
+          id?: string
+          notes?: string | null
+          photos?: string[] | null
+          priority?: Database["public"]["Enums"]["service_task_priority"]
+          scheduled_date?: string | null
+          status?: Database["public"]["Enums"]["service_task_status"]
+          task_type?: Database["public"]["Enums"]["service_task_type"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_tasks_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_tasks_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suppliers: {
         Row: {
           address: string | null
@@ -2448,6 +2526,13 @@ export type Database = {
         | "expiry_day"
         | "3_days_overdue"
       router_mode: "dummy" | "real"
+      service_task_priority: "low" | "medium" | "high" | "urgent"
+      service_task_status: "pending" | "in_progress" | "completed" | "cancelled"
+      service_task_type:
+        | "installation"
+        | "repair"
+        | "maintenance"
+        | "inspection"
       ticket_category:
         | "connection_issue"
         | "billing_dispute"
@@ -2638,6 +2723,14 @@ export const Constants = {
         "3_days_overdue",
       ],
       router_mode: ["dummy", "real"],
+      service_task_priority: ["low", "medium", "high", "urgent"],
+      service_task_status: ["pending", "in_progress", "completed", "cancelled"],
+      service_task_type: [
+        "installation",
+        "repair",
+        "maintenance",
+        "inspection",
+      ],
       ticket_category: [
         "connection_issue",
         "billing_dispute",
