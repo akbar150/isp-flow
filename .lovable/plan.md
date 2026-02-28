@@ -1,157 +1,105 @@
 
 
-## Inventory Module Enhancement Plan
+## Cross-Module Audit: Missing Features and Improvements
 
 ### Overview
-Implement all 6 missing features for the Inventory module: pagination with status filters, stock movement audit trail, warranty expiry tracking, CSV/PDF export, return workflow, and bulk status updates.
+After reviewing all 18+ modules, here is a prioritized list of gaps organized by severity.
 
 ---
 
-### 1. Database: Stock Movement Audit Trail Table
+### CRITICAL -- Will break at scale
 
-Create a new `stock_movements` table to track every status change for inventory items.
-
-```text
-stock_movements
-+----------------+------------------+
-| id             | uuid (PK)        |
-| inventory_item_id | uuid (FK)     |
-| from_status    | text (nullable)  |
-| to_status      | text             |
-| movement_type  | text             |
-| quantity        | numeric (1)     |
-| performed_by   | uuid (nullable) |
-| notes          | text (nullable)  |
-| created_at     | timestamptz      |
-+----------------+------------------+
-```
-
-Movement types: `stock_in`, `assigned`, `returned`, `sold`, `damaged`, `status_change`
-
-RLS: Admins/super_admins full access, staff can view and insert.
-
-A database trigger `trg_log_stock_movement` on `inventory_items` will automatically log every status change into this table.
+| Module | Issue | Detail |
+|--------|-------|--------|
+| **Customers** | No pagination | Loads ALL customers in one query. Will crash with 1000+ records. |
+| **Payments** | No pagination | Hard-capped at 100 with `.limit(100)`, no page controls. No date filter, no export. |
+| **Tickets** | No pagination | Loads all tickets in one query. |
+| **HRM - Attendance** | No pagination | Capped at `.limit(100)`. No date range filter. |
+| **HRM - Payroll** | No pagination | Capped at `.limit(50)`. |
+| **Service Tasks** | No pagination | Loads all tasks in one query. |
+| **Invoices** | No pagination | Loads all invoices in one query. |
 
 ---
 
-### 2. Status Filter + Pagination for Stock Items Tab
+### HIGH -- Missing for daily ISP operations
 
-**Current problem**: Hard-capped at 100 items, no status filter.
-
-Changes to `src/pages/Inventory.tsx`:
-- Add a status dropdown filter (All, In Stock, Assigned, Returned, Damaged, Sold) next to the existing search bar
-- Add pagination controls (Previous / Next / page numbers) below the stock items table
-- Page size: 25 items per page
-- Track `currentPage` and `statusFilter` in state
-- Apply both filters before slicing for display
-
----
-
-### 3. Warranty Expiry Tracking
-
-Add a new **"Warranty"** sub-section in the Stock Items tab header area:
-- Show a warning banner when items have warranties expiring within 30 days
-- Add "Warranty" column to the stock items table showing expiry date with color coding:
-  - Green: > 90 days remaining
-  - Yellow: 30-90 days remaining  
-  - Red: < 30 days or expired
-- Add a filter option "Expiring Soon" to the status filter dropdown
+| Module | Issue | Detail |
+|--------|-------|--------|
+| **Payments** | No date range filter | Cannot filter payments by date -- critical for daily reconciliation. |
+| **Payments** | No CSV/PDF export | Reports page has export, but the Payments page itself does not. |
+| **Customers** | No CSV/PDF export | Cannot export the customer list for offline use or reporting. |
+| **Customers** | No pagination | Same as critical above -- loading all records at once. |
+| **Tickets** | No CSV/PDF export | Cannot export ticket data for SLA reporting. |
+| **Accounting** | Shared income/expense categories | Code comment says "Use expense categories for income too (for now)". Need separate category types. |
+| **Settings** | No Activity Log viewer | `activity_logs` table exists and is populated, but there is no UI to view them. |
+| **Customer Portal** | localStorage session | Uses `localStorage` for auth -- insecure, easily tampered with. Should use signed tokens. |
+| **Customer Portal** | No ticket submission | Customers cannot create support tickets from the portal. |
+| **HRM** | No CSV/PDF export | Employee list, attendance, and payroll have no export capability. |
 
 ---
 
-### 4. CSV/PDF Export
+### MEDIUM -- Functional gaps
 
-Add export buttons to each tab using the existing `exportToCSV` and `exportToPDF` utilities from `src/lib/exportUtils.ts`.
-
-- **Products tab**: Export product name, category, brand, model, purchase price, selling price, stock count
-- **Stock Items tab**: Export product name, serial, MAC, supplier, status, purchase price, warranty end date
-- **Suppliers tab**: Export name, contact, phone, email, address
-
-Two buttons (CSV, PDF) placed next to each tab's action buttons.
-
----
-
-### 5. Return Workflow for Assigned Assets
-
-Add a "Return" action in the Stock Items dropdown menu for items with status `assigned`:
-- Opens a Return Dialog with:
-  - Item details (product name, serial, currently assigned customer)
-  - Condition on return dropdown: New, Good, Fair, Damaged
-  - Return notes textarea
-- On submit:
-  - Update `asset_assignments` table: set `returned_date` and `condition_on_return`
-  - Update `inventory_items` status based on condition:
-    - New/Good/Fair -> `in_stock` (re-stock)
-    - Damaged -> `damaged`
-  - Update product `stock_quantity` accordingly (increment if re-stocked)
-  - Log a `stock_movements` record with type `returned`
-  - Show success toast with return summary
+| Module | Issue | Detail |
+|--------|-------|--------|
+| **Routers** | No health monitoring | No connected user count, uptime, or traffic stats displayed. |
+| **Routers** | Real MikroTik adapter is a stub | `RealMikrotikAdapter` returns "not_implemented" for all methods. |
+| **Outages** | No pagination for history | Resolved outages capped at `.slice(0, 20)` in UI. |
+| **Outages** | WhatsApp broadcast is manual | Opens WhatsApp for the first customer only; no real bulk broadcast. |
+| **Service Tasks** | No status update from admin UI | View-only task detail dialog; admin cannot update status without going to technician portal. |
+| **Invoices** | No automated overdue detection | Invoice status must be updated manually; no scheduled check for overdue invoices. |
+| **Dashboard** | No area-based breakdown | Stats are aggregated across all areas; no per-area view. |
+| **Reminders** | No scheduled/auto reminders | All reminders are manual; no cron-based auto-reminder for expiring customers. |
+| **Resellers** | Thin wrapper page | Just renders `ResellerManagement` component; no dashboard stats or commission overview on the page. |
+| **Packages** | No customer count per package | Cannot see how many customers are on each package. |
 
 ---
 
-### 6. Bulk Status Updates
+### LOW -- Polish and UX improvements
 
-Add bulk selection capability to the Stock Items tab:
-- Checkbox column in the table for selecting multiple items
-- "Select All" checkbox in the header
-- When items are selected, show a floating action bar at the bottom:
-  - "Change Status" button with dropdown (In Stock, Damaged, Returned)
-  - "Delete Selected" button (requires confirmation)
-  - Selected count display
-- On bulk status change:
-  - Update all selected items' status
-  - Log stock movements for each item
-  - Update product stock quantities
-  - Show summary toast
+| Module | Issue | Detail |
+|--------|-------|--------|
+| **Payments** | No edit/delete capability | Payment records are insert-only; no correction workflow. |
+| **Tickets** | No category-based filter | Can filter by status but not by category (connection_issue, billing_dispute, etc.). |
+| **HRM** | Leave request form missing | `leave_requests` table exists but no creation form in the HRM UI (only leave types management). |
+| **Invoices** | No email delivery | Invoices can be printed but not emailed directly to customers. |
+| **Dashboard** | Expiring list capped at 5 | Only shows 5 expiring customers; should link to full filtered list. |
+| **Call Records** | Separate page is thin | The dedicated Call Records page could integrate with customer context better. |
+| **Settings** | No system backup/restore | Data reset exists but no backup functionality. |
 
 ---
 
-### Technical Summary
+### Recommended Implementation Order
 
-| Feature | Files Modified/Created |
-|---------|----------------------|
-| Stock movements table + trigger | New DB migration |
-| Status filter + pagination | `src/pages/Inventory.tsx` |
-| Warranty tracking | `src/pages/Inventory.tsx` |
-| CSV/PDF export | `src/pages/Inventory.tsx` |
-| Return workflow | `src/pages/Inventory.tsx` |
-| Bulk status updates | `src/pages/Inventory.tsx` |
+**Phase 1 -- Scalability (Critical)**
+1. Add pagination to Customers, Payments, Tickets, Invoices, Service Tasks, HRM (Attendance + Payroll)
+2. Add date range filters to Payments page
+3. Add CSV/PDF export to Customers, Payments, Tickets, HRM
 
-### Migration SQL (Key Parts)
+**Phase 2 -- Operations (High)**
+4. Add Activity Log viewer in Settings
+5. Separate income/expense categories in Accounting
+6. Add customer ticket submission to Customer Portal
+7. Secure Customer Portal sessions (replace localStorage with signed JWT)
 
-```sql
--- stock_movements table
-CREATE TABLE public.stock_movements (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  inventory_item_id uuid REFERENCES public.inventory_items(id) ON DELETE CASCADE,
-  from_status text,
-  to_status text NOT NULL,
-  movement_type text NOT NULL DEFAULT 'status_change',
-  quantity numeric NOT NULL DEFAULT 1,
-  performed_by uuid,
-  notes text,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+**Phase 3 -- Automation (Medium)**
+8. Add admin status update to Service Tasks detail dialog
+9. Add automated overdue invoice detection (scheduled function)
+10. Add scheduled auto-reminders for expiring customers
+11. Add customer count per package display
 
--- Auto-log trigger on inventory_items status change
-CREATE OR REPLACE FUNCTION public.log_stock_movement()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
-SET search_path TO 'public' AS $$
-BEGIN
-  IF OLD.status IS DISTINCT FROM NEW.status THEN
-    INSERT INTO public.stock_movements 
-      (inventory_item_id, from_status, to_status, movement_type)
-    VALUES 
-      (NEW.id, OLD.status::text, NEW.status::text, 'status_change');
-  END IF;
-  RETURN NEW;
-END;
-$$;
+**Phase 4 -- Advanced (Low)**
+12. Invoice email delivery
+13. Leave request creation form in HRM
+14. Reseller dashboard stats
+15. Area-based dashboard breakdown
 
-CREATE TRIGGER trg_log_stock_movement
-  AFTER UPDATE ON public.inventory_items
-  FOR EACH ROW EXECUTE FUNCTION public.log_stock_movement();
-```
+---
 
-All changes stay within the existing architecture patterns -- using the same Supabase client, permission checks, and UI component library already in use.
+### Technical Notes
+
+- Pagination pattern: Use `currentPage` state + Supabase `.range(from, to)` for server-side pagination with total count via `.select('*', { count: 'exact' })`.
+- Export utilities already exist in `src/lib/exportUtils.ts` -- just need to wire them into each page.
+- Activity logs table already has RLS policies for admin/super_admin read access.
+- All changes follow existing patterns (DashboardLayout, permission checks via `usePermissions`, Supabase client from `@/integrations/supabase/client`).
 
