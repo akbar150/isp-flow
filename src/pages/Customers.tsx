@@ -167,7 +167,7 @@ export default function Customers() {
 
       let customerQuery = supabase
         .from('customers_safe')
-        .select('*, packages(*), areas(*), routers(*), mikrotik_users:mikrotik_users_safe(id, username, status)', { count: 'exact' });
+        .select('*, packages(*), areas(*), routers(*)', { count: 'exact' });
 
       // Server-side search
       if (searchTerm.trim()) {
