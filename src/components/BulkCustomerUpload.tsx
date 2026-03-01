@@ -22,7 +22,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, Download, FileText, AlertCircle, CheckCircle2, Loader2, Copy } from "lucide-react";
 import { normalizePhone, isValidBDPhone } from "@/lib/phoneUtils";
-import { format, addDays } from "date-fns";
+import { addDays } from "date-fns";
 import * as XLSX from "xlsx";
 
 interface Package {
@@ -65,26 +65,107 @@ interface ParsedCustomer {
   errors: string[];
 }
 
-function normalizeExcelDate(value: unknown): string {
+/** Get current Dhaka time as ISO string with +06:00 offset */
+function getDhakaISO(): string {
+  const now = new Date();
+  const dhakaOffset = 6 * 60; // +6 hours in minutes
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const dhaka = new Date(utc + dhakaOffset * 60000);
+  const y = dhaka.getFullYear();
+  const mo = String(dhaka.getMonth() + 1).padStart(2, "0");
+  const d = String(dhaka.getDate()).padStart(2, "0");
+  const h = String(dhaka.getHours()).padStart(2, "0");
+  const mi = String(dhaka.getMinutes()).padStart(2, "0");
+  const s = String(dhaka.getSeconds()).padStart(2, "0");
+  return `${y}-${mo}-${d}T${h}:${mi}:${s}+06:00`;
+}
+
+/** Parse 12-hour time string like "06:20:31 PM" to 24h components */
+function parse12hTime(timeStr: string): { h: number; m: number; s: number } | null {
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const s = parseInt(match[3], 10);
+  const ampm = match[4].toUpperCase();
+  if (ampm === "PM" && h < 12) h += 12;
+  if (ampm === "AM" && h === 12) h = 0;
+  return { h, m, s };
+}
+
+/**
+ * Normalize date/datetime value to ISO with Dhaka +06:00 offset.
+ * Handles: Excel serial numbers (with fractional time), YYYY-MM-DD, 
+ * "YYYY-MM-DD HH:mm:ss AM/PM", DD/MM/YYYY, ISO strings.
+ * Output: "2025-10-15T18:20:31+06:00"
+ */
+function normalizeExcelDateTime(value: unknown): string {
   if (!value) return "";
   if (typeof value === "number") {
     const date = XLSX.SSF.parse_date_code(value);
     if (date) {
       const y = date.y;
-      const m = String(date.m).padStart(2, "0");
+      const mo = String(date.m).padStart(2, "0");
       const d = String(date.d).padStart(2, "0");
-      return `${y}-${m}-${d}`;
+      const h = String(date.H || 0).padStart(2, "0");
+      const mi = String(date.M || 0).padStart(2, "0");
+      const s = String(date.S || 0).padStart(2, "0");
+      return `${y}-${mo}-${d}T${h}:${mi}:${s}+06:00`;
     }
   }
   const str = String(value).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-  if (str.includes("T")) return str.split("T")[0];
-  if (str.includes(" ")) return str.split(" ")[0];
+  // Already ISO with offset
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/.test(str)) return str;
+  // YYYY-MM-DD only → midnight Dhaka
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return `${str}T00:00:00+06:00`;
+  // ISO with T but no offset
+  if (/^\d{4}-\d{2}-\d{2}T/.test(str)) {
+    const datePart = str.substring(0, 19); // take up to seconds
+    return `${datePart}+06:00`;
+  }
+  // "YYYY-MM-DD HH:mm:ss AM/PM" format
+  const dateTimeMatch = str.match(/^(\d{4}-\d{2}-\d{2})\s+(.+)$/);
+  if (dateTimeMatch) {
+    const datePart = dateTimeMatch[1];
+    const timeParsed = parse12hTime(dateTimeMatch[2]);
+    if (timeParsed) {
+      const h = String(timeParsed.h).padStart(2, "0");
+      const m = String(timeParsed.m).padStart(2, "0");
+      const s = String(timeParsed.s).padStart(2, "0");
+      return `${datePart}T${h}:${m}:${s}+06:00`;
+    }
+    // Try 24h format "HH:mm:ss"
+    const time24Match = dateTimeMatch[2].match(/^(\d{2}):(\d{2}):(\d{2})$/);
+    if (time24Match) {
+      return `${datePart}T${time24Match[1]}:${time24Match[2]}:${time24Match[3]}+06:00`;
+    }
+    // Unknown time format, default midnight
+    return `${datePart}T00:00:00+06:00`;
+  }
+  // DD/MM/YYYY
   const slashMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
   if (slashMatch) {
-    return `${slashMatch[3]}-${slashMatch[2].padStart(2, "0")}-${slashMatch[1].padStart(2, "0")}`;
+    const datePart = `${slashMatch[3]}-${slashMatch[2].padStart(2, "0")}-${slashMatch[1].padStart(2, "0")}`;
+    return `${datePart}T00:00:00+06:00`;
   }
   return str;
+}
+
+/** Format ISO timestamp for display: "2025-10-15 06:20 PM" */
+function formatDateTimeDisplay(isoStr: string): string {
+  if (!isoStr) return "";
+  try {
+    const match = isoStr.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+    if (!match) return isoStr;
+    const [, date, hStr, mStr] = match;
+    let h = parseInt(hStr, 10);
+    const ampm = h >= 12 ? "PM" : "AM";
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    return `${date} ${String(h).padStart(2, "0")}:${mStr} ${ampm}`;
+  } catch {
+    return isoStr;
+  }
 }
 
 interface BulkCustomerUploadProps {
@@ -162,8 +243,8 @@ function autoMapColumns(headers: string[]): Record<string, string> {
 }
 
 const SAMPLE_CSV = `full_name,phone,alt_phone,address,area_name,router_name,package_name,password,pppoe_username,pppoe_password,latitude,longitude,connection_type,billing_cycle,connection_date,expiry_date
-Mohammad Rahman,01712345678,,House 12 Road 5 Dhanmondi Dhaka,Zone A,Main Router,Basic 10Mbps,abc123,user001,pass01,23.7461,90.3742,pppoe,monthly,2025-01-15,2025-02-14
-Fatima Begum,01898765432,01711111111,Flat 4B Green Tower Uttara Dhaka,Zone B,Sub Router,Standard 20Mbps,xyz789,user002,pass02,23.8765,90.3920,static,quarterly,2025-02-01,2025-05-01
+Mohammad Rahman,01712345678,,House 12 Road 5 Dhanmondi Dhaka,Zone A,Main Router,Basic 10Mbps,abc123,user001,pass01,23.7461,90.3742,pppoe,monthly,2025-01-15 09:00:00 AM,2025-02-14 11:59:00 PM
+Fatima Begum,01898765432,01711111111,Flat 4B Green Tower Uttara Dhaka,Zone B,Sub Router,Standard 20Mbps,xyz789,user002,pass02,23.8765,90.3920,static,quarterly,2025-02-01 10:30:00 AM,2025-05-01 11:59:00 PM
 Abdul Karim,01512345678,,Shop 23 Banani Commercial Area Dhaka,Zone A,Main Router,Premium 50Mbps,test123,user003,pass03,23.7938,90.4035,pppoe,yearly,,`;
 
 export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: BulkCustomerUploadProps) {
@@ -266,8 +347,8 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
         longitude: row.longitude || "",
         connection_type: row.connection_type || "pppoe",
         billing_cycle: row.billing_cycle || "monthly",
-        connection_date: normalizeExcelDate(row.connection_date || ""),
-        expiry_date: normalizeExcelDate(row.expiry_date || ""),
+        connection_date: normalizeExcelDateTime(row.connection_date || ""),
+        expiry_date: normalizeExcelDateTime(row.expiry_date || ""),
         isDuplicate: false,
         ...validation,
       };
@@ -309,8 +390,8 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
         longitude: row.longitude || "",
         connection_type: row.connection_type || "pppoe",
         billing_cycle: row.billing_cycle || "monthly",
-        connection_date: normalizeExcelDate(row.connection_date || ""),
-        expiry_date: normalizeExcelDate(row.expiry_date || ""),
+        connection_date: normalizeExcelDateTime(row.connection_date || ""),
+        expiry_date: normalizeExcelDateTime(row.expiry_date || ""),
         isDuplicate: false,
         ...validation,
       };
@@ -445,13 +526,25 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
         });
         if (pppoeHashError) throw pppoeHashError;
 
-        const isValidDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
-        const billingStartDate = row.connection_date && isValidDate(row.connection_date)
+        const isValidDateTime = (d: string) => /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})?$/.test(d);
+        const billingStartDate = row.connection_date && isValidDateTime(row.connection_date)
           ? row.connection_date
-          : format(new Date(), "yyyy-MM-dd");
-        const expiryDateStr = row.expiry_date && isValidDate(row.expiry_date)
+          : getDhakaISO();
+        const expiryDateStr = row.expiry_date && isValidDateTime(row.expiry_date)
           ? row.expiry_date
-          : format(addDays(new Date(billingStartDate), pkg.validity_days), "yyyy-MM-dd");
+          : (() => {
+              const baseDate = billingStartDate.includes("T")
+                ? new Date(billingStartDate)
+                : new Date(billingStartDate + "T00:00:00+06:00");
+              const expiry = addDays(baseDate, pkg.validity_days);
+              const y = expiry.getFullYear();
+              const mo = String(expiry.getMonth() + 1).padStart(2, "0");
+              const d = String(expiry.getDate()).padStart(2, "0");
+              const h = String(expiry.getHours()).padStart(2, "0");
+              const mi = String(expiry.getMinutes()).padStart(2, "0");
+              const s = String(expiry.getSeconds()).padStart(2, "0");
+              return `${y}-${mo}-${d}T${h}:${mi}:${s}+06:00`;
+            })();
 
         const connectionType = ['pppoe', 'static', 'dhcp'].includes(row.connection_type)
           ? row.connection_type as 'pppoe' | 'static' | 'dhcp'
@@ -660,8 +753,8 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
                       <TableCell>{row.phone || "-"}</TableCell>
                       <TableCell>{row.package_name || "-"}</TableCell>
                       <TableCell>{row.pppoe_username || "-"}</TableCell>
-                      <TableCell className="text-xs">{row.connection_date || "-"}</TableCell>
-                      <TableCell className="text-xs">{row.expiry_date || "-"}</TableCell>
+                      <TableCell className="text-xs">{formatDateTimeDisplay(row.connection_date) || "-"}</TableCell>
+                      <TableCell className="text-xs">{formatDateTimeDisplay(row.expiry_date) || "-"}</TableCell>
                       <TableCell>
                         {row.errors.length > 0 && !row.isDuplicate && (
                           <div className="flex flex-wrap gap-1">

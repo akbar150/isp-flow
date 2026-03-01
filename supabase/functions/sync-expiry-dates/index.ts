@@ -13,16 +13,17 @@ interface SyncRow {
   status: string;
 }
 
-/** Extract YYYY-MM-DD from any date/datetime string, preventing timezone shifts */
-function normalizeDateToLocal(dateStr: string): string {
+/** Normalize date/datetime string to ISO with Dhaka +06:00 offset for timestamptz */
+function normalizeDateTimeToDbFormat(dateStr: string): string {
   if (!dateStr) return dateStr;
-  // If already YYYY-MM-DD (10 chars, no time), return as-is
   const trimmed = dateStr.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-  // If ISO format with T, take the date part before T
-  if (trimmed.includes("T")) return trimmed.split("T")[0];
-  // If has space (e.g. "2026-03-01 11:59:00 PM"), take date part before space
-  if (trimmed.includes(" ")) return trimmed.split(" ")[0];
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return `${trimmed}T00:00:00+06:00`;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed)) return trimmed;
+  if (trimmed.includes(" ")) {
+    const datePart = trimmed.split(" ")[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return `${datePart}T00:00:00+06:00`;
+  }
   return trimmed;
 }
 
@@ -71,7 +72,7 @@ Deno.serve(async (req) => {
 
         // Build update payload
         const updatePayload: Record<string, unknown> = {
-          expiry_date: normalizeDateToLocal(row.expiry_date),
+          expiry_date: normalizeDateTimeToDbFormat(row.expiry_date),
           status,
         };
 
