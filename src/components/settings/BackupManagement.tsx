@@ -48,9 +48,10 @@ export function BackupManagement() {
 
       if (error) throw error;
 
+      const tableCount = data.tables ? Object.keys(data.tables).length : 0;
       toast({
         title: "Backup completed",
-        description: `${data.record_count} customers exported successfully.`,
+        description: `${data.record_count} total records across ${tableCount} tables exported successfully.`,
       });
       fetchBackups();
     } catch (error: any) {
@@ -105,7 +106,7 @@ export function BackupManagement() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="flex items-center gap-2 text-base md:text-lg font-semibold">
             <HardDrive className="h-5 w-5" />
-            Customer Data Backups
+            Full System Data Backups
           </h3>
           <Button onClick={runBackupNow} disabled={running}>
             {running ? (
@@ -118,7 +119,7 @@ export function BackupManagement() {
         </div>
 
         <p className="text-sm text-muted-foreground mb-4">
-          Backups run automatically every day at midnight (Dhaka time). You can also trigger a manual backup.
+          Full system backup including Customers, Payments, Invoices, Billing, Accounting, Tickets, Service Tasks, Inventory, HRM, Reminders, Call Records, PPPoE Users, Packages, Routers, Resellers &amp; Areas. Runs daily at midnight (Dhaka UTC+6).
         </p>
 
         {backups.length === 0 ? (
