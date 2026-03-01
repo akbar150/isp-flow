@@ -74,7 +74,7 @@ const CUSTOMER_DATA = [
   { name: "Md Ruhan Ahmod", phone: "8801852578570", username: "easy310-ruhan.kg", status: "active", expiry_date: "2026-03-09", package_name: "Sync-36Mbps-800-Unlimited", bill: 800, zone: "Khagria" },
   { name: "Razi Uddin Khan", phone: "8801716690101", username: "easy309-razi.vt", status: "active", expiry_date: "2026-03-06", package_name: "Sync-70Mbps-1000-Unlimited", bill: 1000, zone: "Vata" },
   { name: "Md Afjol Hussain", phone: "8801747336248", username: "easy308-afjol.upguwa", status: "active", expiry_date: "2026-03-12", package_name: "FRN-8Mbps", bill: 600, zone: "Uforpara" },
-  { name: "Habibur Rahman", phone: "8801790874112", username: "easy307-habibur.vat", status: "active", expiry_date: "2026-03-02", package_name: "Sync-36Mbps-800-Unlimited", bill: 800, zone: "Vata" },
+  { name: "Habibur Rahman", phone: "8801790874112", username: "easy307-habibur.vat", status: "active", expiry_date: "2026-03-01", package_name: "Sync-36Mbps-800-Unlimited", bill: 800, zone: "Vata" },
   { name: "Md Mohobbot Ali", phone: "8801711580429", username: "easy306-mohobbot.kglk", status: "active", expiry_date: "2026-03-01", package_name: "Sync-36Mbps-800-Unlimited", bill: 1200, zone: "Khagria" },
   { name: "MD NASIR UDDIN", phone: "8801734596600", username: "easy305-nasir.upor", status: "active", expiry_date: "2026-03-17", package_name: "FRN-8Mbps", bill: 600, zone: "Uforpara" },
   { name: "Md Abdul Kabir", phone: "8801735549503", username: "easy304-kabir.kg", status: "active", expiry_date: "2026-03-07", package_name: "Sync-36Mbps-800-Unlimited", bill: 800, zone: "Khagria" },
