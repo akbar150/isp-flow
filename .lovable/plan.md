@@ -1,63 +1,30 @@
 
 
-## Bug Fix Plan: Customer Edit PPPoE + Search Pagination
+## Bug Fix: Phone Number Validation Regex
 
-### Bug 1: PPPoE Username/Password Not Saving
+### Problem
+The `isValidBDPhone` function in `src/lib/phoneUtils.ts` has a wrong regex pattern. Bangladesh mobile numbers are 13 digits (e.g., `8801766866997`), but the current regex `/^880[13-9]\d{8}$/` only matches 12-digit strings (880 + 1 digit + 8 digits = 12).
 
-**Root Cause:** The `CustomerEditDialog` component has no PPPoE username or password fields. It only updates the `customers` table -- it never touches the `mikrotik_users` table where PPPoE credentials are stored.
+This causes ALL valid phone numbers to be rejected when adding or editing customers.
 
-**Fix:**
-- Add PPPoE username and PPPoE password fields to `CustomerEditDialog`
-- On dialog open, fetch the existing PPPoE credentials from `mikrotik_users` (via the customer's `mikrotik_users` relation already available)
-- On save, update `mikrotik_users` table in addition to the `customers` table
-- For the PPPoE password: since it's stored as a hash (`password_encrypted`), the field will be blank by default. If the user enters a new password, hash it via `hash_password` RPC and update. If left blank, skip the password update.
-- Accept the `mikrotik_users` data from the parent component (already passed as part of customer data)
+### Fix
+**File:** `src/lib/phoneUtils.ts` (line 28)
 
-**Files Modified:**
-- `src/components/CustomerEditDialog.tsx` -- Add PPPoE username + password fields, update `mikrotik_users` on save
-
----
-
-### Bug 2: Search Shows Wrong Pagination (e.g., "1/4")
-
-**Root Cause:** Search is done **client-side** -- it filters only the 50 records loaded on the current page. But the `TablePagination` component still uses `totalCount` from the server (the total number of all customers in the database), so it shows pages like "1/4" even when searching.
-
-This means:
-- Searching only filters within the current page's 50 records
-- Customers matching the search on other pages are invisible
-- The page count is incorrect during search
-
-**Fix:**
-- Move search to **server-side** using Supabase `.or()` with `.ilike()` filters
-- Move status filter to server-side using `.eq()` 
-- Reset `currentPage` to 1 whenever `searchTerm` or `statusFilter` changes
-- Include `searchTerm` and `statusFilter` in the `useEffect` dependency array alongside `currentPage`
-- Remove client-side `filteredCustomers` filtering logic (keep only the date sort which is fine client-side)
-
-**Server-side search query pattern:**
+Change the regex from:
 ```
-query.or(`full_name.ilike.%${search}%,user_id.ilike.%${search}%,phone.ilike.%${search}%`)
+/^880[13-9]\d{8}$/
+```
+To:
+```
+/^880[13-9]\d{9}$/
 ```
 
-**Files Modified:**
-- `src/pages/Customers.tsx` -- Move search/filter to server-side, fix pagination dependency
+This makes the total match 13 digits (880 + 1 operator digit + 9 remaining digits), which is the correct Bangladesh mobile number format.
 
----
-
-### Technical Details
-
-**CustomerEditDialog changes:**
-1. Expand the Customer interface to include `mikrotik_users` array
-2. Add form fields: `pppoe_username` (text input) and `pppoe_password` (text input, optional)
-3. Pre-populate `pppoe_username` from `customer.mikrotik_users[0].username`
-4. On submit: update `mikrotik_users` with new username; if password provided, hash it and update `password_encrypted`
-5. Add password visibility toggle for PPPoE password field
-
-**Customers.tsx search changes:**
-1. In `fetchData()`, build the query conditionally:
-   - If `searchTerm` is set, add `.or(...)` with ilike on full_name, user_id, phone
-   - If `statusFilter` is not "all", add `.eq('status', statusFilter)`
-2. Add `searchTerm` and `statusFilter` to the `useEffect` deps
-3. When search or filter changes, reset page to 1
-4. Remove the client-side `filteredCustomers` filter (keep only sort)
+### Impact
+This single-line fix resolves phone validation errors in:
+- Add New Customer dialog
+- Edit Customer dialog
+- Bulk customer import
+- Any other place using `isValidBDPhone`
 
