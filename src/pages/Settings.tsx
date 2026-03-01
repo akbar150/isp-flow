@@ -20,10 +20,8 @@ import { BillingSettings } from "@/components/settings/BillingSettings";
 import BkashSettings from "@/components/settings/BkashSettings";
 import { ContractTemplates } from "@/components/settings/ContractTemplates";
 import { ActivityLogViewer } from "@/components/settings/ActivityLogViewer";
-import { CustomerDataImport } from "@/components/settings/CustomerDataImport";
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Database } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { decodeSettingValue, normalizeTemplateVars } from "@/lib/settingsValue";
 import { useAuth } from "@/hooks/useAuth";
@@ -185,12 +183,6 @@ Please pay to avoid disconnection.
               <Activity className="h-4 w-4" />
               <span className="hidden sm:inline">Activity Logs</span>
             </TabsTrigger>
-            {isSuperAdmin && (
-              <TabsTrigger value="data-import" className="flex items-center gap-1.5 px-3 py-2">
-                <Database className="h-4 w-4" />
-                <span className="hidden sm:inline">Data Import</span>
-              </TabsTrigger>
-            )}
             {isSuperAdmin && (
               <TabsTrigger value="bkash" className="flex items-center gap-1.5 px-3 py-2">
                 <CreditCard className="h-4 w-4" />
@@ -425,12 +417,6 @@ Please pay to avoid disconnection.
         <TabsContent value="activity-logs">
           <ActivityLogViewer />
         </TabsContent>
-
-        {isSuperAdmin && (
-          <TabsContent value="data-import">
-            <CustomerDataImport />
-          </TabsContent>
-        )}
 
         {isSuperAdmin && (
           <TabsContent value="bkash">

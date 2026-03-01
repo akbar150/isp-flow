@@ -17,16 +17,6 @@ interface CustomerRow {
   zone: string;
 }
 
-/** Extract YYYY-MM-DD from any date/datetime string, preventing timezone shifts */
-function normalizeDateToLocal(dateStr: string): string {
-  if (!dateStr) return dateStr;
-  const trimmed = dateStr.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-  if (trimmed.includes("T")) return trimmed.split("T")[0];
-  if (trimmed.includes(" ")) return trimmed.split(" ")[0];
-  return trimmed;
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -155,9 +145,7 @@ Deno.serve(async (req) => {
         const areaId = areaMap.get(c.zone) || null;
 
         // Calculate billing start date (expiry - 30 days)
-        // Use normalized date string to avoid timezone shifts
-        const normalizedExpiry = normalizeDateToLocal(c.expiry_date);
-        const expiryDate = new Date(normalizedExpiry + "T00:00:00");
+        const expiryDate = new Date(c.expiry_date);
         const billingStart = new Date(expiryDate);
         billingStart.setDate(billingStart.getDate() - 30);
 
@@ -173,7 +161,7 @@ Deno.serve(async (req) => {
             package_id: packageId,
             area_id: areaId,
             status,
-            expiry_date: normalizedExpiry,
+            expiry_date: expiryDate.toISOString().split("T")[0],
             billing_start_date: billingStart.toISOString().split("T")[0],
             total_due: c.bill || 0,
             connection_type: "pppoe",
