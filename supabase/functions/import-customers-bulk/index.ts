@@ -17,13 +17,21 @@ interface CustomerRow {
   zone: string;
 }
 
-/** Extract YYYY-MM-DD from any date/datetime string, preventing timezone shifts */
-function normalizeDateToLocal(dateStr: string): string {
+/** Normalize date/datetime string to ISO with Dhaka +06:00 offset for timestamptz */
+function normalizeDateTimeToDbFormat(dateStr: string): string {
   if (!dateStr) return dateStr;
   const trimmed = dateStr.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-  if (trimmed.includes("T")) return trimmed.split("T")[0];
-  if (trimmed.includes(" ")) return trimmed.split(" ")[0];
+  // Already ISO with offset
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/.test(trimmed)) return trimmed;
+  // YYYY-MM-DD only → midnight Dhaka
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return `${trimmed}T00:00:00+06:00`;
+  // ISO with T
+  if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed)) return trimmed;
+  // Has space (datetime)
+  if (trimmed.includes(" ")) {
+    const datePart = trimmed.split(" ")[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return `${datePart}T00:00:00+06:00`;
+  }
   return trimmed;
 }
 
@@ -155,11 +163,18 @@ Deno.serve(async (req) => {
         const areaId = areaMap.get(c.zone) || null;
 
         // Calculate billing start date (expiry - 30 days)
-        // Use normalized date string to avoid timezone shifts
-        const normalizedExpiry = normalizeDateToLocal(c.expiry_date);
-        const expiryDate = new Date(normalizedExpiry + "T00:00:00");
+        const normalizedExpiry = normalizeDateTimeToDbFormat(c.expiry_date);
+        const expiryDate = new Date(normalizedExpiry);
         const billingStart = new Date(expiryDate);
         billingStart.setDate(billingStart.getDate() - 30);
+        // Format billingStart as ISO with +06:00
+        const bsY = billingStart.getFullYear();
+        const bsMo = String(billingStart.getMonth() + 1).padStart(2, "0");
+        const bsD = String(billingStart.getDate()).padStart(2, "0");
+        const bsH = String(billingStart.getHours()).padStart(2, "0");
+        const bsMi = String(billingStart.getMinutes()).padStart(2, "0");
+        const bsS = String(billingStart.getSeconds()).padStart(2, "0");
+        const billingStartStr = `${bsY}-${bsMo}-${bsD}T${bsH}:${bsMi}:${bsS}+06:00`;
 
         // Insert customer
         const { data: customer, error: custError } = await supabase
@@ -174,7 +189,7 @@ Deno.serve(async (req) => {
             area_id: areaId,
             status,
             expiry_date: normalizedExpiry,
-            billing_start_date: billingStart.toISOString().split("T")[0],
+            billing_start_date: billingStartStr,
             total_due: c.bill || 0,
             connection_type: "pppoe",
             billing_cycle: "monthly",
