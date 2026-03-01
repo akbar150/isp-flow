@@ -1,0 +1,2 @@
+ALTER TABLE public.customers DROP CONSTRAINT check_address_length;
+ALTER TABLE public.customers ADD CONSTRAINT check_address_length CHECK (length(TRIM(BOTH FROM address)) >= 4 AND length(address) <= 500);

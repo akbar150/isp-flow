@@ -277,8 +277,8 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
       errors.push("Invalid phone (use 8801XXXXXXXXX)");
     }
 
-    if (!row.address?.trim() || row.address.trim().length < 10) {
-      errors.push("Address required (min 10 chars)");
+    if (!row.address?.trim() || row.address.trim().length < 4) {
+      errors.push("Address required (min 4 chars)");
     }
 
     const pkg = packages.find(p => p.name.toLowerCase() === row.package_name?.toLowerCase().trim());
@@ -562,7 +562,7 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
             full_name: row.full_name.trim(),
             phone: normalizePhone(row.phone),
             alt_phone: row.alt_phone?.trim() || null,
-            address: row.address.trim().length < 10 ? row.address.trim() + ", Bangladesh" : row.address.trim(),
+            address: row.address.trim(),
             area_id: area?.id || null,
             router_id: router?.id || null,
             package_id: pkg.id,
