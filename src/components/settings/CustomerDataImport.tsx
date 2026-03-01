@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Upload, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 
 const CUSTOMER_DATA = [
   { name: "Archana rani dash", phone: "8801723575374", username: "easy375-archana.vt", status: "active", expiry_date: "2026-03-26", package_name: "FRN-8Mbps", bill: 600, zone: "Vata" },
@@ -74,7 +74,7 @@ const CUSTOMER_DATA = [
   { name: "Md Ruhan Ahmod", phone: "8801852578570", username: "easy310-ruhan.kg", status: "active", expiry_date: "2026-03-09", package_name: "Sync-36Mbps-800-Unlimited", bill: 800, zone: "Khagria" },
   { name: "Razi Uddin Khan", phone: "8801716690101", username: "easy309-razi.vt", status: "active", expiry_date: "2026-03-06", package_name: "Sync-70Mbps-1000-Unlimited", bill: 1000, zone: "Vata" },
   { name: "Md Afjol Hussain", phone: "8801747336248", username: "easy308-afjol.upguwa", status: "active", expiry_date: "2026-03-12", package_name: "FRN-8Mbps", bill: 600, zone: "Uforpara" },
-  { name: "Habibur Rahman", phone: "8801790874112", username: "easy307-habibur.vat", status: "active", expiry_date: "2026-03-02", package_name: "Sync-36Mbps-800-Unlimited", bill: 800, zone: "Vata" },
+  { name: "Habibur Rahman", phone: "8801790874112", username: "easy307-habibur.vat", status: "active", expiry_date: "2026-03-01", package_name: "Sync-36Mbps-800-Unlimited", bill: 800, zone: "Vata" },
   { name: "Md Mohobbot Ali", phone: "8801711580429", username: "easy306-mohobbot.kglk", status: "active", expiry_date: "2026-03-01", package_name: "Sync-36Mbps-800-Unlimited", bill: 1200, zone: "Khagria" },
   { name: "MD NASIR UDDIN", phone: "8801734596600", username: "easy305-nasir.upor", status: "active", expiry_date: "2026-03-17", package_name: "FRN-8Mbps", bill: 600, zone: "Uforpara" },
   { name: "Md Abdul Kabir", phone: "8801735549503", username: "easy304-kabir.kg", status: "active", expiry_date: "2026-03-07", package_name: "Sync-36Mbps-800-Unlimited", bill: 800, zone: "Khagria" },
@@ -184,8 +184,10 @@ const CUSTOMER_DATA = [
 
 export function CustomerDataImport() {
   const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<{ success: number; errors: string[] } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ updated: number; not_found: number; errors: string[]; unmatched: string[] } | null>(null);
 
   const handleImport = async () => {
     if (!confirm(
@@ -225,8 +227,107 @@ export function CustomerDataImport() {
     }
   };
 
+  const handleSyncExpiry = async () => {
+    if (!confirm(
+      `This will sync expiry dates and missing packages for ${CUSTOMER_DATA.length} records by matching PPPoE usernames. No data will be deleted. Continue?`
+    )) return;
+
+    setSyncing(true);
+    setProgress(10);
+    setSyncResult(null);
+
+    try {
+      setProgress(30);
+
+      const records = CUSTOMER_DATA.map((c) => ({
+        username: c.username,
+        expiry_date: c.expiry_date,
+        package_name: c.package_name,
+        status: c.status,
+      }));
+
+      const { data, error } = await supabase.functions.invoke("sync-expiry-dates", {
+        body: { records },
+      });
+
+      setProgress(100);
+
+      if (error) {
+        toast({ title: "Sync failed", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      setSyncResult(data);
+      toast({
+        title: "Sync Complete",
+        description: `Updated ${data.updated} customers, ${data.not_found} not found${data.errors?.length ? `, ${data.errors.length} errors` : ""}`,
+      });
+    } catch (err) {
+      toast({ title: "Sync failed", description: String(err), variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Safe Sync Section */}
+      <div className="p-4 border border-primary/50 rounded-lg bg-primary/5">
+        <div className="flex items-start gap-3">
+          <RefreshCw className="h-5 w-5 text-primary mt-0.5" />
+          <div>
+            <p className="font-medium text-primary">Sync Expiry Dates & Packages (Safe)</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Matches PPPoE usernames from the Excel data against existing customers. Updates <strong>expiry_date</strong> and <strong>status</strong>. 
+              If a customer has no package assigned, it will also assign the matching package. No data is deleted.
+            </p>
+          </div>
+        </div>
+
+        {syncing && (
+          <div className="space-y-2 mt-3">
+            <Progress value={progress} />
+            <p className="text-sm text-muted-foreground">Syncing expiry dates...</p>
+          </div>
+        )}
+
+        {syncResult && (
+          <div className="p-3 border rounded-lg bg-muted/50 space-y-2 mt-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              <span className="font-medium">
+                {syncResult.updated} updated, {syncResult.not_found} not found
+              </span>
+            </div>
+            {syncResult.unmatched?.length > 0 && (
+              <div className="text-sm text-muted-foreground max-h-32 overflow-y-auto">
+                <p className="font-medium">Unmatched usernames:</p>
+                {syncResult.unmatched.map((u, i) => (
+                  <p key={i}>• {u}</p>
+                ))}
+              </div>
+            )}
+            {syncResult.errors?.length > 0 && (
+              <div className="text-sm text-destructive max-h-32 overflow-y-auto">
+                {syncResult.errors.map((e, i) => (
+                  <p key={i}>• {e}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <Button
+          onClick={handleSyncExpiry}
+          disabled={syncing || importing}
+          className="mt-3"
+        >
+          <RefreshCw className="h-4 w-4 mr-2" />
+          {syncing ? "Syncing..." : "Sync Expiry Dates Only"}
+        </Button>
+      </div>
+
+      {/* Destructive Import Section */}
       <div className="p-4 border border-destructive/50 rounded-lg bg-destructive/5">
         <div className="flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
@@ -270,7 +371,7 @@ export function CustomerDataImport() {
 
       <Button
         onClick={handleImport}
-        disabled={importing}
+        disabled={importing || syncing}
         variant="destructive"
       >
         <Upload className="h-4 w-4 mr-2" />
