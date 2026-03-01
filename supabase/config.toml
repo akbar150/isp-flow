@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.export-customer-backup]
 verify_jwt = false
+
+[functions.restore-customer-backup]
+verify_jwt = false
