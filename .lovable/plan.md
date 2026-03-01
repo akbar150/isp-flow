@@ -1,106 +1,63 @@
 
 
-## Cross-Module Audit: Missing Features and Improvements
+## Bug Fix Plan: Customer Edit PPPoE + Search Pagination
 
-### Overview
-After reviewing all 18+ modules, here is a prioritized list of gaps organized by severity.
+### Bug 1: PPPoE Username/Password Not Saving
 
----
+**Root Cause:** The `CustomerEditDialog` component has no PPPoE username or password fields. It only updates the `customers` table -- it never touches the `mikrotik_users` table where PPPoE credentials are stored.
 
-### CRITICAL -- Will break at scale
+**Fix:**
+- Add PPPoE username and PPPoE password fields to `CustomerEditDialog`
+- On dialog open, fetch the existing PPPoE credentials from `mikrotik_users` (via the customer's `mikrotik_users` relation already available)
+- On save, update `mikrotik_users` table in addition to the `customers` table
+- For the PPPoE password: since it's stored as a hash (`password_encrypted`), the field will be blank by default. If the user enters a new password, hash it via `hash_password` RPC and update. If left blank, skip the password update.
+- Accept the `mikrotik_users` data from the parent component (already passed as part of customer data)
 
-| Module | Issue | Detail | Status |
-|--------|-------|--------|--------|
-| **Customers** | No pagination | Loads ALL customers in one query. | ✅ Done |
-| **Payments** | No pagination | Hard-capped at 100 with `.limit(100)`. | ✅ Done |
-| **Tickets** | No pagination | Loads all tickets in one query. | ✅ Done |
-| **HRM - Attendance** | No pagination | Capped at `.limit(100)`. | ✅ Done |
-| **HRM - Payroll** | No pagination | Capped at `.limit(50)`. | ✅ Done |
-| **Service Tasks** | No pagination | Loads all tasks in one query. | ✅ Done |
-| **Invoices** | No pagination | Loads all invoices in one query. | ✅ Done |
+**Files Modified:**
+- `src/components/CustomerEditDialog.tsx` -- Add PPPoE username + password fields, update `mikrotik_users` on save
 
 ---
 
-### HIGH -- Missing for daily ISP operations
+### Bug 2: Search Shows Wrong Pagination (e.g., "1/4")
 
-| Module | Issue | Detail | Status |
-|--------|-------|--------|--------|
-| **Payments** | No date range filter | Cannot filter payments by date. | ✅ Done |
-| **Payments** | No CSV/PDF export | No export on Payments page. | ✅ Done |
-| **Payments** | No method filter | Cannot filter by payment method. | ✅ Done |
-| **Customers** | No CSV/PDF export | Cannot export customer list. | ✅ Done |
-| **Tickets** | No CSV/PDF export | Cannot export ticket data. | ✅ Done |
-| **Accounting** | Shared income/expense categories | Need separate category types. | ✅ Done |
-| **Settings** | No Activity Log viewer | No UI to view activity_logs. | ✅ Done |
-| **Customer Portal** | localStorage session | Should use signed tokens. | ⬜ TODO |
-| **Customer Portal** | No ticket submission | Customers cannot create tickets. | ✅ Done |
-| **HRM** | No CSV/PDF export | No export capability. | ✅ Done |
+**Root Cause:** Search is done **client-side** -- it filters only the 50 records loaded on the current page. But the `TablePagination` component still uses `totalCount` from the server (the total number of all customers in the database), so it shows pages like "1/4" even when searching.
 
----
+This means:
+- Searching only filters within the current page's 50 records
+- Customers matching the search on other pages are invisible
+- The page count is incorrect during search
 
-### MEDIUM -- Functional gaps
+**Fix:**
+- Move search to **server-side** using Supabase `.or()` with `.ilike()` filters
+- Move status filter to server-side using `.eq()` 
+- Reset `currentPage` to 1 whenever `searchTerm` or `statusFilter` changes
+- Include `searchTerm` and `statusFilter` in the `useEffect` dependency array alongside `currentPage`
+- Remove client-side `filteredCustomers` filtering logic (keep only the date sort which is fine client-side)
 
-| Module | Issue | Detail | Status |
-|--------|-------|--------|--------|
-| **Routers** | No health monitoring | No connected user count, uptime, or traffic stats displayed. | ⬜ TODO |
-| **Routers** | Real MikroTik adapter is a stub | `RealMikrotikAdapter` returns "not_implemented" for all methods. | ⬜ TODO |
-| **Outages** | No pagination for history | Resolved outages capped at `.slice(0, 20)` in UI. | ⬜ TODO |
-| **Outages** | WhatsApp broadcast is manual | Opens WhatsApp for the first customer only; no real bulk broadcast. | ⬜ TODO |
-| **Service Tasks** | No status update from admin UI | View-only task detail dialog; admin cannot update status without going to technician portal. | ✅ Done |
-| **Invoices** | No automated overdue detection | Invoice status must be updated manually; no scheduled check for overdue invoices. | ✅ Done |
-| **Dashboard** | No area-based breakdown | Stats are aggregated across all areas; no per-area view. | ⬜ TODO |
-| **Reminders** | No scheduled/auto reminders | All reminders are manual; no cron-based auto-reminder for expiring customers. | ✅ Done |
-| **Resellers** | Thin wrapper page | Just renders `ResellerManagement` component; no dashboard stats or commission overview on the page. | ⬜ TODO |
-| **Packages** | No customer count per package | Cannot see how many customers are on each package. | ✅ Done |
+**Server-side search query pattern:**
+```
+query.or(`full_name.ilike.%${search}%,user_id.ilike.%${search}%,phone.ilike.%${search}%`)
+```
+
+**Files Modified:**
+- `src/pages/Customers.tsx` -- Move search/filter to server-side, fix pagination dependency
 
 ---
 
-### LOW -- Polish and UX improvements
+### Technical Details
 
-| Module | Issue | Detail |
-|--------|-------|--------|
-| **Payments** | No edit/delete capability | Payment records are insert-only; no correction workflow. |
-| **Tickets** | No category-based filter | Can filter by status but not by category (connection_issue, billing_dispute, etc.). |
-| **HRM** | Leave request form missing | `leave_requests` table exists but no creation form in the HRM UI (only leave types management). |
-| **Invoices** | No email delivery | Invoices can be printed but not emailed directly to customers. |
-| **Dashboard** | Expiring list capped at 5 | Only shows 5 expiring customers; should link to full filtered list. |
-| **Call Records** | Separate page is thin | The dedicated Call Records page could integrate with customer context better. |
-| **Settings** | No system backup/restore | Data reset exists but no backup functionality. |
+**CustomerEditDialog changes:**
+1. Expand the Customer interface to include `mikrotik_users` array
+2. Add form fields: `pppoe_username` (text input) and `pppoe_password` (text input, optional)
+3. Pre-populate `pppoe_username` from `customer.mikrotik_users[0].username`
+4. On submit: update `mikrotik_users` with new username; if password provided, hash it and update `password_encrypted`
+5. Add password visibility toggle for PPPoE password field
 
----
+**Customers.tsx search changes:**
+1. In `fetchData()`, build the query conditionally:
+   - If `searchTerm` is set, add `.or(...)` with ilike on full_name, user_id, phone
+   - If `statusFilter` is not "all", add `.eq('status', statusFilter)`
+2. Add `searchTerm` and `statusFilter` to the `useEffect` deps
+3. When search or filter changes, reset page to 1
+4. Remove the client-side `filteredCustomers` filter (keep only sort)
 
-### Recommended Implementation Order
-
-**Phase 1 -- Scalability (Critical) ✅ COMPLETE**
-1. ✅ Add pagination to Customers, Payments, Tickets, Invoices, Service Tasks, HRM (Attendance + Payroll)
-2. ✅ Add date range filters and method filter to Payments page
-3. ✅ Add CSV export to Customers and Payments
-
-**Phase 2 -- Operations (High) ✅ COMPLETE**
-4. ✅ Add Activity Log viewer in Settings
-5. ✅ Separate income/expense categories in Accounting
-6. ✅ Add customer ticket submission to Customer Portal
-7. ⬜ Secure Customer Portal sessions (replace localStorage with signed JWT) -- deferred, needs backend infra
-8. ✅ Add CSV export to Tickets and HRM
-
-**Phase 3 -- Automation (Medium) ✅ COMPLETE**
-9. ✅ Add admin status update to Service Tasks detail dialog
-10. ✅ Add automated overdue invoice detection (scheduled function -- runs daily at 2 AM)
-11. ✅ Add scheduled auto-reminders for expiring customers (runs daily at 8 AM)
-12. ✅ Add customer count per package display
-
-**Phase 4 -- Advanced (Low) ✅ COMPLETE**
-13. ⬜ Invoice email delivery -- deferred, requires email domain setup
-14. ✅ Leave request creation form in HRM
-15. ✅ Reseller dashboard stats
-16. ✅ Area-based dashboard breakdown
-
----
-
-### Technical Notes
-
-- Pagination pattern: Use `currentPage` state + Supabase `.range(from, to)` for server-side pagination with total count via `.select('*', { count: 'exact' })`.
-- Reusable `TablePagination` component created at `src/components/TablePagination.tsx`.
-- Export utilities already exist in `src/lib/exportUtils.ts` -- just need to wire them into each page.
-- Activity logs table already has RLS policies for admin/super_admin read access.
-- All changes follow existing patterns (DashboardLayout, permission checks via `usePermissions`, Supabase client from `@/integrations/supabase/client`).
