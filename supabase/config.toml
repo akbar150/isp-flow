@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.analyze-churn]
 verify_jwt = false
+
+[functions.sync-expiry-dates]
+verify_jwt = false
