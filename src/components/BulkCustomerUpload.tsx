@@ -20,9 +20,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Download, FileText, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { Upload, Download, FileText, AlertCircle, CheckCircle2, Loader2, Copy } from "lucide-react";
 import { normalizePhone, isValidBDPhone } from "@/lib/phoneUtils";
 import { format, addDays } from "date-fns";
+import * as XLSX from "xlsx";
 
 interface Package {
   id: string;
@@ -58,6 +59,7 @@ interface ParsedCustomer {
   connection_type: string;
   billing_cycle: string;
   isValid: boolean;
+  isDuplicate: boolean;
   errors: string[];
 }
 
@@ -66,6 +68,61 @@ interface BulkCustomerUploadProps {
   areas: Area[];
   routers: Router[];
   onSuccess: () => void;
+}
+
+// Column name auto-mapping
+const COLUMN_MAP: Record<string, string> = {
+  "full_name": "full_name",
+  "full name": "full_name",
+  "name": "full_name",
+  "customer name": "full_name",
+  "customer": "full_name",
+  "phone": "phone",
+  "mobile": "phone",
+  "phone number": "phone",
+  "alt_phone": "alt_phone",
+  "alt phone": "alt_phone",
+  "alternative phone": "alt_phone",
+  "address": "address",
+  "area_name": "area_name",
+  "area": "area_name",
+  "zone": "area_name",
+  "router_name": "router_name",
+  "router": "router_name",
+  "package_name": "package_name",
+  "package": "package_name",
+  "package name": "package_name",
+  "plan": "package_name",
+  "password": "password",
+  "pppoe_username": "pppoe_username",
+  "pppoe username": "pppoe_username",
+  "username": "pppoe_username",
+  "user": "pppoe_username",
+  "pppoe_password": "pppoe_password",
+  "pppoe password": "pppoe_password",
+  "pppoe pass": "pppoe_password",
+  "latitude": "latitude",
+  "lat": "latitude",
+  "longitude": "longitude",
+  "lng": "longitude",
+  "lon": "longitude",
+  "connection_type": "connection_type",
+  "connection type": "connection_type",
+  "connection": "connection_type",
+  "billing_cycle": "billing_cycle",
+  "billing cycle": "billing_cycle",
+  "billing": "billing_cycle",
+};
+
+function autoMapColumns(headers: string[]): Record<string, string> {
+  const mapping: Record<string, string> = {};
+  for (const header of headers) {
+    const normalized = header.trim().toLowerCase();
+    if (COLUMN_MAP[normalized]) {
+      mapping[header] = COLUMN_MAP[normalized];
+    }
+  }
+  return mapping;
 }
 
 const SAMPLE_CSV = `full_name,phone,alt_phone,address,area_name,router_name,package_name,password,pppoe_username,pppoe_password,latitude,longitude,connection_type,billing_cycle
@@ -78,6 +135,7 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
   const [parsedData, setParsedData] = useState<ParsedCustomer[]>([]);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, success: 0, failed: 0 });
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const downloadSampleCSV = () => {
@@ -92,35 +150,29 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
   const validateRow = (row: Record<string, string>): { isValid: boolean; errors: string[] } => {
     const errors: string[] = [];
 
-    // Name validation
     if (!row.full_name?.trim() || row.full_name.trim().length < 3) {
       errors.push("Name required (min 3 chars)");
     }
 
-    // Phone validation (880 format)
     if (!isValidBDPhone(row.phone || "")) {
       errors.push("Invalid phone (use 8801XXXXXXXXX)");
     }
 
-    // Address validation
     if (!row.address?.trim() || row.address.trim().length < 10) {
       errors.push("Address required (min 10 chars)");
     }
 
-    // Package validation
     const pkg = packages.find(p => p.name.toLowerCase() === row.package_name?.toLowerCase().trim());
     if (!pkg) {
       errors.push("Invalid package");
     }
 
-    // Password validation
     if (!row.password || row.password.length < 6) {
       errors.push("Password min 6 chars");
     } else if (!/^[a-zA-Z0-9]+$/.test(row.password)) {
       errors.push("Password alphanumeric only");
     }
 
-    // PPPoE validation
     if (!row.pppoe_username?.trim() || row.pppoe_username.trim().length < 3) {
       errors.push("PPPoE username min 3 chars");
     }
@@ -138,13 +190,12 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
     if (lines.length < 2) return [];
 
     const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/\s+/g, "_"));
-    
+
     return lines.slice(1).map(line => {
-      // Handle CSV fields with possible commas in quoted strings
       const values: string[] = [];
       let current = "";
       let inQuotes = false;
-      
+
       for (const char of line) {
         if (char === '"') {
           inQuotes = !inQuotes;
@@ -179,78 +230,171 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
         longitude: row.longitude || "",
         connection_type: row.connection_type || "pppoe",
         billing_cycle: row.billing_cycle || "monthly",
+        isDuplicate: false,
         ...validation,
       };
     });
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const parseExcel = (data: ArrayBuffer): ParsedCustomer[] => {
+    const workbook = XLSX.read(data, { type: "array" });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: "" });
+
+    if (jsonData.length === 0) return [];
+
+    // Auto-map columns
+    const rawHeaders = Object.keys(jsonData[0]);
+    const columnMapping = autoMapColumns(rawHeaders);
+
+    return jsonData.map((rawRow) => {
+      const row: Record<string, string> = {};
+      for (const [originalCol, mappedCol] of Object.entries(columnMapping)) {
+        row[mappedCol] = String(rawRow[originalCol] ?? "").trim();
+      }
+
+      const validation = validateRow(row);
+
+      return {
+        full_name: row.full_name || "",
+        phone: row.phone || "",
+        alt_phone: row.alt_phone || "",
+        address: row.address || "",
+        area_name: row.area_name || "",
+        router_name: row.router_name || "",
+        package_name: row.package_name || "",
+        password: row.password || "",
+        pppoe_username: row.pppoe_username || "",
+        pppoe_password: row.pppoe_password || "",
+        latitude: row.latitude || "",
+        longitude: row.longitude || "",
+        connection_type: row.connection_type || "pppoe",
+        billing_cycle: row.billing_cycle || "monthly",
+        isDuplicate: false,
+        ...validation,
+      };
+    });
+  };
+
+  const checkDuplicates = async (data: ParsedCustomer[]): Promise<ParsedCustomer[]> => {
+    setCheckingDuplicates(true);
+    try {
+      // Fetch all existing PPPoE usernames
+      const { data: existingUsers, error } = await supabase
+        .from("mikrotik_users_safe")
+        .select("username");
+
+      if (error) {
+        console.error("Failed to fetch existing usernames:", error);
+        toast({
+          title: "Warning",
+          description: "Could not check for duplicates. Proceeding without duplicate detection.",
+          variant: "destructive",
+        });
+        return data;
+      }
+
+      const existingSet = new Set(
+        (existingUsers || []).map(u => u.username?.toLowerCase().trim()).filter(Boolean)
+      );
+
+      return data.map(row => {
+        const isDuplicate = existingSet.has(row.pppoe_username?.toLowerCase().trim());
+        return { ...row, isDuplicate };
+      });
+    } finally {
+      setCheckingDuplicates(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith(".csv")) {
+    const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+    const isCsv = file.name.endsWith(".csv");
+
+    if (!isExcel && !isCsv) {
       toast({
         title: "Invalid file",
-        description: "Please upload a CSV file",
+        description: "Please upload a CSV or Excel (.xlsx/.xls) file",
         variant: "destructive",
       });
       return;
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      const parsed = parseCSV(content);
-      setParsedData(parsed);
+    reader.onload = async (event) => {
+      let parsed: ParsedCustomer[] = [];
+
+      if (isExcel) {
+        parsed = parseExcel(event.target?.result as ArrayBuffer);
+      } else {
+        parsed = parseCSV(event.target?.result as string);
+      }
 
       if (parsed.length === 0) {
         toast({
           title: "Empty file",
-          description: "No valid data found in the CSV file",
+          description: "No valid data found in the file",
           variant: "destructive",
         });
+        return;
       }
-    };
-    reader.readAsText(file);
 
-    // Reset file input
+      // Check for duplicates
+      const withDuplicates = await checkDuplicates(parsed);
+      setParsedData(withDuplicates);
+
+      const dupCount = withDuplicates.filter(r => r.isDuplicate).length;
+      const newCount = withDuplicates.filter(r => !r.isDuplicate && r.isValid).length;
+      toast({
+        title: `${parsed.length} rows loaded`,
+        description: `${newCount} new, ${dupCount} duplicates detected`,
+      });
+    };
+
+    if (isExcel) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
+
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
 
   const handleImport = async () => {
-    const validRows = parsedData.filter(r => r.isValid);
-    if (validRows.length === 0) {
+    const importableRows = parsedData.filter(r => r.isValid && !r.isDuplicate);
+    if (importableRows.length === 0) {
       toast({
-        title: "No valid data",
-        description: "Please fix errors before importing",
+        title: "No importable data",
+        description: "All rows are either duplicates or have errors",
         variant: "destructive",
       });
       return;
     }
 
     setImporting(true);
-    setImportProgress({ current: 0, total: validRows.length, success: 0, failed: 0 });
+    setImportProgress({ current: 0, total: importableRows.length, success: 0, failed: 0 });
 
     let successCount = 0;
     let failedCount = 0;
 
-    for (let i = 0; i < validRows.length; i++) {
-      const row = validRows[i];
+    for (let i = 0; i < importableRows.length; i++) {
+      const row = importableRows[i];
       try {
-        // Find related IDs
         const pkg = packages.find(p => p.name.toLowerCase() === row.package_name.toLowerCase().trim());
         const area = areas.find(a => a.name.toLowerCase() === row.area_name.toLowerCase().trim());
         const router = routers.find(r => r.name.toLowerCase() === row.router_name.toLowerCase().trim());
 
         if (!pkg) throw new Error("Package not found");
 
-        // Generate user ID
         const { data: userId, error: idError } = await supabase.rpc("generate_customer_user_id");
         if (idError) throw idError;
 
-        // Hash passwords
         const { data: hashedPassword, error: hashError } = await supabase.rpc("hash_password", {
           raw_password: row.password,
         });
@@ -264,12 +408,11 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
         const today = new Date();
         const expiryDate = addDays(today, pkg.validity_days);
 
-        // Create customer
-        const connectionType = ['pppoe', 'static', 'dhcp'].includes(row.connection_type) 
-          ? row.connection_type as 'pppoe' | 'static' | 'dhcp' 
+        const connectionType = ['pppoe', 'static', 'dhcp'].includes(row.connection_type)
+          ? row.connection_type as 'pppoe' | 'static' | 'dhcp'
           : 'pppoe' as const;
-        const billingCycle = ['monthly', 'quarterly', 'yearly'].includes(row.billing_cycle) 
-          ? row.billing_cycle as 'monthly' | 'quarterly' | 'yearly' 
+        const billingCycle = ['monthly', 'quarterly', 'yearly'].includes(row.billing_cycle)
+          ? row.billing_cycle as 'monthly' | 'quarterly' | 'yearly'
           : 'monthly' as const;
 
         const { data: newCustomer, error: customerError } = await supabase
@@ -298,7 +441,6 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
 
         if (customerError) throw customerError;
 
-        // Create MikroTik user
         await supabase.from("mikrotik_users").insert({
           customer_id: newCustomer.id,
           username: row.pppoe_username.trim(),
@@ -316,7 +458,7 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
 
       setImportProgress({
         current: i + 1,
-        total: validRows.length,
+        total: importableRows.length,
         success: successCount,
         failed: failedCount,
       });
@@ -337,8 +479,9 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
     }
   };
 
-  const validCount = parsedData.filter(r => r.isValid).length;
-  const invalidCount = parsedData.filter(r => !r.isValid).length;
+  const newValidCount = parsedData.filter(r => r.isValid && !r.isDuplicate).length;
+  const duplicateCount = parsedData.filter(r => r.isDuplicate).length;
+  const invalidCount = parsedData.filter(r => !r.isValid && !r.isDuplicate).length;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -358,7 +501,7 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
           {/* Instructions */}
           <div className="flex flex-wrap gap-2 items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              Upload a CSV file with customer data. Download sample for format reference.
+              Upload a CSV or Excel (.xlsx) file. Duplicate PPPoE usernames will be auto-skipped.
             </p>
             <Button variant="outline" size="sm" onClick={downloadSampleCSV}>
               <Download className="h-4 w-4 mr-2" />
@@ -371,7 +514,7 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx,.xls"
               onChange={handleFileUpload}
               className="hidden"
               id="csv-upload"
@@ -380,9 +523,19 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
               variant="outline"
               className="flex-1"
               onClick={() => fileInputRef.current?.click()}
+              disabled={checkingDuplicates}
             >
-              <FileText className="h-4 w-4 mr-2" />
-              {parsedData.length > 0 ? `${parsedData.length} rows loaded` : "Select CSV File"}
+              {checkingDuplicates ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Checking duplicates...
+                </>
+              ) : (
+                <>
+                  <FileText className="h-4 w-4 mr-2" />
+                  {parsedData.length > 0 ? `${parsedData.length} rows loaded` : "Select CSV / Excel File"}
+                </>
+              )}
             </Button>
             {parsedData.length > 0 && (
               <Button
@@ -397,11 +550,17 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
 
           {/* Validation Summary */}
           {parsedData.length > 0 && (
-            <div className="flex gap-4 text-sm">
+            <div className="flex gap-4 text-sm flex-wrap">
               <div className="flex items-center gap-1">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
-                <span>{validCount} valid</span>
+                <span>{newValidCount} new</span>
               </div>
+              {duplicateCount > 0 && (
+                <div className="flex items-center gap-1 text-amber-500">
+                  <Copy className="h-4 w-4" />
+                  <span>{duplicateCount} duplicates (will skip)</span>
+                </div>
+              )}
               {invalidCount > 0 && (
                 <div className="flex items-center gap-1 text-destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -428,10 +587,23 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
                 </TableHeader>
                 <TableBody>
                   {parsedData.map((row, i) => (
-                    <TableRow key={i} className={!row.isValid ? "bg-destructive/5" : ""}>
+                    <TableRow
+                      key={i}
+                      className={
+                        row.isDuplicate
+                          ? "bg-amber-500/10"
+                          : !row.isValid
+                          ? "bg-destructive/5"
+                          : ""
+                      }
+                    >
                       <TableCell className="font-mono text-xs">{i + 1}</TableCell>
                       <TableCell>
-                        {row.isValid ? (
+                        {row.isDuplicate ? (
+                          <Badge variant="outline" className="text-amber-500 border-amber-500 text-xs">
+                            Duplicate
+                          </Badge>
+                        ) : row.isValid ? (
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
                         ) : (
                           <AlertCircle className="h-4 w-4 text-destructive" />
@@ -442,7 +614,7 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
                       <TableCell>{row.package_name || "-"}</TableCell>
                       <TableCell>{row.pppoe_username || "-"}</TableCell>
                       <TableCell>
-                        {row.errors.length > 0 && (
+                        {row.errors.length > 0 && !row.isDuplicate && (
                           <div className="flex flex-wrap gap-1">
                             {row.errors.map((err, j) => (
                               <Badge key={j} variant="destructive" className="text-xs">
@@ -490,7 +662,7 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
           </Button>
           <Button
             onClick={handleImport}
-            disabled={validCount === 0 || importing}
+            disabled={newValidCount === 0 || importing}
           >
             {importing ? (
               <>
@@ -500,7 +672,7 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
             ) : (
               <>
                 <Upload className="h-4 w-4 mr-2" />
-                Import {validCount} Customers
+                Import {newValidCount} New Customers
               </>
             )}
           </Button>
