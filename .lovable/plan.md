@@ -1,31 +1,84 @@
 
 
-# Fix Address Validation and Bulk Upload Errors
+# Automated Customer Data Backup/Export Feature
 
-## Problem
-1. The database constraint `check_address_length` requires addresses to be at least **10 characters**, but you need it to accept **4 characters minimum**.
-2. The client-side validation in BulkCustomerUpload was also set to 10, causing valid short addresses to fail.
+## Overview
+Build a scheduled backup system that automatically exports all customer data (with related package, area, and billing info) as CSV files, stores them in cloud storage, and provides a UI to manage backup settings and download past backups.
+
+## Architecture
+
+```text
++------------------+       +-----------------------+       +------------------+
+| pg_cron schedule | ----> | Edge Function:        | ----> | Storage Bucket:  |
+| (daily/weekly)   |       | export-customer-backup|       | customer-backups |
++------------------+       +-----------------------+       +------------------+
+                                    |
+                                    v
+                           +------------------+
+                           | backup_logs table |
+                           +------------------+
+                                    ^
+                                    |
+                           +------------------+
+                           | Settings UI:     |
+                           | Backup tab       |
+                           +------------------+
+```
 
 ## Changes
 
-### 1. Database Migration: Relax address constraint from 10 to 4
-Update the `check_address_length` constraint on the `customers` table:
-```text
-DROP CONSTRAINT check_address_length;
-ADD CONSTRAINT check_address_length CHECK (length(TRIM(BOTH FROM address)) >= 4 AND length(address) <= 500);
-```
+### 1. Database: Create `backup_logs` table and storage bucket
 
-### 2. Update client-side validation in `BulkCustomerUpload.tsx`
-- Change address validation back from `min 10 chars` to `min 4 chars` (line 280-281)
-- Remove the auto-padding logic that appends ", Bangladesh" (line 565) since 4-char addresses are now valid in the database
-- Keep the auto-pad as a fallback only if address is completely empty
+New migration:
+- **`backup_logs` table** with columns: `id`, `file_name`, `file_path`, `file_size_bytes`, `record_count`, `status` (success/failed), `error_message`, `created_at`
+- RLS: Only admins/super_admins can view and manage
+- **Storage bucket** `customer-backups` (private) with RLS for admin-only access
+- Enable `pg_cron` and `pg_net` extensions for scheduled execution
 
-### 3. Update `AddCustomerDialog.tsx` (if applicable)
-Ensure any other customer creation forms also use min 4 chars for address validation to stay consistent.
+### 2. Edge Function: `export-customer-backup`
+
+New file: `supabase/functions/export-customer-backup/index.ts`
+
+- Queries all customers joined with packages, areas, routers, and mikrotik_users
+- Generates a CSV with columns: User ID, Name, Phone, Alt Phone, Address, Area, Package, Speed, Price, Status, Connection Type, Billing Cycle, Expiry Date, Total Due, PPPoE Username, Router, Created At
+- Uploads CSV to `customer-backups` bucket with filename like `backup_2026-03-01_18-30.csv`
+- Logs the result in `backup_logs` table
+- Uses service role key for full data access
+
+### 3. Scheduled Cron Job
+
+SQL insert (not migration) to set up a daily cron job at midnight Dhaka time (18:00 UTC) that calls the edge function via `net.http_post`.
+
+### 4. Settings UI: Backup Management Tab
+
+New file: `src/components/settings/BackupManagement.tsx`
+
+- Shows list of past backups from `backup_logs` (date, file size, record count, status)
+- Download button for each backup (generates signed URL from storage)
+- "Run Backup Now" button to manually trigger the edge function
+- Display next scheduled backup time
+
+Add a new "Backups" tab in `src/pages/Settings.tsx` (visible to super_admin only).
+
+### 5. Update Settings Page
+
+Add a new tab with a HardDrive icon labeled "Backups" in the TabsList, gated behind `isSuperAdmin`.
 
 ## Technical Details
 
+**Files to create:**
+- `supabase/functions/export-customer-backup/index.ts` -- edge function
+- `src/components/settings/BackupManagement.tsx` -- UI component
+- Database migration for `backup_logs` table + storage bucket + extensions
+
 **Files to modify:**
-- New database migration SQL (alter constraint)
-- `src/components/BulkCustomerUpload.tsx` -- revert validation to 4 chars, simplify address handling
+- `src/pages/Settings.tsx` -- add Backups tab
+- `supabase/config.toml` -- add function config (auto-managed)
+
+**Key considerations:**
+- Uses `supabase_service_role_key` in the edge function to bypass RLS for full data export
+- CSV includes BOM for Excel compatibility (matching existing exportUtils pattern)
+- Storage files are private; downloads use signed URLs (valid 1 hour)
+- Backup retention: UI shows all logs but old files can be manually deleted
+- The cron job runs daily; frequency can be adjusted in the SQL schedule
 
