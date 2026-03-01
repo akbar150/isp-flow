@@ -92,7 +92,7 @@ export default function Reminders() {
     const threeDaysBefore: Customer[] = [];
     const oneDayBefore: Customer[] = [];
     const expiryDay: Customer[] = [];
-    const threeDaysOverdue: Customer[] = [];
+    const allOverdue: Customer[] = [];
 
     customers.forEach(customer => {
       // Skip suspended customers and customers with no dues
@@ -108,15 +108,15 @@ export default function Reminders() {
         oneDayBefore.push(customer);
       } else if (daysDiff === 0) {
         expiryDay.push(customer);
-      } else if (daysDiff <= -3 && daysDiff >= -30) {
-        threeDaysOverdue.push(customer);
+    } else if (daysDiff <= -1 && daysDiff >= -30) {
+        allOverdue.push(customer);
       }
     });
 
-    return { threeDaysBefore, oneDayBefore, expiryDay, threeDaysOverdue };
+    return { threeDaysBefore, oneDayBefore, expiryDay, allOverdue };
   };
 
-  const { threeDaysBefore, oneDayBefore, expiryDay, threeDaysOverdue } = categorizeCustomers();
+  const { threeDaysBefore, oneDayBefore, expiryDay, allOverdue } = categorizeCustomers();
 
   const openGoogleMaps = (lat: number, lng: number) => {
     window.open(`https://www.google.com/maps?q=${lat},${lng}`, "_blank");
@@ -284,7 +284,7 @@ export default function Reminders() {
           {renderCustomerTable(threeDaysBefore, "3 Days Before Expiry")}
           {renderCustomerTable(oneDayBefore, "1 Day Before Expiry")}
           {renderCustomerTable(expiryDay, "Expiring Today")}
-          {renderCustomerTable(threeDaysOverdue, "3+ Days Overdue")}
+          {renderCustomerTable(allOverdue, "All Overdue")}
         </TabsContent>
 
         <TabsContent value="logs">
