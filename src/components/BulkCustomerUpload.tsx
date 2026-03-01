@@ -158,8 +158,8 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
       errors.push("Invalid phone (use 8801XXXXXXXXX)");
     }
 
-    if (!row.address?.trim() || row.address.trim().length < 10) {
-      errors.push("Address required (min 10 chars)");
+    if (!row.address?.trim() || row.address.trim().length < 4) {
+      errors.push("Address required (min 4 chars)");
     }
 
     const pkg = packages.find(p => p.name.toLowerCase() === row.package_name?.toLowerCase().trim());
