@@ -108,6 +108,7 @@ export default function Customers() {
   const [routers, setRouters] = useState<Router[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -151,28 +152,54 @@ export default function Customers() {
   });
   const [showPppoePassword, setShowPppoePassword] = useState(false);
 
-  // Reset page when search/filter changes
+  // Debounce search term (400ms)
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedSearch(searchTerm), 400);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
+  // Reset page when debounced search or filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter]);
+  }, [debouncedSearch, statusFilter]);
 
   useEffect(() => {
     fetchData();
-  }, [currentPage, searchTerm, statusFilter]);
+  }, [currentPage, debouncedSearch, statusFilter]);
 
   const fetchData = async () => {
     try {
       const from = (currentPage - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
+      const trimmedSearch = debouncedSearch.trim();
+
+      // If searching, first find matching PPPoE usernames to get customer IDs
+      let pppoeCustomerIds: string[] = [];
+      if (trimmedSearch) {
+        const { data: pppoeMatches } = await supabase
+          .from('mikrotik_users_safe')
+          .select('customer_id')
+          .ilike('username', `%${trimmedSearch}%`);
+        if (pppoeMatches) {
+          pppoeCustomerIds = pppoeMatches
+            .map(m => m.customer_id)
+            .filter((id): id is string => id !== null);
+        }
+      }
+
       let customerQuery = supabase
         .from('customers_safe')
         .select('*, packages(*), areas(*), routers(*), mikrotik_users:mikrotik_users_safe(id, username, status)', { count: 'exact' });
 
-      // Server-side search
-      if (searchTerm.trim()) {
-        const term = `%${searchTerm.trim()}%`;
-        customerQuery = customerQuery.or(`full_name.ilike.${term},user_id.ilike.${term},phone.ilike.${term}`);
+      // Server-side search: name/user_id/phone OR PPPoE username match
+      if (trimmedSearch) {
+        const term = `%${trimmedSearch}%`;
+        if (pppoeCustomerIds.length > 0) {
+          customerQuery = customerQuery.or(`full_name.ilike.${term},user_id.ilike.${term},phone.ilike.${term},id.in.(${pppoeCustomerIds.join(',')})`);
+        } else {
+          customerQuery = customerQuery.or(`full_name.ilike.${term},user_id.ilike.${term},phone.ilike.${term}`);
+        }
       }
 
       // Server-side status filter
