@@ -58,9 +58,33 @@ interface ParsedCustomer {
   longitude: string;
   connection_type: string;
   billing_cycle: string;
+  connection_date: string;
+  expiry_date: string;
   isValid: boolean;
   isDuplicate: boolean;
   errors: string[];
+}
+
+function normalizeExcelDate(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "number") {
+    const date = XLSX.SSF.parse_date_code(value);
+    if (date) {
+      const y = date.y;
+      const m = String(date.m).padStart(2, "0");
+      const d = String(date.d).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+  }
+  const str = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  if (str.includes("T")) return str.split("T")[0];
+  if (str.includes(" ")) return str.split(" ")[0];
+  const slashMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (slashMatch) {
+    return `${slashMatch[3]}-${slashMatch[2].padStart(2, "0")}-${slashMatch[1].padStart(2, "0")}`;
+  }
+  return str;
 }
 
 interface BulkCustomerUploadProps {
@@ -112,6 +136,18 @@ const COLUMN_MAP: Record<string, string> = {
   "billing_cycle": "billing_cycle",
   "billing cycle": "billing_cycle",
   "billing": "billing_cycle",
+  "connection_date": "connection_date",
+  "connection date": "connection_date",
+  "billing_start_date": "connection_date",
+  "billing start date": "connection_date",
+  "start date": "connection_date",
+  "start_date": "connection_date",
+  "expiry_date": "expiry_date",
+  "expiry date": "expiry_date",
+  "expire date": "expiry_date",
+  "expire_date": "expiry_date",
+  "expire": "expiry_date",
+  "expiry": "expiry_date",
 };
 
 function autoMapColumns(headers: string[]): Record<string, string> {
@@ -125,10 +161,10 @@ function autoMapColumns(headers: string[]): Record<string, string> {
   return mapping;
 }
 
-const SAMPLE_CSV = `full_name,phone,alt_phone,address,area_name,router_name,package_name,password,pppoe_username,pppoe_password,latitude,longitude,connection_type,billing_cycle
-Mohammad Rahman,01712345678,,House 12 Road 5 Dhanmondi Dhaka,Zone A,Main Router,Basic 10Mbps,abc123,user001,pass01,23.7461,90.3742,pppoe,monthly
-Fatima Begum,01898765432,01711111111,Flat 4B Green Tower Uttara Dhaka,Zone B,Sub Router,Standard 20Mbps,xyz789,user002,pass02,23.8765,90.3920,static,quarterly
-Abdul Karim,01512345678,,Shop 23 Banani Commercial Area Dhaka,Zone A,Main Router,Premium 50Mbps,test123,user003,pass03,23.7938,90.4035,pppoe,yearly`;
+const SAMPLE_CSV = `full_name,phone,alt_phone,address,area_name,router_name,package_name,password,pppoe_username,pppoe_password,latitude,longitude,connection_type,billing_cycle,connection_date,expiry_date
+Mohammad Rahman,01712345678,,House 12 Road 5 Dhanmondi Dhaka,Zone A,Main Router,Basic 10Mbps,abc123,user001,pass01,23.7461,90.3742,pppoe,monthly,2025-01-15,2025-02-14
+Fatima Begum,01898765432,01711111111,Flat 4B Green Tower Uttara Dhaka,Zone B,Sub Router,Standard 20Mbps,xyz789,user002,pass02,23.8765,90.3920,static,quarterly,2025-02-01,2025-05-01
+Abdul Karim,01512345678,,Shop 23 Banani Commercial Area Dhaka,Zone A,Main Router,Premium 50Mbps,test123,user003,pass03,23.7938,90.4035,pppoe,yearly,,`;
 
 export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: BulkCustomerUploadProps) {
   const [open, setOpen] = useState(false);
@@ -230,6 +266,8 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
         longitude: row.longitude || "",
         connection_type: row.connection_type || "pppoe",
         billing_cycle: row.billing_cycle || "monthly",
+        connection_date: normalizeExcelDate(row.connection_date || ""),
+        expiry_date: normalizeExcelDate(row.expiry_date || ""),
         isDuplicate: false,
         ...validation,
       };
@@ -271,6 +309,8 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
         longitude: row.longitude || "",
         connection_type: row.connection_type || "pppoe",
         billing_cycle: row.billing_cycle || "monthly",
+        connection_date: normalizeExcelDate(row.connection_date || ""),
+        expiry_date: normalizeExcelDate(row.expiry_date || ""),
         isDuplicate: false,
         ...validation,
       };
@@ -405,8 +445,13 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
         });
         if (pppoeHashError) throw pppoeHashError;
 
-        const today = new Date();
-        const expiryDate = addDays(today, pkg.validity_days);
+        const isValidDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+        const billingStartDate = row.connection_date && isValidDate(row.connection_date)
+          ? row.connection_date
+          : format(new Date(), "yyyy-MM-dd");
+        const expiryDateStr = row.expiry_date && isValidDate(row.expiry_date)
+          ? row.expiry_date
+          : format(addDays(new Date(billingStartDate), pkg.validity_days), "yyyy-MM-dd");
 
         const connectionType = ['pppoe', 'static', 'dhcp'].includes(row.connection_type)
           ? row.connection_type as 'pppoe' | 'static' | 'dhcp'
@@ -427,8 +472,8 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
             router_id: router?.id || null,
             package_id: pkg.id,
             password_hash: hashedPassword,
-            billing_start_date: format(today, "yyyy-MM-dd"),
-            expiry_date: format(expiryDate, "yyyy-MM-dd"),
+            billing_start_date: billingStartDate,
+            expiry_date: expiryDateStr,
             status: "active" as const,
             total_due: pkg.monthly_price,
             latitude: row.latitude ? parseFloat(row.latitude) : null,
@@ -582,6 +627,8 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
                     <TableHead>Phone</TableHead>
                     <TableHead>Package</TableHead>
                     <TableHead>PPPoE User</TableHead>
+                    <TableHead>Connection</TableHead>
+                    <TableHead>Expiry</TableHead>
                     <TableHead>Errors</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -613,6 +660,8 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
                       <TableCell>{row.phone || "-"}</TableCell>
                       <TableCell>{row.package_name || "-"}</TableCell>
                       <TableCell>{row.pppoe_username || "-"}</TableCell>
+                      <TableCell className="text-xs">{row.connection_date || "-"}</TableCell>
+                      <TableCell className="text-xs">{row.expiry_date || "-"}</TableCell>
                       <TableCell>
                         {row.errors.length > 0 && !row.isDuplicate && (
                           <div className="flex flex-wrap gap-1">
