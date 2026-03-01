@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map, Trash2, Zap, CreditCard, FileText, Lock, ChevronDown, Activity } from "lucide-react";
+import { Save, Shield, Users, Tags, MapPin, Wifi, MessageSquare, Mail, Smartphone, Settings2, Map, Trash2, Zap, CreditCard, FileText, Lock, ChevronDown, Activity, HardDrive } from "lucide-react";
 import { UserManagement } from "@/components/settings/UserManagement";
 import { RolePermissions } from "@/components/settings/RolePermissions";
 import { ExpenseCategories } from "@/components/settings/ExpenseCategories";
@@ -21,6 +21,7 @@ import BkashSettings from "@/components/settings/BkashSettings";
 import { ContractTemplates } from "@/components/settings/ContractTemplates";
 import { ActivityLogViewer } from "@/components/settings/ActivityLogViewer";
 import { CustomerDataImport } from "@/components/settings/CustomerDataImport";
+import { BackupManagement } from "@/components/settings/BackupManagement";
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Database } from "lucide-react";
@@ -195,6 +196,12 @@ Please pay to avoid disconnection.
               <TabsTrigger value="bkash" className="flex items-center gap-1.5 px-3 py-2">
                 <CreditCard className="h-4 w-4" />
                 <span className="hidden sm:inline">bKash</span>
+              </TabsTrigger>
+            )}
+            {isSuperAdmin && (
+              <TabsTrigger value="backups" className="flex items-center gap-1.5 px-3 py-2">
+                <HardDrive className="h-4 w-4" />
+                <span className="hidden sm:inline">Backups</span>
               </TabsTrigger>
             )}
           </TabsList>
@@ -435,6 +442,12 @@ Please pay to avoid disconnection.
         {isSuperAdmin && (
           <TabsContent value="bkash">
             <BkashSettings />
+          </TabsContent>
+        )}
+
+        {isSuperAdmin && (
+          <TabsContent value="backups">
+            <BackupManagement />
           </TabsContent>
         )}
       </Tabs>
