@@ -1,36 +1,51 @@
 
 
-## Fix Customer Search
+## Sync Expiry Dates and Packages from Excel Data
 
-### Problems Found
-1. **No debounce on search input** -- every keystroke fires a database query. Fast typing causes race conditions where stale results from earlier partial queries overwrite correct results from the final query (e.g., typing "Easy261" fires queries for "E", "Ea", "Eas", etc., and the last one to resolve wins, which may not be "Easy261").
-2. **PPPoE username not searchable** -- the search placeholder promises PPPoE username search, but the query only searches `full_name`, `user_id`, and `phone`. Since `mikrotik_users_safe` is a joined relation, PostgREST cannot filter it in the parent `.or()`.
+### What This Does
+Match each PPPoE username from your Excel data (already embedded in the code) against existing PPPoE usernames in the database. For each match:
+1. Update the customer's **expiry_date** to the date from the Excel
+2. If the customer has **no package assigned**, assign the matching package from the Excel
+3. Update customer **status** based on the Excel data (active/expired)
 
-### Solution
+No customers will be deleted or created -- this is a safe update-only operation.
 
-**File: `src/pages/Customers.tsx`**
+### Changes
 
-1. Add a **debounced search term** (400ms delay) so the query only fires after the user stops typing, eliminating race conditions.
-   - Keep `searchTerm` for instant input display
-   - Add `debouncedSearch` state that updates 400ms after the last keystroke
-   - Use `debouncedSearch` (not `searchTerm`) in the `useEffect` that triggers `fetchData` and in the query itself
+**1. New Edge Function: `supabase/functions/sync-expiry-dates/index.ts`**
 
-2. Add **PPPoE username search** by including the mikrotik username in the `.or()` filter using the PostgREST nested filter syntax: `mikrotik_users_safe.username.ilike.%term%`. If PostgREST does not support cross-table `.or()`, fall back to a two-query approach: first search mikrotik_users_safe for matching usernames to get customer IDs, then include those IDs in the main query.
+A new backend function that:
+- Receives the array of `{ username, expiry_date, package_name, status }` records
+- For each username, looks up the `mikrotik_users` table to find the matching `customer_id`
+- Updates the customer's `expiry_date` to the Excel value
+- If the customer currently has no `package_id`, looks up the package by name and assigns it
+- Updates status (maps "expire" to "expired")
+- Returns a summary: how many matched/updated, how many not found, any errors
 
-### Technical Details
+**2. Update `src/components/settings/CustomerDataImport.tsx`**
+
+Add a second button: **"Sync Expiry Dates Only"** (non-destructive, safe)
+- Calls the new edge function with just the username + expiry_date + package_name + status data
+- Shows progress and results (matched, updated, not found counts)
+- This sits alongside the existing destructive import button but is clearly labeled as safe
+
+### How It Works (Technical)
 
 ```text
-Before (fires on every keystroke):
-  searchTerm changes -> fetchData() immediately
-
-After (debounced):
-  searchTerm changes -> 400ms timer -> debouncedSearch updates -> fetchData()
+For each Excel row:
+  1. SELECT customer_id FROM mikrotik_users WHERE username = row.username
+  2. If found:
+     a. UPDATE customers SET expiry_date = row.expiry_date WHERE id = customer_id
+     b. If customer has no package_id AND row.package_name != 'Expired':
+        - Look up package by name -> get package_id
+        - UPDATE customers SET package_id = package_id
+     c. Update status if needed
+  3. If not found: log as "unmatched"
 ```
 
-- Uses a `useEffect` with `setTimeout`/`clearTimeout` for debounce (no new dependency needed)
-- Page reset (`setCurrentPage(1)`) triggers on `debouncedSearch` change, not raw `searchTerm`
-- The PPPoE search will use a preliminary query to `mikrotik_users_safe` when search term is present, fetching matching `customer_id`s, then merging them into the main query via `.or()` with `.in('id', customerIds)`
-
-### Files Changed
-- `src/pages/Customers.tsx` (add debounce logic + PPPoE username search)
+### Safety
+- No deletions, no new customer creation
+- Only updates `expiry_date`, `package_id` (if null), and `status`
+- Unmatched usernames are reported but skipped
+- Existing packages and other customer data remain untouched
 
