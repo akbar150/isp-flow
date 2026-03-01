@@ -26,7 +26,7 @@ export function normalizePhone(phone: string): string {
  */
 export function isValidBDPhone(phone: string): boolean {
   const normalized = normalizePhone(phone);
-  return /^880[13-9]\d{8}$/.test(normalized);
+  return /^880[13-9]\d{9}$/.test(normalized);
 }
 
 /**
