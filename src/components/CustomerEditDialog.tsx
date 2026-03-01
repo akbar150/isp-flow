@@ -188,10 +188,11 @@ export function CustomerEditDialog({
       if (error) throw error;
 
       // Update mikrotik_users using directly fetched data
+      const trimmedPppoeUsername = formData.pppoe_username.trim();
       if (mikrotikUser) {
         const mikrotikUpdate: Record<string, unknown> = {};
-        if (formData.pppoe_username && formData.pppoe_username !== mikrotikUser.username) {
-          mikrotikUpdate.username = formData.pppoe_username;
+        if (trimmedPppoeUsername && trimmedPppoeUsername !== mikrotikUser.username) {
+          mikrotikUpdate.username = trimmedPppoeUsername;
         }
         if (formData.pppoe_password) {
           const { data: hashedPw, error: hashErr } = await supabase
@@ -206,9 +207,9 @@ export function CustomerEditDialog({
             .eq('id', mikrotikUser.id);
           if (mkErr) throw mkErr;
         }
-      } else if (formData.pppoe_username) {
+      } else if (trimmedPppoeUsername) {
         // No existing mikrotik user - create one
-        const pppoePass = formData.pppoe_password || formData.pppoe_username;
+        const pppoePass = formData.pppoe_password || trimmedPppoeUsername;
         const { data: hashedPw, error: hashErr } = await supabase
           .rpc('hash_password', { raw_password: pppoePass });
         if (hashErr) throw new Error('Failed to hash PPPoE password');
