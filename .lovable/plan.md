@@ -1,55 +1,34 @@
 
 
-# Add Time Support to Connection Date and Expiry Date (Dhaka UTC+6)
+# Make Bulk Import Validation Errors Clearly Visible
 
-## Overview
-Currently `expiry_date` and `billing_start_date` are stored as `DATE` (no time). This plan upgrades them to store full date+time in Dhaka timezone (UTC+6), and updates the bulk import to accept formats like `2025-10-15 06:20:31 PM`.
+## Problem
+When uploading a file with 6 rows that have errors, the user sees "6 with errors" in the summary but cannot easily identify which fields are causing the errors. The error badges in the last table column are difficult to read due to narrow column width and horizontal scrolling.
 
-## Database Migration
-
-Alter two columns on the `customers` table:
-- `expiry_date`: Change from `DATE` to `TIMESTAMP WITH TIME ZONE` (preserving existing data by casting `date -> timestamptz` at midnight Dhaka time)
-- `billing_start_date`: Change from `DATE` to `TIMESTAMP WITH TIME ZONE` (same treatment)
-
-Also update the `customers_safe` view to reflect the new column types.
+## Solution
+Add a dedicated **Error Summary Panel** that appears above the data table when there are invalid rows, listing each error by row number and field. Also improve the existing error display in the table.
 
 ## Changes to `src/components/BulkCustomerUpload.tsx`
 
-### 1. Update `normalizeExcelDate` to `normalizeExcelDateTime`
-- Rename and enhance the helper to preserve time components
-- If the input is a date-only string (e.g., `2025-10-15`), append `T00:00:00+06:00` (Dhaka midnight)
-- If the input includes time (e.g., `2025-10-15 06:20:31 PM`), parse it and convert to ISO with `+06:00` offset
-- Handle Excel serial numbers with fractional time component (e.g., `45678.76` = date + time)
-- Output format: ISO 8601 with Dhaka offset, e.g., `2025-10-15T18:20:31+06:00`
+### 1. Add Error Summary Panel
+Between the validation summary counts and the data table, add a collapsible error details section that lists all errors grouped by row number:
+- "Row 1: Name required (min 3 chars), Invalid phone"
+- "Row 4: Invalid package, Password min 6 chars"
 
-### 2. Update date validation
-- Change `isValidDate` regex from `YYYY-MM-DD` only to also accept full ISO timestamps
-- Both formats accepted: `2025-10-15` and `2025-10-15T18:20:31+06:00`
+This panel will only appear when there are errors, with a red border and clear formatting.
 
-### 3. Update import logic (`handleImport`)
-- When no `connection_date` provided, use current Dhaka time instead of just today's date
-- When no `expiry_date` provided, calculate expiry as Dhaka time + validity days
-- Pass full timestamp strings to the database insert
+### 2. Improve Error Column in Table
+- Make the Errors column wider with `min-w-[200px]`  
+- Show errors as a comma-separated list instead of tiny badges for better readability
+- Highlight the specific invalid field values in red text
 
-### 4. Update preview table
-- Show date+time in the "Connection" and "Expiry" columns (formatted as `YYYY-MM-DD hh:mm A`)
-
-### 5. Update sample CSV
-- Update example values to include time: `2025-01-15 09:00:00 AM` and `2025-02-14 11:59:00 PM`
+### 3. Add Tooltip on Error Icon
+When hovering over the red error icon in the Status column, show the full list of errors in a tooltip so users can quickly see issues without scrolling horizontally.
 
 ## Technical Details
 
-**Timezone handling**: All dates are treated as Dhaka time (UTC+6). When a user provides `2025-10-15 06:20:31 PM`, it is stored as `2025-10-15T18:20:31+06:00`. PostgreSQL's `timestamptz` will store this correctly and convert as needed.
-
-**Backward compatibility**: 
-- Existing date-only values (from previous imports) will be cast to midnight Dhaka time during migration
-- CSV/Excel files with date-only values still work -- time defaults to `00:00:00` Dhaka
-
-**Migration SQL (summary)**:
-```text
-ALTER TABLE customers 
-  ALTER COLUMN expiry_date TYPE timestamptz USING expiry_date::timestamptz,
-  ALTER COLUMN billing_start_date TYPE timestamptz USING billing_start_date::timestamptz;
-```
-Then recreate the `customers_safe` view to match.
+- The error data already exists in `row.errors[]` array on each `ParsedCustomer` -- no new parsing logic needed
+- Will use the existing Collapsible component from Radix UI for the expandable error panel
+- The error summary filters `parsedData` to only rows where `!isValid && !isDuplicate`
+- Each error string from `validateRow()` already describes the field and issue (e.g., "Name required (min 3 chars)")
 
