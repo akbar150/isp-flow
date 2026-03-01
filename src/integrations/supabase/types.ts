@@ -238,6 +238,39 @@ export type Database = {
           },
         ]
       }
+      backup_logs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          file_name: string
+          file_path: string
+          file_size_bytes: number | null
+          id: string
+          record_count: number | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          file_name: string
+          file_path: string
+          file_size_bytes?: number | null
+          id?: string
+          record_count?: number | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          file_name?: string
+          file_path?: string
+          file_size_bytes?: number | null
+          id?: string
+          record_count?: number | null
+          status?: string
+        }
+        Relationships: []
+      }
       billing_records: {
         Row: {
           amount: number
