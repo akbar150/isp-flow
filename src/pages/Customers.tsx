@@ -151,17 +151,39 @@ export default function Customers() {
   });
   const [showPppoePassword, setShowPppoePassword] = useState(false);
 
+  // Reset page when search/filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
+
   useEffect(() => {
     fetchData();
-  }, [currentPage]);
+  }, [currentPage, searchTerm, statusFilter]);
 
   const fetchData = async () => {
     try {
       const from = (currentPage - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
+      let customerQuery = supabase
+        .from('customers_safe')
+        .select('*, packages(*), areas(*), routers(*), mikrotik_users:mikrotik_users_safe(id, username, status)', { count: 'exact' });
+
+      // Server-side search
+      if (searchTerm.trim()) {
+        const term = `%${searchTerm.trim()}%`;
+        customerQuery = customerQuery.or(`full_name.ilike.${term},user_id.ilike.${term},phone.ilike.${term}`);
+      }
+
+      // Server-side status filter
+      if (statusFilter !== 'all') {
+        customerQuery = customerQuery.eq('status', statusFilter as 'active' | 'expiring' | 'expired' | 'suspended');
+      }
+
+      customerQuery = customerQuery.order('created_at', { ascending: false }).range(from, to);
+
       const [customersRes, packagesRes, areasRes, routersRes] = await Promise.all([
-        supabase.from('customers_safe').select('*, packages(*), areas(*), routers(*), mikrotik_users:mikrotik_users_safe(id, username, status)', { count: 'exact' }).order('created_at', { ascending: false }).range(from, to),
+        customerQuery,
         supabase.from('packages').select('*').eq('is_active', true),
         supabase.from('areas').select('*'),
         supabase.from('routers').select('*').eq('is_active', true),
@@ -361,25 +383,12 @@ export default function Customers() {
     }
   };
 
-  const filteredCustomers = customers
-    .filter(customer => {
-      const pppoeUsername = customer.mikrotik_users?.[0]?.username || '';
-      const matchesSearch = 
-        customer.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        customer.user_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        pppoeUsername.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        customer.phone.includes(searchTerm);
-      
-      const matchesStatus = statusFilter === "all" || customer.status === statusFilter;
-      
-      return matchesSearch && matchesStatus;
-    })
+  // Client-side sort only (search/filter is server-side now)
+  const filteredCustomers = [...customers]
     .sort((a, b) => {
       if (dateSortDirection === null) return 0;
-      
       const dateA = new Date(a.expiry_date).getTime();
       const dateB = new Date(b.expiry_date).getTime();
-      
       return dateSortDirection === 'asc' ? dateA - dateB : dateB - dateA;
     });
 

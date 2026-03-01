@@ -20,7 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { CalendarIcon, Loader2, MapPin } from "lucide-react";
+import { CalendarIcon, Loader2, MapPin, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { normalizePhone, isValidBDPhone } from "@/lib/phoneUtils";
 
@@ -39,6 +39,12 @@ interface Area {
 interface Router {
   id: string;
   name: string;
+}
+
+interface MikrotikUser {
+  id: string;
+  username: string;
+  status: 'enabled' | 'disabled';
 }
 
 interface Customer {
@@ -60,6 +66,7 @@ interface Customer {
   longitude: number | null;
   connection_type: 'pppoe' | 'static' | 'dhcp' | null;
   billing_cycle: 'monthly' | 'quarterly' | 'yearly' | null;
+  mikrotik_users?: MikrotikUser[] | null;
 }
 
 interface CustomerEditDialogProps {
@@ -98,7 +105,10 @@ export function CustomerEditDialog({
     longitude: "",
     connection_type: "pppoe" as Customer["connection_type"],
     billing_cycle: "monthly" as Customer["billing_cycle"],
+    pppoe_username: "",
+    pppoe_password: "",
   });
+  const [showPppoePassword, setShowPppoePassword] = useState(false);
 
   useEffect(() => {
     if (customer) {
@@ -118,7 +128,10 @@ export function CustomerEditDialog({
         longitude: customer.longitude?.toString() || "",
         connection_type: customer.connection_type || "pppoe",
         billing_cycle: customer.billing_cycle || "monthly",
+        pppoe_username: customer.mikrotik_users?.[0]?.username || "",
+        pppoe_password: "",
       });
+      setShowPppoePassword(false);
     }
   }, [customer]);
 
@@ -157,6 +170,41 @@ export function CustomerEditDialog({
         .eq("id", customer.id);
 
       if (error) throw error;
+
+      // Update mikrotik_users if PPPoE username changed or password provided
+      const existingMikrotik = customer.mikrotik_users?.[0];
+      if (existingMikrotik) {
+        const mikrotikUpdate: Record<string, unknown> = {};
+        if (formData.pppoe_username && formData.pppoe_username !== existingMikrotik.username) {
+          mikrotikUpdate.username = formData.pppoe_username;
+        }
+        if (formData.pppoe_password) {
+          const { data: hashedPw, error: hashErr } = await supabase
+            .rpc('hash_password', { raw_password: formData.pppoe_password });
+          if (hashErr) throw new Error('Failed to hash PPPoE password');
+          mikrotikUpdate.password_encrypted = hashedPw;
+        }
+        if (Object.keys(mikrotikUpdate).length > 0) {
+          const { error: mkErr } = await supabase
+            .from('mikrotik_users')
+            .update(mikrotikUpdate)
+            .eq('id', existingMikrotik.id);
+          if (mkErr) throw mkErr;
+        }
+      } else if (formData.pppoe_username) {
+        // No existing mikrotik user - create one
+        const pppoePass = formData.pppoe_password || formData.pppoe_username;
+        const { data: hashedPw, error: hashErr } = await supabase
+          .rpc('hash_password', { raw_password: pppoePass });
+        if (hashErr) throw new Error('Failed to hash PPPoE password');
+        await supabase.from('mikrotik_users').insert({
+          customer_id: customer.id,
+          username: formData.pppoe_username,
+          password_encrypted: hashedPw,
+          router_id: formData.router_id || null,
+          status: 'enabled',
+        });
+      }
 
       toast({ title: "Customer updated successfully" });
       onOpenChange(false);
@@ -373,6 +421,38 @@ export function CustomerEditDialog({
               </Popover>
             </div>
             
+            {/* PPPoE Credentials */}
+            <div className="space-y-2">
+              <Label>PPPoE Username</Label>
+              <Input
+                value={formData.pppoe_username}
+                onChange={(e) => setFormData({ ...formData, pppoe_username: e.target.value })}
+                placeholder="e.g., user001"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>PPPoE Password (leave blank to keep)</Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    type={showPppoePassword ? "text" : "password"}
+                    value={formData.pppoe_password}
+                    onChange={(e) => setFormData({ ...formData, pppoe_password: e.target.value })}
+                    placeholder="Enter new password"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full"
+                    onClick={() => setShowPppoePassword(!showPppoePassword)}
+                  >
+                    {showPppoePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             {/* GPS Location */}
             <div className="space-y-2">
               <Label>Latitude</Label>
