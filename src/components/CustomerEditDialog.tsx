@@ -89,6 +89,7 @@ export function CustomerEditDialog({
   onSuccess,
 }: CustomerEditDialogProps) {
   const [saving, setSaving] = useState(false);
+  const [mikrotikUser, setMikrotikUser] = useState<{ id: string; username: string; status: string } | null>(null);
   const [formData, setFormData] = useState({
     full_name: "",
     phone: "",
@@ -111,7 +112,7 @@ export function CustomerEditDialog({
   const [showPppoePassword, setShowPppoePassword] = useState(false);
 
   useEffect(() => {
-    if (customer) {
+    if (customer && open) {
       setFormData({
         full_name: customer.full_name,
         phone: customer.phone,
@@ -128,12 +129,27 @@ export function CustomerEditDialog({
         longitude: customer.longitude?.toString() || "",
         connection_type: customer.connection_type || "pppoe",
         billing_cycle: customer.billing_cycle || "monthly",
-        pppoe_username: customer.mikrotik_users?.[0]?.username || "",
+        pppoe_username: "",
         pppoe_password: "",
       });
       setShowPppoePassword(false);
+      setMikrotikUser(null);
+
+      // Fetch mikrotik_users directly from the table
+      supabase
+        .from('mikrotik_users')
+        .select('id, username, status')
+        .eq('customer_id', customer.id)
+        .limit(1)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            setMikrotikUser(data);
+            setFormData(prev => ({ ...prev, pppoe_username: data.username }));
+          }
+        });
     }
-  }, [customer]);
+  }, [customer, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,11 +187,10 @@ export function CustomerEditDialog({
 
       if (error) throw error;
 
-      // Update mikrotik_users if PPPoE username changed or password provided
-      const existingMikrotik = customer.mikrotik_users?.[0];
-      if (existingMikrotik) {
+      // Update mikrotik_users using directly fetched data
+      if (mikrotikUser) {
         const mikrotikUpdate: Record<string, unknown> = {};
-        if (formData.pppoe_username && formData.pppoe_username !== existingMikrotik.username) {
+        if (formData.pppoe_username && formData.pppoe_username !== mikrotikUser.username) {
           mikrotikUpdate.username = formData.pppoe_username;
         }
         if (formData.pppoe_password) {
@@ -188,7 +203,7 @@ export function CustomerEditDialog({
           const { error: mkErr } = await supabase
             .from('mikrotik_users')
             .update(mikrotikUpdate)
-            .eq('id', existingMikrotik.id);
+            .eq('id', mikrotikUser.id);
           if (mkErr) throw mkErr;
         }
       } else if (formData.pppoe_username) {
@@ -197,13 +212,14 @@ export function CustomerEditDialog({
         const { data: hashedPw, error: hashErr } = await supabase
           .rpc('hash_password', { raw_password: pppoePass });
         if (hashErr) throw new Error('Failed to hash PPPoE password');
-        await supabase.from('mikrotik_users').insert({
+        const { error: insertErr } = await supabase.from('mikrotik_users').insert({
           customer_id: customer.id,
           username: formData.pppoe_username,
           password_encrypted: hashedPw,
           router_id: formData.router_id || null,
           status: 'enabled',
         });
+        if (insertErr) throw insertErr;
       }
 
       toast({ title: "Customer updated successfully" });
@@ -213,7 +229,7 @@ export function CustomerEditDialog({
       console.error("Error updating customer:", error);
       toast({
         title: "Error",
-        description: "Failed to update customer",
+        description: error instanceof Error ? error.message : "Failed to update customer",
         variant: "destructive",
       });
     } finally {
