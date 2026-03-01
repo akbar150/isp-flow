@@ -130,9 +130,10 @@ export function CustomerViewDialog({
     user_password: "",
   });
   const [savingCredentials, setSavingCredentials] = useState(false);
+  const [mikrotikUser, setMikrotikUser] = useState<{ id: string; username: string; status: string } | null>(null);
 
   useEffect(() => {
-    if (customer) {
+    if (customer && open) {
       setFormData({
         full_name: customer.full_name,
         phone: customer.phone,
@@ -145,14 +146,26 @@ export function CustomerViewDialog({
         billing_start_date: new Date(customer.billing_start_date),
         expiry_date: new Date(customer.expiry_date),
       });
-      setCredentialData({
-        pppoe_username: customer.mikrotik_users?.[0]?.username || "",
-        pppoe_password: "",
-        user_password: "",
-      });
       setIsEditing(false);
+      setMikrotikUser(null);
+
+      // Fetch mikrotik_users directly from table (not relying on join data)
+      supabase
+        .from('mikrotik_users')
+        .select('id, username, status')
+        .eq('customer_id', customer.id)
+        .limit(1)
+        .maybeSingle()
+        .then(({ data }) => {
+          setMikrotikUser(data);
+          setCredentialData({
+            pppoe_username: data?.username || customer.mikrotik_users?.[0]?.username || "",
+            pppoe_password: "",
+            user_password: "",
+          });
+        });
     }
-  }, [customer]);
+  }, [customer, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,58 +211,73 @@ export function CustomerViewDialog({
     
     setSavingCredentials(true);
     try {
-      if (credentialData.pppoe_username && credentialData.pppoe_username !== customer.mikrotik_users?.[0]?.username) {
-        const mikrotikUser = customer.mikrotik_users?.[0];
-        if (mikrotikUser) {
-          const { error: pppoeError } = await supabase
-            .from("mikrotik_users")
-            .update({ username: credentialData.pppoe_username })
-            .eq("id", mikrotikUser.id);
-          
-          if (pppoeError) throw pppoeError;
-        }
-      }
+      let didMutate = false;
+      const trimmedUsername = credentialData.pppoe_username.trim();
 
-      if (credentialData.pppoe_password) {
-        const mikrotikUser = customer.mikrotik_users?.[0];
-        if (mikrotikUser) {
+      if (mikrotikUser) {
+        // Update existing PPPoE record
+        const updates: Record<string, unknown> = {};
+        if (trimmedUsername && trimmedUsername !== mikrotikUser.username) {
+          updates.username = trimmedUsername;
+        }
+        if (credentialData.pppoe_password) {
           const { data: hashData, error: hashError } = await supabase.rpc('hash_password', {
             raw_password: credentialData.pppoe_password
           });
-          
           if (hashError) throw hashError;
-          
-          const { error: pppoePassError } = await supabase
-            .from("mikrotik_users")
-            .update({ password_encrypted: hashData })
-            .eq("id", mikrotikUser.id);
-          
-          if (pppoePassError) throw pppoePassError;
+          updates.password_encrypted = hashData;
         }
+        if (Object.keys(updates).length > 0) {
+          const { error } = await supabase
+            .from("mikrotik_users")
+            .update(updates)
+            .eq("id", mikrotikUser.id);
+          if (error) throw error;
+          didMutate = true;
+        }
+      } else if (trimmedUsername) {
+        // Create new PPPoE record
+        const pppoePass = credentialData.pppoe_password || trimmedUsername;
+        const { data: hashData, error: hashError } = await supabase.rpc('hash_password', {
+          raw_password: pppoePass
+        });
+        if (hashError) throw hashError;
+        const { error: insertErr } = await supabase.from('mikrotik_users').insert({
+          customer_id: customer.id,
+          username: trimmedUsername,
+          password_encrypted: hashData,
+          router_id: customer.router_id || null,
+          status: 'enabled',
+        });
+        if (insertErr) throw insertErr;
+        didMutate = true;
       }
 
+      // Update customer portal password
       if (credentialData.user_password) {
         const { data: hashData, error: hashError } = await supabase.rpc('hash_password', {
           raw_password: credentialData.user_password
         });
-        
         if (hashError) throw hashError;
-        
         const { error: userPassError } = await supabase
           .from("customers")
           .update({ password_hash: hashData })
           .eq("id", customer.id);
-        
         if (userPassError) throw userPassError;
+        didMutate = true;
       }
 
-      toast({ title: "Credentials updated successfully" });
+      if (didMutate) {
+        toast({ title: "Credentials updated successfully" });
+        onSuccess();
+      } else {
+        toast({ title: "No changes to save" });
+      }
       setCredentialData({ 
         ...credentialData, 
         pppoe_password: "", 
         user_password: "" 
       });
-      onSuccess();
     } catch (error) {
       console.error("Error updating credentials:", error);
       toast({
