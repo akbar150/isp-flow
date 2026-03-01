@@ -20,7 +20,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Download, FileText, AlertCircle, CheckCircle2, Loader2, Copy } from "lucide-react";
+import { Upload, Download, FileText, AlertCircle, CheckCircle2, Loader2, Copy, ChevronDown } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { normalizePhone, isValidBDPhone } from "@/lib/phoneUtils";
 import { addDays } from "date-fns";
 import * as XLSX from "xlsx";
@@ -708,6 +710,34 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
             </div>
           )}
 
+          {/* Error Details Panel */}
+          {invalidCount > 0 && parsedData.length > 0 && (
+            <Collapsible defaultOpen>
+              <div className="border border-destructive/50 rounded-md bg-destructive/5">
+                <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors rounded-t-md">
+                  <span className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    {invalidCount} Row{invalidCount > 1 ? "s" : ""} with Errors — Click to expand details
+                  </span>
+                  <ChevronDown className="h-4 w-4 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-3 pb-3 space-y-1 max-h-40 overflow-y-auto">
+                    {parsedData.map((row, i) => {
+                      if (row.isValid || row.isDuplicate) return null;
+                      return (
+                        <div key={i} className="text-sm">
+                          <span className="font-medium text-destructive">Row {i + 1}:</span>{" "}
+                          <span className="text-muted-foreground">{row.errors.join(", ")}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
+          )}
+
           {/* Data Preview */}
           {parsedData.length > 0 && (
             <ScrollArea className="flex-1 border rounded-md">
@@ -722,7 +752,7 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
                     <TableHead>PPPoE User</TableHead>
                     <TableHead>Connection</TableHead>
                     <TableHead>Expiry</TableHead>
-                    <TableHead>Errors</TableHead>
+                    <TableHead className="min-w-[200px]">Errors</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -746,7 +776,20 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
                         ) : row.isValid ? (
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
                         ) : (
-                          <AlertCircle className="h-4 w-4 text-destructive" />
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertCircle className="h-4 w-4 text-destructive cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-xs">
+                                <ul className="text-xs space-y-0.5">
+                                  {row.errors.map((err, j) => (
+                                    <li key={j}>• {err}</li>
+                                  ))}
+                                </ul>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         )}
                       </TableCell>
                       <TableCell className="font-medium">{row.full_name || "-"}</TableCell>
@@ -755,15 +798,11 @@ export function BulkCustomerUpload({ packages, areas, routers, onSuccess }: Bulk
                       <TableCell>{row.pppoe_username || "-"}</TableCell>
                       <TableCell className="text-xs">{formatDateTimeDisplay(row.connection_date) || "-"}</TableCell>
                       <TableCell className="text-xs">{formatDateTimeDisplay(row.expiry_date) || "-"}</TableCell>
-                      <TableCell>
+                      <TableCell className="min-w-[200px]">
                         {row.errors.length > 0 && !row.isDuplicate && (
-                          <div className="flex flex-wrap gap-1">
-                            {row.errors.map((err, j) => (
-                              <Badge key={j} variant="destructive" className="text-xs">
-                                {err}
-                              </Badge>
-                            ))}
-                          </div>
+                          <span className="text-xs text-destructive">
+                            {row.errors.join(", ")}
+                          </span>
                         )}
                       </TableCell>
                     </TableRow>
