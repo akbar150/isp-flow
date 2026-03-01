@@ -1,53 +1,30 @@
 
 
-## Fix: PPPoE Data Not Saving in Customer Edit
+## Fix: Restore PPPoE Username Display Across Customer Pages
 
-### Root Cause
+### Problem
+The previous fix removed the `mikrotik_users:mikrotik_users_safe(id, username, status)` join from the Customers page query, thinking the view-to-view join was broken. However, the same join works correctly on other pages (Dashboard, Reminders, CallRecords). This caused all PPPoE usernames to show "Not set" on the customer list.
 
-The customer list fetches data from `customers_safe` (a view) and tries to join `mikrotik_users_safe` (another view). PostgREST often can't detect foreign key relationships between views, so `customer.mikrotik_users` is always null/empty. This means:
+Your PPPoE data is safe -- 174 out of 175 customers have their PPPoE records intact in the database. Only one customer (ISP00494 - Md Gulam Mustafa) has no PPPoE record, which is expected since they were recently added.
 
-- The edit dialog never sees existing PPPoE credentials
-- It always tries to INSERT new mikrotik_users records instead of UPDATING existing ones
-- The INSERT has no error checking, so failures are silent
+### Fix
 
-### Fix (2 files)
+**File: `src/pages/Customers.tsx`** (1 line change)
 
-**1. `src/components/CustomerEditDialog.tsx`**
-- When the dialog opens with a customer, **fetch mikrotik_users directly** from the `mikrotik_users` table using `customer_id` instead of relying on data passed from the parent
-- Use the fetched data to determine whether to UPDATE or INSERT
-- Add proper error checking on the INSERT operation
-- Ensure dialog closes and shows correct error messages on failure
+Restore the mikrotik_users join in the customer query:
 
-**2. `src/pages/Customers.tsx`**
-- Remove the broken `mikrotik_users_safe` join from the query (it doesn't work between views)
-- Instead, fetch mikrotik_users separately and merge the data client-side, OR just let the edit dialog handle its own mikrotik data fetching (simpler approach)
+```
+// FROM:
+.select('*, packages(*), areas(*), routers(*)', { count: 'exact' })
 
-### Technical Details
-
-**CustomerEditDialog changes:**
-```typescript
-// When dialog opens, fetch mikrotik_users directly
-useEffect(() => {
-  if (customer && open) {
-    // Fetch fresh mikrotik_users data from the actual table
-    supabase.from('mikrotik_users')
-      .select('id, username, status')
-      .eq('customer_id', customer.id)
-      .limit(1)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setMikrotikUser(data);
-          setFormData(prev => ({ ...prev, pppoe_username: data.username }));
-        }
-      });
-  }
-}, [customer, open]);
+// TO:
+.select('*, packages(*), areas(*), routers(*), mikrotik_users:mikrotik_users_safe(id, username, status)', { count: 'exact' })
 ```
 
-On save, use `mikrotikUser` state (from direct fetch) instead of `customer.mikrotik_users?.[0]` to decide INSERT vs UPDATE. Also add error checking on the insert.
+This is the only change needed. The `CustomerEditDialog` already fetches mikrotik_users directly from the table (added in the previous fix), so editing PPPoE credentials will continue to work correctly regardless of the join.
 
-**Customers.tsx changes:**
-- Remove `mikrotik_users:mikrotik_users_safe(id, username, status)` from the main query
-- For the customer list table display (PPPoE username column), fetch mikrotik_users separately and merge, or keep the join attempt but handle null gracefully
+### Why This Is Safe
+- The same join pattern (`mikrotik_users:mikrotik_users_safe`) is already used successfully on Dashboard, Reminders, and CallRecords pages
+- The `CustomerViewDialog` also relies on `customer.mikrotik_users?.[0]?.username` from the parent data, so restoring the join fixes the Credentials tab display too
+- No data was lost -- all 174 PPPoE records are intact in the database
 
