@@ -1,30 +1,39 @@
 
-# Sort Reminders by Expiry Date
 
-## Changes to `src/pages/Reminders.tsx`
+# Merge Name and PPPoE Username Columns in Customer Table
 
-### 1. Default sort: Latest expiry date first
-After categorizing customers, sort each array so that the most recent (nearest/latest) expiry date appears first. For overdue, this means the most recently expired customer is at the top.
+## Current State
+- Customers are already sorted by `created_at DESC` (newest first) -- this is correct
+- The table has two separate columns: "PPPoE Username" (hidden on mobile) and "Name"
+- On mobile, PPPoE username already shows under the name in the Name column
 
-Add sorting after categorization (around line 114-116):
-```typescript
-const sortByExpiry = (a: Customer, b: Customer) => 
-  new Date(b.expiry_date).getTime() - new Date(a.expiry_date).getTime();
+## Changes to `src/pages/Customers.tsx`
 
-threeDaysBefore.sort(sortByExpiry);
-oneDayBefore.sort(sortByExpiry);
-expiryDay.sort(sortByExpiry);
-allOverdue.sort(sortByExpiry);
+### 1. Remove the separate "PPPoE Username" column header (line 535)
+Delete the standalone `<th>` for PPPoE Username.
+
+### 2. Merge into the "Name" column
+Rename the column to "Customer" and always show PPPoE username below the name (not just on mobile). Remove the `sm:hidden` class so it's visible on all screen sizes.
+
+### 3. Remove the separate PPPoE Username `<td>` cell (lines 574-576)
+Delete the standalone PPPoE data cell.
+
+### 4. Update the Name `<td>` cell (lines 577-590)
+Always show PPPoE username below the customer name, removing the `sm:hidden` restriction:
+
+```
+<td>
+  <div>
+    <button ...>{customer.full_name}</button>
+    <p className="text-xs text-muted-foreground font-mono">{pppoeUsername || 'No PPPoE'}</p>
+  </div>
+</td>
 ```
 
-### 2. Add clickable sort toggle on "Expiry" column header
-- Add state: `sortDirection` (`'desc' | 'asc'`) defaulting to `'desc'` (latest first)
-- Make the "Expiry" `<th>` clickable with an arrow icon (ArrowUpDown from lucide-react)
-- When toggled, reverse the sort direction for all tables
-- Pass the sort direction into `renderCustomerTable` and apply sorting there
+### 5. Update colspan
+Adjust the "No customers found" colspan from 8 to 7.
 
-### Technical detail
-- Add `useState` for `sortDirection`
-- Import `ArrowUpDown` from lucide-react
-- In `renderCustomerTable`, sort the list based on `sortDirection` before mapping
-- The `<th>` for Expiry becomes a clickable button with the sort icon
+## Result
+- One unified "Customer" column showing name + PPPoE username on all screen sizes
+- Matches the existing mobile layout pattern
+- No sorting changes needed -- already sorted newest first by default
