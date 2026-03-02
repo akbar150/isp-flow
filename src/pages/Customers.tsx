@@ -534,6 +534,7 @@ export default function Customers() {
           <thead>
             <tr>
               <th>Customer</th>
+              <th className="hidden lg:table-cell">Customer ID</th>
               <th className="hidden md:table-cell">Phone</th>
               <th className="hidden lg:table-cell">Package</th>
               <th>
@@ -550,7 +551,6 @@ export default function Customers() {
               <th className="hidden lg:table-cell">Bill</th>
               <th>Due</th>
               <th className="hidden sm:table-cell">Status</th>
-              <th className="hidden lg:table-cell">Customer ID</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -587,6 +587,9 @@ export default function Customers() {
                         </button>
                         <p className="text-xs text-muted-foreground font-mono">{pppoeUsername || 'No PPPoE'}</p>
                       </div>
+                    </td>
+                    <td className="hidden lg:table-cell font-mono text-xs text-muted-foreground">
+                      {customer.user_id}
                     </td>
                     <td className="hidden md:table-cell">{customer.phone}</td>
                     <td className="hidden lg:table-cell">{customer.packages?.name || 'N/A'}</td>
@@ -649,9 +652,6 @@ export default function Customers() {
                     </td>
                     <td className="hidden sm:table-cell">
                       <StatusBadge status={billingInfo.status} />
-                    </td>
-                    <td className="hidden lg:table-cell font-mono text-xs text-muted-foreground">
-                      {customer.user_id}
                     </td>
                     <td>
                       <DropdownMenu>
