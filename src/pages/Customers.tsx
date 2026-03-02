@@ -532,8 +532,7 @@ export default function Customers() {
         <table className="data-table">
           <thead>
             <tr>
-              <th className="hidden sm:table-cell">PPPoE Username</th>
-              <th>Name</th>
+              <th>Customer</th>
               <th className="hidden md:table-cell">Phone</th>
               <th className="hidden lg:table-cell">Package</th>
               <th>
@@ -555,7 +554,7 @@ export default function Customers() {
           <tbody>
             {filteredCustomers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-8 text-muted-foreground">
+                <td colSpan={7} className="text-center py-8 text-muted-foreground">
                   No customers found
                 </td>
               </tr>
@@ -571,9 +570,6 @@ export default function Customers() {
                 
                 return (
                   <tr key={customer.id}>
-                    <td className="font-mono text-sm hidden sm:table-cell">
-                      {pppoeUsername || <span className="text-muted-foreground">Not set</span>}
-                    </td>
                     <td>
                       <div>
                         <button
@@ -586,7 +582,7 @@ export default function Customers() {
                         >
                           {customer.full_name}
                         </button>
-                        <p className="text-xs text-muted-foreground sm:hidden font-mono">{pppoeUsername}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{pppoeUsername || 'No PPPoE'}</p>
                       </div>
                     </td>
                     <td className="hidden md:table-cell">{customer.phone}</td>
