@@ -550,13 +550,14 @@ export default function Customers() {
               <th className="hidden lg:table-cell">Bill</th>
               <th>Due</th>
               <th className="hidden sm:table-cell">Status</th>
+              <th className="hidden lg:table-cell">Customer ID</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredCustomers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-8 text-muted-foreground">
+                <td colSpan={9} className="text-center py-8 text-muted-foreground">
                   No customers found
                 </td>
               </tr>
@@ -648,6 +649,9 @@ export default function Customers() {
                     </td>
                     <td className="hidden sm:table-cell">
                       <StatusBadge status={billingInfo.status} />
+                    </td>
+                    <td className="hidden lg:table-cell font-mono text-xs text-muted-foreground">
+                      {customer.user_id}
                     </td>
                     <td>
                       <DropdownMenu>
