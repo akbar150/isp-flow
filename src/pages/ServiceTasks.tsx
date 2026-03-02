@@ -14,7 +14,10 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Wrench, MapPin, Calendar, User, Eye, Loader2, CheckCircle } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Plus, Search, Wrench, MapPin, Calendar, User, Eye, Loader2, CheckCircle, Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
 interface ServiceTask {
@@ -63,6 +66,7 @@ export default function ServiceTasks() {
   const [saving, setSaving] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const PAGE_SIZE = 50;
 
   const [formData, setFormData] = useState({
@@ -290,14 +294,39 @@ export default function ServiceTasks() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Customer *</Label>
-              <Select value={formData.customer_id} onValueChange={(v) => setFormData({...formData, customer_id: v})}>
-                <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
-                <SelectContent>
-                  {customers.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.full_name} ({c.user_id})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={customerSearchOpen} onOpenChange={setCustomerSearchOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" aria-expanded={customerSearchOpen} className="w-full justify-between font-normal">
+                    {formData.customer_id
+                      ? (() => { const c = customers.find(c => c.id === formData.customer_id); return c ? `${c.full_name} (${c.user_id})` : "Select customer"; })()
+                      : "Select customer..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0">
+                  <Command>
+                    <CommandInput placeholder="Search by name or user ID..." />
+                    <CommandList>
+                      <CommandEmpty>No customer found.</CommandEmpty>
+                      <CommandGroup>
+                        {customers.map(c => (
+                          <CommandItem
+                            key={c.id}
+                            value={`${c.full_name} ${c.user_id}`}
+                            onSelect={() => {
+                              setFormData({ ...formData, customer_id: c.id });
+                              setCustomerSearchOpen(false);
+                            }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", formData.customer_id === c.id ? "opacity-100" : "opacity-0")} />
+                            {c.full_name} ({c.user_id})
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-2">
               <Label>Title *</Label>
