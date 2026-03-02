@@ -16,7 +16,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfDay, differenceInDays } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MoreHorizontal, Navigation } from "lucide-react";
+import { MoreHorizontal, Navigation, ArrowUpDown } from "lucide-react";
 
 interface MikrotikUser {
   id: string;
@@ -59,6 +59,7 @@ export default function Reminders() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [reminderLogs, setReminderLogs] = useState<ReminderLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortDirection, setSortDirection] = useState<'desc' | 'asc'>('desc');
 
   useEffect(() => {
     fetchData();
@@ -113,6 +114,16 @@ export default function Reminders() {
       }
     });
 
+    const sortByExpiry = (a: Customer, b: Customer) => {
+      const diff = new Date(b.expiry_date).getTime() - new Date(a.expiry_date).getTime();
+      return sortDirection === 'desc' ? diff : -diff;
+    };
+
+    threeDaysBefore.sort(sortByExpiry);
+    oneDayBefore.sort(sortByExpiry);
+    expiryDay.sort(sortByExpiry);
+    allOverdue.sort(sortByExpiry);
+
     return { threeDaysBefore, oneDayBefore, expiryDay, allOverdue };
   };
 
@@ -136,7 +147,11 @@ export default function Reminders() {
                 <th>Name</th>
                 <th className="hidden md:table-cell">Phone</th>
                 <th className="hidden lg:table-cell">Package</th>
-                <th>Expiry</th>
+                <th>
+                  <Button variant="ghost" size="sm" className="h-auto p-0 font-medium hover:bg-transparent" onClick={() => setSortDirection(d => d === 'desc' ? 'asc' : 'desc')}>
+                    Expiry <ArrowUpDown className="inline h-3 w-3 ml-1" />
+                  </Button>
+                </th>
                 <th>Due</th>
                 <th>Actions</th>
               </tr>
