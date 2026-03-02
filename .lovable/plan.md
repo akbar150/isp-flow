@@ -1,52 +1,43 @@
 
 
-# Use Actual Month Names in Due Breakdown
+# Add Customer Search to Ticket and Service Task Dialogs
 
-## Change
-In the Due Breakdown popover, replace "Month 1", "Month 2" etc. with actual month names (e.g., "January", "February") calculated backwards from the customer's expiry date.
+## Overview
+Replace the plain customer dropdown (Select) with a searchable customer picker in both the "Create Support Ticket" and "Create Service Task" dialogs. This allows users to quickly find customers by typing their name or User ID.
 
-## Logic
-- Use the customer's `expiry_date` as the reference point
-- Work backwards: the most recent due month is the one the expiry date falls in, then go back for each additional month
-- Use `date-fns` `format` and `subMonths` to get month names
+## Approach
+Use a Popover + Command (cmdk) combo -- already available in the project via `@/components/ui/command` and `@/components/ui/popover`. This gives a searchable dropdown with filtering built-in.
 
-## Changes to `src/pages/Customers.tsx`
+## Changes
 
-### Import
-Add `format, subMonths` from `date-fns` (already partially imported).
+### 1. `src/pages/Tickets.tsx` (lines ~341-350)
+- Replace the `Select` for customer with a `Popover` containing a `Command` input
+- Users can type to search/filter customers by name or user ID
+- Selected customer shows as "Name (UserID)" in the trigger button
 
-### Update breakdown logic (lines 612-632)
-Replace the current `Month {i + 1}` logic with:
+### 2. `src/pages/ServiceTasks.tsx` (lines ~291-301)
+- Same change: replace customer `Select` with searchable `Popover + Command`
+- Same search/filter behavior
 
-```typescript
-const monthlyPrice = customer.packages?.monthly_price || 0;
-if (monthlyPrice <= 0) return <p className="text-sm text-muted-foreground">No package assigned</p>;
-const fullMonths = Math.floor(customer.total_due / monthlyPrice);
-const remainder = customer.total_due % monthlyPrice;
-const expiryDate = new Date(customer.expiry_date);
-return (
-  <>
-    {Array.from({ length: fullMonths }, (_, i) => {
-      const monthDate = subMonths(expiryDate, i);
-      return (
-        <div key={i} className="flex justify-between text-sm">
-          <span>{format(monthDate, 'MMMM yyyy')}</span>
-          <span>৳{monthlyPrice}</span>
-        </div>
-      );
-    })}
-    {remainder > 0 && (
-      <div className="flex justify-between text-sm">
-        <span>Partial</span>
-        <span>৳{remainder}</span>
-      </div>
-    )}
-  </>
-);
+### Technical Details
+
+New imports for both files:
+- `Popover, PopoverContent, PopoverTrigger` from `@/components/ui/popover`
+- `Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList` from `@/components/ui/command`
+- `Check, ChevronsUpDown` from `lucide-react`
+
+Component structure:
+```
+Popover
+  PopoverTrigger (button showing selected customer or "Select customer")
+  PopoverContent
+    Command
+      CommandInput (search box)
+      CommandList
+        CommandEmpty ("No customer found")
+        CommandGroup
+          CommandItem (for each customer, filterable by name + user_id)
 ```
 
-This shows month names like "January 2026", "December 2025" working backwards from the expiry date.
-
-## Files to modify
-- `src/pages/Customers.tsx`
+Adds a local `customerSearchOpen` state (boolean) per dialog to control the popover.
 
