@@ -11,6 +11,7 @@ import { QuickPaymentRecord } from "@/components/QuickPaymentRecord";
 import { CallCustomerButton } from "@/components/CallCustomerButton";
 import { BulkCustomerUpload } from "@/components/BulkCustomerUpload";
 import { AddCustomerDialog } from "@/components/AddCustomerDialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CustomerMapView } from "@/components/CustomerMapView";
 import PackageRequests from "@/components/admin/PackageRequests";
 import { Button } from "@/components/ui/button";
@@ -546,6 +547,7 @@ export default function Customers() {
                   {dateSortDirection === 'desc' && <ArrowDown className="h-3 w-3" />}
                 </button>
               </th>
+              <th className="hidden lg:table-cell">Bill</th>
               <th>Due</th>
               <th className="hidden sm:table-cell">Status</th>
               <th>Actions</th>
@@ -554,7 +556,7 @@ export default function Customers() {
           <tbody>
             {filteredCustomers.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-8 text-muted-foreground">
+                <td colSpan={8} className="text-center py-8 text-muted-foreground">
                   No customers found
                 </td>
               </tr>
@@ -593,8 +595,52 @@ export default function Customers() {
                         <span className="text-xs text-muted-foreground">{billingInfo.statusLabel}</span>
                       </div>
                     </td>
-                    <td className={billingInfo.displayDue > 0 ? "amount-due" : "amount-positive"}>
-                      ৳{billingInfo.displayDue}
+                    <td className="hidden lg:table-cell">
+                      ৳{customer.packages?.monthly_price || 0}
+                    </td>
+                    <td>
+                      {customer.total_due > 0 ? (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button className="amount-due cursor-pointer hover:underline font-medium">
+                              ৳{customer.total_due}
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-60">
+                            <div className="space-y-2">
+                              <h4 className="font-semibold text-sm">Due Breakdown</h4>
+                              {(() => {
+                                const monthlyPrice = customer.packages?.monthly_price || 0;
+                                if (monthlyPrice <= 0) return <p className="text-sm text-muted-foreground">No package assigned</p>;
+                                const fullMonths = Math.floor(customer.total_due / monthlyPrice);
+                                const remainder = customer.total_due % monthlyPrice;
+                                return (
+                                  <>
+                                    {Array.from({ length: fullMonths }, (_, i) => (
+                                      <div key={i} className="flex justify-between text-sm">
+                                        <span>Month {i + 1}</span>
+                                        <span>৳{monthlyPrice}</span>
+                                      </div>
+                                    ))}
+                                    {remainder > 0 && (
+                                      <div className="flex justify-between text-sm">
+                                        <span>Partial</span>
+                                        <span>৳{remainder}</span>
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                              <div className="border-t pt-2 flex justify-between font-semibold text-sm">
+                                <span>Total</span>
+                                <span>৳{customer.total_due}</span>
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      ) : (
+                        <span className="amount-positive">৳0</span>
+                      )}
                     </td>
                     <td className="hidden sm:table-cell">
                       <StatusBadge status={billingInfo.status} />
