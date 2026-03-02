@@ -45,7 +45,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Plus, Search, Eye, EyeOff, RefreshCw, MoreHorizontal, Edit, Trash2, UserCircle, ArrowUpDown, ArrowUp, ArrowDown, MapPin, Map, Download } from "lucide-react";
 import { TablePagination } from "@/components/TablePagination";
 import { exportToCSV } from "@/lib/exportUtils";
-import { format, addDays } from "date-fns";
+import { format, addDays, subMonths } from "date-fns";
 import { calculateBillingInfo } from "@/lib/billingUtils";
 import { normalizePhone, isValidBDPhone } from "@/lib/phoneUtils";
 
@@ -614,14 +614,18 @@ export default function Customers() {
                                 if (monthlyPrice <= 0) return <p className="text-sm text-muted-foreground">No package assigned</p>;
                                 const fullMonths = Math.floor(customer.total_due / monthlyPrice);
                                 const remainder = customer.total_due % monthlyPrice;
+                                const expiryDate = new Date(customer.expiry_date);
                                 return (
                                   <>
-                                    {Array.from({ length: fullMonths }, (_, i) => (
-                                      <div key={i} className="flex justify-between text-sm">
-                                        <span>Month {i + 1}</span>
-                                        <span>৳{monthlyPrice}</span>
-                                      </div>
-                                    ))}
+                                    {Array.from({ length: fullMonths }, (_, i) => {
+                                      const monthDate = subMonths(expiryDate, i);
+                                      return (
+                                        <div key={i} className="flex justify-between text-sm">
+                                          <span>{format(monthDate, 'MMMM yyyy')}</span>
+                                          <span>৳{monthlyPrice}</span>
+                                        </div>
+                                      );
+                                    })}
                                     {remainder > 0 && (
                                       <div className="flex justify-between text-sm">
                                         <span>Partial</span>
