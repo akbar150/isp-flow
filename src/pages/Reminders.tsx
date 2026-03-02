@@ -102,13 +102,13 @@ export default function Reminders() {
       const expiry = startOfDay(new Date(customer.expiry_date));
       const daysDiff = differenceInDays(expiry, today);
 
-      if (daysDiff === 3) {
+      if (daysDiff === 2 || daysDiff === 3) {
         threeDaysBefore.push(customer);
       } else if (daysDiff === 1) {
         oneDayBefore.push(customer);
       } else if (daysDiff === 0) {
         expiryDay.push(customer);
-    } else if (daysDiff <= -1 && daysDiff >= -30) {
+      } else if (daysDiff <= -1) {
         allOverdue.push(customer);
       }
     });
