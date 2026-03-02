@@ -1,43 +1,21 @@
 
 
-# Add Customer Search to Ticket and Service Task Dialogs
+# Add Customer ID Column to Customer Table
 
 ## Overview
-Replace the plain customer dropdown (Select) with a searchable customer picker in both the "Create Support Ticket" and "Create Service Task" dialogs. This allows users to quickly find customers by typing their name or User ID.
+Add the Customer ID (`user_id`) as the last column before the Actions column in the customer table.
 
-## Approach
-Use a Popover + Command (cmdk) combo -- already available in the project via `@/components/ui/command` and `@/components/ui/popover`. This gives a searchable dropdown with filtering built-in.
+## Changes to `src/pages/Customers.tsx`
 
-## Changes
+### 1. Add "Customer ID" column header
+Insert `<th>Customer ID</th>` after the Status column and before Actions (line 553).
 
-### 1. `src/pages/Tickets.tsx` (lines ~341-350)
-- Replace the `Select` for customer with a `Popover` containing a `Command` input
-- Users can type to search/filter customers by name or user ID
-- Selected customer shows as "Name (UserID)" in the trigger button
+### 2. Add Customer ID cell in each row
+Insert a `<td>` displaying `customer.user_id` in a mono font, positioned after the Status cell and before the Actions cell.
 
-### 2. `src/pages/ServiceTasks.tsx` (lines ~291-301)
-- Same change: replace customer `Select` with searchable `Popover + Command`
-- Same search/filter behavior
+### 3. Update colspan
+Change the "No customers found" colspan from 8 to 9.
 
-### Technical Details
-
-New imports for both files:
-- `Popover, PopoverContent, PopoverTrigger` from `@/components/ui/popover`
-- `Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList` from `@/components/ui/command`
-- `Check, ChevronsUpDown` from `lucide-react`
-
-Component structure:
-```
-Popover
-  PopoverTrigger (button showing selected customer or "Select customer")
-  PopoverContent
-    Command
-      CommandInput (search box)
-      CommandList
-        CommandEmpty ("No customer found")
-        CommandGroup
-          CommandItem (for each customer, filterable by name + user_id)
-```
-
-Adds a local `customerSearchOpen` state (boolean) per dialog to control the popover.
+## Files to modify
+- `src/pages/Customers.tsx`
 
