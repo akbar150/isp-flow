@@ -94,7 +94,7 @@ export default function Payments() {
 
       let query = supabase
         .from('payments')
-        .select('*, customers(user_id, full_name)', { count: 'exact' })
+        .select('*, customers(user_id, full_name, mikrotik_users:mikrotik_users_safe(username))', { count: 'exact' })
         .order('payment_date', { ascending: false });
 
       if (dateFrom) query = query.gte('payment_date', dateFrom);
