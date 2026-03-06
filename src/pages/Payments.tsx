@@ -413,10 +413,7 @@ export default function Payments() {
                     <div>
                       <p className="font-medium">{payment.customers?.full_name}</p>
                       <p className="text-xs text-muted-foreground font-mono">
-                        {payment.customers?.user_id}
-                        {payment.customers?.mikrotik_users?.[0]?.username && (
-                          <> · {payment.customers.mikrotik_users[0].username}</>
-                        )}
+                        {payment.customers?.mikrotik_users?.[0]?.username || payment.customers?.user_id}
                       </p>
                     </div>
                   </td>
