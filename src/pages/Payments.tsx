@@ -47,6 +47,7 @@ interface Payment {
   customers: {
     user_id: string;
     full_name: string;
+    mikrotik_users: { username: string }[] | null;
   } | null;
 }
 
@@ -93,7 +94,7 @@ export default function Payments() {
 
       let query = supabase
         .from('payments')
-        .select('*, customers(user_id, full_name)', { count: 'exact' })
+        .select('*, customers(user_id, full_name, mikrotik_users:mikrotik_users_safe(username))', { count: 'exact' })
         .order('payment_date', { ascending: false });
 
       if (dateFrom) query = query.gte('payment_date', dateFrom);
@@ -413,6 +414,9 @@ export default function Payments() {
                       <p className="font-medium">{payment.customers?.full_name}</p>
                       <p className="text-xs text-muted-foreground font-mono">
                         {payment.customers?.user_id}
+                        {payment.customers?.mikrotik_users?.[0]?.username && (
+                          <> · {payment.customers.mikrotik_users[0].username}</>
+                        )}
                       </p>
                     </div>
                   </td>
