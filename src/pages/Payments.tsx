@@ -47,6 +47,7 @@ interface Payment {
   customers: {
     user_id: string;
     full_name: string;
+    mikrotik_users: { username: string }[] | null;
   } | null;
 }
 
