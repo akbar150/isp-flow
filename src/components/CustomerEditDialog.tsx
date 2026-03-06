@@ -111,6 +111,8 @@ export function CustomerEditDialog({
   });
   const [showPppoePassword, setShowPppoePassword] = useState(false);
 
+  const [originalPackageId, setOriginalPackageId] = useState<string>("");
+
   useEffect(() => {
     if (customer && open) {
       setFormData({
@@ -132,6 +134,7 @@ export function CustomerEditDialog({
         pppoe_username: "",
         pppoe_password: "",
       });
+      setOriginalPackageId(customer.package_id || "");
       setShowPppoePassword(false);
       setMikrotikUser(null);
 
