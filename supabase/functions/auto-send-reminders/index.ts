@@ -28,6 +28,7 @@ Deno.serve(async (req) => {
       .from('customers')
       .select('id, full_name, phone, expiry_date, total_due, user_id')
       .eq('status', 'active')
+      .neq('status', 'suspended')
       .gte('expiry_date', todayStr)
       .lte('expiry_date', futureStr)
 
