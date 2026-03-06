@@ -267,7 +267,15 @@ export default function Payments() {
                   <Label>Customer *</Label>
                   <Select
                     value={formData.customer_id}
-                    onValueChange={(value) => setFormData({ ...formData, customer_id: value })}
+                    onValueChange={(value) => {
+                      const cust = customers.find(c => c.id === value);
+                      const pkgPrice = cust?.packages?.monthly_price;
+                      setFormData({ 
+                        ...formData, 
+                        customer_id: value,
+                        amount: pkgPrice ? pkgPrice.toString() : "",
+                      });
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select customer" />
