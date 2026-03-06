@@ -96,19 +96,8 @@ export function InvoicePaymentDialog({
 
       if (paymentError) throw paymentError;
 
-      // 4. Update customer's total_due
-      const { data: customer } = await supabase
-        .from("customers")
-        .select("total_due")
-        .eq("id", invoice.customer_id)
-        .single();
-
-      if (customer) {
-        await supabase
-          .from("customers")
-          .update({ total_due: Math.max(0, (customer.total_due || 0) - amount) })
-          .eq("id", invoice.customer_id);
-      }
+      // Note: customer total_due is updated automatically by the database trigger
+      // when the payment record is inserted above
 
       toast({
         title: "Payment recorded",
