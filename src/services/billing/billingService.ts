@@ -1,4 +1,3 @@
-import { supabase } from "@/integrations/supabase/client";
 import { differenceInDays, addDays, format } from "date-fns";
 
 export type CustomerStatus = 'active' | 'expiring' | 'expired' | 'suspended';
