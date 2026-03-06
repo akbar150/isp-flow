@@ -167,25 +167,38 @@ export function CustomerEditDialog({
         throw new Error('Alternative phone must start with 880 (e.g., 8801701377315)');
       }
 
+      // Calculate due adjustment if package changed
+      const updateData: Record<string, unknown> = {
+        full_name: formData.full_name,
+        phone: normalizePhone(formData.phone),
+        alt_phone: formData.alt_phone ? normalizePhone(formData.alt_phone) : null,
+        email: formData.email || null,
+        address: formData.address,
+        area_id: formData.area_id || null,
+        router_id: formData.router_id || null,
+        package_id: formData.package_id || null,
+        status: formData.status,
+        billing_start_date: format(formData.billing_start_date, "yyyy-MM-dd"),
+        expiry_date: format(formData.expiry_date, "yyyy-MM-dd"),
+        latitude: formData.latitude ? parseFloat(formData.latitude) : null,
+        longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+        connection_type: formData.connection_type,
+        billing_cycle: formData.billing_cycle,
+      };
+
+      // If package changed, adjust total_due based on price difference
+      if (formData.package_id !== originalPackageId && customer.total_due > 0) {
+        const oldPkg = packages.find(p => p.id === originalPackageId);
+        const newPkg = packages.find(p => p.id === formData.package_id);
+        const oldPrice = oldPkg?.monthly_price || 0;
+        const newPrice = newPkg?.monthly_price || 0;
+        const adjustedDue = Math.max(0, customer.total_due - oldPrice + newPrice);
+        updateData.total_due = adjustedDue;
+      }
+
       const { error } = await supabase
         .from("customers")
-        .update({
-          full_name: formData.full_name,
-          phone: normalizePhone(formData.phone),
-          alt_phone: formData.alt_phone ? normalizePhone(formData.alt_phone) : null,
-          email: formData.email || null,
-          address: formData.address,
-          area_id: formData.area_id || null,
-          router_id: formData.router_id || null,
-          package_id: formData.package_id || null,
-          status: formData.status,
-          billing_start_date: format(formData.billing_start_date, "yyyy-MM-dd"),
-          expiry_date: format(formData.expiry_date, "yyyy-MM-dd"),
-          latitude: formData.latitude ? parseFloat(formData.latitude) : null,
-          longitude: formData.longitude ? parseFloat(formData.longitude) : null,
-          connection_type: formData.connection_type,
-          billing_cycle: formData.billing_cycle,
-        })
+        .update(updateData)
         .eq("id", customer.id);
 
       if (error) throw error;
