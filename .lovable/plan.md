@@ -1,21 +1,29 @@
 
 
-# Add Customer ID Column to Customer Table
+# Switch to Calendar-Month Billing
 
-## Overview
-Add the Customer ID (`user_id`) as the last column before the Actions column in the customer table.
+## Change
 
-## Changes to `src/pages/Customers.tsx`
+Update the `update_customer_due_on_payment()` trigger to use PostgreSQL `INTERVAL '1 month'` instead of adding `validity_days * months_paid` days.
 
-### 1. Add "Customer ID" column header
-Insert `<th>Customer ID</th>` after the Status column and before Actions (line 553).
+### Current logic
+```sql
+new_expiry := base_date + (customer_record.validity_days * months_paid);
+-- Feb 21 + 30 = Mar 23 (drifts)
+```
 
-### 2. Add Customer ID cell in each row
-Insert a `<td>` displaying `customer.user_id` in a mono font, positioned after the Status cell and before the Actions cell.
+### New logic
+```sql
+new_expiry := base_date + (months_paid * INTERVAL '1 month');
+-- Feb 21 + 1 month = Mar 21 (fixed)
+-- Jan 31 + 1 month = Feb 28 (PostgreSQL handles automatically)
+```
 
-### 3. Update colspan
-Change the "No customers found" colspan from 8 to 9.
+## Files
 
-## Files to modify
-- `src/pages/Customers.tsx`
+| File | Change |
+|------|--------|
+| Database migration | Replace `validity_days * months_paid` with `months_paid * INTERVAL '1 month'` in trigger function |
+
+The `validity_days` column remains in the `packages` table for backward compatibility but will no longer be used for expiry calculation in this trigger. The `generate-billing` edge function does not need changes as it reads `expiry_date` directly.
 
