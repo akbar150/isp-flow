@@ -228,6 +228,28 @@ export default function Dashboard() {
             <StatCard title="Today's Collections" value={`৳${stats.todayCollections.toLocaleString()}`} icon={TrendingUp} variant="success" />
           </div>
 
+          {/* Monthly Collection Stats */}
+          <div className="form-section">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="form-section-title border-0 mb-0 pb-0">Monthly Collection</h2>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {monthOptions.map(opt => (
+                    <SelectItem key={opt.key} value={opt.key}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <StatCard title="Total Cash Collection" value={`৳${cashCollection.toLocaleString()}`} icon={Banknote} variant="success" />
+              <StatCard title="Total bKash Collection" value={`৳${bkashCollection.toLocaleString()}`} icon={Smartphone} variant="primary" />
+              <StatCard title="Total Collection" value={`৳${totalCollection.toLocaleString()}`} icon={Wallet} variant="warning" />
+            </div>
+          </div>
+
           {/* Expiring Soon Table */}
           <div className="form-section">
             <div className="flex items-center justify-between mb-4">
