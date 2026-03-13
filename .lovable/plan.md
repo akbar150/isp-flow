@@ -1,43 +1,21 @@
 
 
-# Dashboard Collection Cards with Month Selector
+# Add Customer ID Column to Customer Table
 
-## What to Build
-Add 3 new stat cards below the existing 6 on the Dashboard overview tab:
-- **Total Cash Collection** — sum of payments where `method = 'cash'`
-- **Total bKash Collection** — sum of payments where `method = 'bkash'`
-- **Total Collection** — sum of all payments (all methods)
+## Overview
+Add the Customer ID (`user_id`) as the last column before the Actions column in the customer table.
 
-Each filtered by a selected month. A dropdown selector above these cards lets the user pick the current month (default) or any previous month (last 12 months).
+## Changes to `src/pages/Customers.tsx`
 
-## Technical Approach
+### 1. Add "Customer ID" column header
+Insert `<th>Customer ID</th>` after the Status column and before Actions (line 553).
 
-### File: `src/pages/Dashboard.tsx`
+### 2. Add Customer ID cell in each row
+Insert a `<td>` displaying `customer.user_id` in a mono font, positioned after the Status cell and before the Actions cell.
 
-1. Add state for `selectedMonth` (default: current month as `YYYY-MM` string)
-2. Add state for collection stats: `cashCollection`, `bkashCollection`, `totalCollection`
-3. Add a `fetchCollectionStats(month)` function that queries the `payments` table filtered by `payment_date` within the selected month range, grouping by `method`
-4. Re-fetch when `selectedMonth` changes via `useEffect`
-5. Render a month dropdown (Select component) + 3 StatCards in a new section between the existing stats grid and the "Expiring Soon" table
+### 3. Update colspan
+Change the "No customers found" colspan from 8 to 9.
 
-### Month Dropdown
-- Generate last 12 months as options (e.g., "March 2026", "February 2026", ...)
-- Default to current month
-- On change, re-query payments for that month's date range
-
-### Query Logic
-```text
-payments where payment_date >= month_start AND payment_date < next_month_start
-- Cash: filter method = 'cash'
-- bKash: filter method = 'bkash'  
-- Total: sum all
-```
-
-### UI Layout
-```text
-[Month Dropdown: March 2026 ▼]
-[Total Cash ৳X] [Total bKash ৳X] [Total Collection ৳X]
-```
-
-No database changes needed — reads existing `payments` table.
+## Files to modify
+- `src/pages/Customers.tsx`
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -19,12 +19,16 @@ import {
   TrendingUp,
   ArrowRight,
   BarChart3,
-  MapPin
+  MapPin,
+  Banknote,
+  Smartphone,
+  Wallet
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { format, startOfDay, isBefore } from "date-fns";
+import { format, startOfDay, isBefore, startOfMonth, addMonths } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface DashboardStats {
   totalUsers: number;
@@ -70,9 +74,52 @@ export default function Dashboard() {
   const [expiringCustomers, setExpiringCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Collection stats
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthKey);
+  const [cashCollection, setCashCollection] = useState(0);
+  const [bkashCollection, setBkashCollection] = useState(0);
+  const [totalCollection, setTotalCollection] = useState(0);
+
+  // Generate last 12 months
+  const monthOptions = Array.from({ length: 12 }, (_, i) => {
+    const d = addMonths(now, -i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = format(d, 'MMMM yyyy');
+    return { key, label };
+  });
+
+  const fetchCollectionStats = useCallback(async (monthKey: string) => {
+    const [year, month] = monthKey.split('-').map(Number);
+    const monthStart = format(new Date(year, month - 1, 1), 'yyyy-MM-dd');
+    const nextMonthStart = format(new Date(year, month, 1), 'yyyy-MM-dd');
+
+    const { data } = await supabase
+      .from('payments')
+      .select('amount, method')
+      .gte('payment_date', monthStart)
+      .lt('payment_date', nextMonthStart);
+
+    let cash = 0, bkash = 0, total = 0;
+    data?.forEach(p => {
+      const amt = Number(p.amount) || 0;
+      total += amt;
+      if (p.method === 'cash') cash += amt;
+      if (p.method === 'bkash') bkash += amt;
+    });
+    setCashCollection(cash);
+    setBkashCollection(bkash);
+    setTotalCollection(total);
+  }, []);
+
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  useEffect(() => {
+    fetchCollectionStats(selectedMonth);
+  }, [selectedMonth, fetchCollectionStats]);
 
   const fetchDashboardData = async () => {
     try {
@@ -179,6 +226,28 @@ export default function Dashboard() {
             <StatCard title="Expired Users" value={stats.expiredUsers} icon={UserX} variant="danger" />
             <StatCard title="Total Due Amount" value={`৳${stats.totalDue.toLocaleString()}`} icon={DollarSign} variant="warning" />
             <StatCard title="Today's Collections" value={`৳${stats.todayCollections.toLocaleString()}`} icon={TrendingUp} variant="success" />
+          </div>
+
+          {/* Monthly Collection Stats */}
+          <div className="form-section">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="form-section-title border-0 mb-0 pb-0">Monthly Collection</h2>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {monthOptions.map(opt => (
+                    <SelectItem key={opt.key} value={opt.key}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <StatCard title="Total Cash Collection" value={`৳${cashCollection.toLocaleString()}`} icon={Banknote} variant="success" />
+              <StatCard title="Total bKash Collection" value={`৳${bkashCollection.toLocaleString()}`} icon={Smartphone} variant="primary" />
+              <StatCard title="Total Collection" value={`৳${totalCollection.toLocaleString()}`} icon={Wallet} variant="warning" />
+            </div>
           </div>
 
           {/* Expiring Soon Table */}
