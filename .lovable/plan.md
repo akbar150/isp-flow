@@ -1,40 +1,21 @@
 
 
-# Advance Payment Support (Multi-Month Renewal)
+# Add Customer ID Column to Customer Table
 
-## Problem
-Currently, the database trigger `update_customer_due_on_payment()` always extends expiry by exactly `validity_days` (typically 30 days), regardless of whether the customer paid for 1 month or 3 months. There's no way to record an advance payment that extends the subscription by multiple months.
+## Overview
+Add the Customer ID (`user_id`) as the last column before the Actions column in the customer table.
 
-## Solution
+## Changes to `src/pages/Customers.tsx`
 
-### 1. Update Database Trigger — Calculate months from payment amount
-Modify `update_customer_due_on_payment()` to calculate how many months the payment covers:
+### 1. Add "Customer ID" column header
+Insert `<th>Customer ID</th>` after the Status column and before Actions (line 553).
 
-```text
-months_paid = FLOOR(NEW.amount / monthly_price)
-new_expiry = base_date + (validity_days * months_paid)
-```
+### 2. Add Customer ID cell in each row
+Insert a `<td>` displaying `customer.user_id` in a mono font, positioned after the Status cell and before the Actions cell.
 
-Where `base_date` is:
-- Current expiry if it's in the future (advance payment on active account)
-- Today if expired
+### 3. Update colspan
+Change the "No customers found" colspan from 8 to 9.
 
-This means paying ৳1800 on a ৳600/month plan extends by 90 days (3 × 30).
-
-### 2. Update QuickPaymentRecord UI — Add advance month quick-buttons
-Add quick-select buttons for 2-month and 3-month advance payments alongside the existing "Full Month" and "Clear Due" buttons:
-
-```text
-[1 Month (৳600)] [2 Months (৳1200)] [3 Months (৳1800)] [Clear Due (৳X)]
-```
-
-### 3. Update the `total_due` deduction logic
-When a customer pays advance (amount > total_due), the trigger should set `total_due = 0` (not negative). The advance portion extends expiry, it doesn't create credit.
-
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| Database (migration) | Update trigger to calculate multi-month extension from payment amount |
-| `src/components/QuickPaymentRecord.tsx` | Add 2-month and 3-month advance quick buttons |
+## Files to modify
+- `src/pages/Customers.tsx`
 
