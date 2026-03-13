@@ -74,9 +74,52 @@ export default function Dashboard() {
   const [expiringCustomers, setExpiringCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Collection stats
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthKey);
+  const [cashCollection, setCashCollection] = useState(0);
+  const [bkashCollection, setBkashCollection] = useState(0);
+  const [totalCollection, setTotalCollection] = useState(0);
+
+  // Generate last 12 months
+  const monthOptions = Array.from({ length: 12 }, (_, i) => {
+    const d = addMonths(now, -i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = format(d, 'MMMM yyyy');
+    return { key, label };
+  });
+
+  const fetchCollectionStats = useCallback(async (monthKey: string) => {
+    const [year, month] = monthKey.split('-').map(Number);
+    const monthStart = format(new Date(year, month - 1, 1), 'yyyy-MM-dd');
+    const nextMonthStart = format(new Date(year, month, 1), 'yyyy-MM-dd');
+
+    const { data } = await supabase
+      .from('payments')
+      .select('amount, method')
+      .gte('payment_date', monthStart)
+      .lt('payment_date', nextMonthStart);
+
+    let cash = 0, bkash = 0, total = 0;
+    data?.forEach(p => {
+      const amt = Number(p.amount) || 0;
+      total += amt;
+      if (p.method === 'cash') cash += amt;
+      if (p.method === 'bkash') bkash += amt;
+    });
+    setCashCollection(cash);
+    setBkashCollection(bkash);
+    setTotalCollection(total);
+  }, []);
+
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  useEffect(() => {
+    fetchCollectionStats(selectedMonth);
+  }, [selectedMonth, fetchCollectionStats]);
 
   const fetchDashboardData = async () => {
     try {
