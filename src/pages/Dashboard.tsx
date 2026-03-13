@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -19,12 +19,16 @@ import {
   TrendingUp,
   ArrowRight,
   BarChart3,
-  MapPin
+  MapPin,
+  Banknote,
+  Smartphone,
+  Wallet
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { format, startOfDay, isBefore } from "date-fns";
+import { format, startOfDay, isBefore, startOfMonth, addMonths } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface DashboardStats {
   totalUsers: number;
