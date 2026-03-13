@@ -177,20 +177,36 @@ export function QuickPaymentRecord({
             />
           </div>
 
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => setFormData({ ...formData, amount: monthlyPrice.toString() })}
-              className="flex-1"
+              size="sm"
             >
-              Full Month (৳{monthlyPrice})
+              1 Month (৳{monthlyPrice})
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setFormData({ ...formData, amount: (monthlyPrice * 2).toString() })}
+              size="sm"
+            >
+              2 Months (৳{monthlyPrice * 2})
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setFormData({ ...formData, amount: (monthlyPrice * 3).toString() })}
+              size="sm"
+            >
+              3 Months (৳{monthlyPrice * 3})
             </Button>
             <Button
               type="button"
               variant="outline"
               onClick={() => setFormData({ ...formData, amount: dueAmount.toString() })}
-              className="flex-1"
+              size="sm"
             >
               Clear Due (৳{dueAmount})
             </Button>
